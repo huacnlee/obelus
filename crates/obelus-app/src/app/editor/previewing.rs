@@ -321,7 +321,10 @@ impl App {
         let reading = match subject {
             Subject::PullRequest(number) => Some(crate::app::pulls::Asked::PullRequest(number)),
             Subject::Issue(number) => Some(crate::app::pulls::Asked::Issue(number)),
-            Subject::File(_) | Subject::Commit { .. } | Subject::Message(_) => None,
+            Subject::File(_)
+            | Subject::Commit { .. }
+            | Subject::Message(_)
+            | Subject::Directory(_) => None,
         };
         if let Some(asked) = reading {
             // What has happened on it since, which the reading ends with:
@@ -805,7 +808,8 @@ impl App {
             Subject::Commit { .. }
             | Subject::Message(_)
             | Subject::PullRequest(_)
-            | Subject::Issue(_) => false,
+            | Subject::Issue(_)
+            | Subject::Directory(_) => false,
         }
     }
 
@@ -883,9 +887,12 @@ impl App {
                     end_character: *end_character,
                 },
             )),
-            // A directory has nothing to show: what it holds goes under it
-            // in the list itself.
-            PickerValue::Directory(_)
+            // What it holds, one name a line, which is what opening it
+            // would put under it in the list.
+            PickerValue::Directory(path) => Some((
+                Subject::Directory(self.working_directory.join(path)),
+                Marked::top(),
+            )),
             // A tree is a whole checkout and no one file of it, and its tab
             // shows no preview -- see `refresh_switching`.
             | PickerValue::Worktree { .. }
@@ -1036,6 +1043,29 @@ impl App {
             Subject::Issue(number) => self
                 .issue(*number)
                 .map(|_| (Buffer::from_text(Path::new(""), ""), None)),
+            // Named by nothing, so that a directory called like a file of
+            // some language is not coloured as one: these are names, and
+            // the same two switches that decide which rows the tree has
+            // decide which of them are here.
+            Subject::Directory(path) => {
+                let config = self.config();
+                let names: String = obelus_search::tree::inside(
+                    &self.working_directory,
+                    path,
+                    config.ignored_files,
+                    config.hidden_files,
+                )
+                .iter()
+                .filter_map(|entry| {
+                    let name = entry.path.file_name()?.to_string_lossy();
+                    Some(match entry.directory {
+                        true => format!("{name}/\n"),
+                        false => format!("{name}\n"),
+                    })
+                })
+                .collect();
+                Some((Buffer::from_text(Path::new(""), &names), None))
+            }
         }
     }
 
@@ -1144,6 +1174,13 @@ pub(in crate::app) enum Subject {
     PullRequest(u64),
     /// And what an issue says about itself, for the same reason.
     Issue(u64),
+    /// What is directly inside a directory of the file list's tree.
+    ///
+    /// Its own subject rather than nothing: a tree is walked a row at a
+    /// time, and a pane that went blank on every directory and came back
+    /// on every file was the bottom half of the screen flashing under a
+    /// reader holding down an arrow.
+    Directory(PathBuf),
 }
 
 /// A file read so that the picker's selection can be shown.

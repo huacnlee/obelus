@@ -41,6 +41,33 @@ pub enum Move {
 }
 
 impl Move {
+    /// The four a picker answers to with control held, on the letter.
+    ///
+    /// `ctrl+n` and `ctrl+p` a row on and back, `ctrl+d` and `ctrl+u` a
+    /// whole screenful -- the same `PageDown` and `PageUp` as the paging
+    /// keys, not half of one, so the two ways of paging cannot disagree
+    /// about how far a page is. What a hand used to another finder reaches
+    /// for, kept where the arrows are a long way from the letters.
+    ///
+    /// Control and nothing else, exactly: a bare letter is the query's, and
+    /// `ctrl+shift+p` or `super+p` is whatever the key table says it is.
+    /// And only a picker's: in a file, a box or a terminal the same chords
+    /// are somebody else's, so nothing but the list asks this.
+    #[must_use]
+    pub fn in_picker(key: &crossterm::event::KeyEvent) -> Option<Self> {
+        use crossterm::event::{KeyCode, KeyModifiers};
+        if obelus_keymap::modifiers_of(key) != Some(KeyModifiers::CONTROL) {
+            return None;
+        }
+        match key.code {
+            KeyCode::Char('n') => Some(Self::Down),
+            KeyCode::Char('p') => Some(Self::Up),
+            KeyCode::Char('d') => Some(Self::PageDown),
+            KeyCode::Char('u') => Some(Self::PageUp),
+            _ => None,
+        }
+    }
+
     /// Which movement a key means, if it means one.
     #[must_use]
     pub const fn of(code: crossterm::event::KeyCode) -> Option<Self> {

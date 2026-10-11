@@ -423,10 +423,12 @@ impl App {
         // which is the key that says to ask again -- read before the key,
         // because a list with more to come does not wrap and the key moves
         // nothing a test after it could see.
-        let again = pulling
-            && key.code == crossterm::event::KeyCode::Down
-            && key.modifiers.is_empty()
-            && self.stuck_at_the_end();
+        // `ctrl+n` is that down too, or it is a key that stops at the end of
+        // a list the arrow goes on past.
+        let down = (key.code == crossterm::event::KeyCode::Down && key.modifiers.is_empty())
+            || obelus_component::window::Move::in_picker(key)
+                == Some(obelus_component::window::Move::Down);
+        let again = pulling && down && self.stuck_at_the_end();
         let Some(picker) = self.picker.as_mut() else {
             return false;
         };

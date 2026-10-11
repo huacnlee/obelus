@@ -519,6 +519,9 @@ impl App {
     /// and a query, and this is about where the rows come from -- and
     /// because a setting is the application's to keep.
     pub(in crate::app) fn listing_key(&mut self, key: &KeyEvent) -> bool {
+        if self.tree_key(key) {
+            return true;
+        }
         if key.modifiers != KeyModifiers::ALT {
             return false;
         }
@@ -559,9 +562,112 @@ impl App {
             .value_of(setting)
             .is_some_and(|value| matches!(value, obelus_config::Value::Switch(true)));
         self.change_setting(setting, &obelus_config::Value::Switch(showing));
+        // On the row the reader was on, where it is still offered: the
+        // tree is the same tree with more or less in it, and the list
+        // jumping to the file being read under a key about something else
+        // is the list moving under them.
+        if self.showing_the_tree() {
+            self.files.stood_on = self
+                .picker
+                .as_ref()
+                .and_then(Picker::selected_item)
+                .and_then(path_of_row)
+                .map(Path::to_path_buf);
+        }
         // A different answer to "which files", so a different walk.
         self.start_walk();
         self.refresh_listing();
+        true
+    }
+
+    /// Whether the tree is what the file list is showing: its first tab,
+    /// with nothing typed.
+    pub(in crate::app) fn showing_the_tree(&self) -> bool {
+        self.picker.as_ref().is_some_and(|picker| {
+            picker.is_listing()
+                && picker.query().is_empty()
+                && self.files.listing.get(picker.tab()).copied() == Some(Listing::All)
+        })
+    }
+
+    /// Left and right on the tree, the way every tree on a desktop takes
+    /// them.
+    ///
+    /// Right opens a directory that is shut and goes into one that is
+    /// open; left shuts one that is open and goes up from anything else.
+    /// `ctrl+left` shuts the lot, back to the top -- the furthest left
+    /// there is, as `ctrl` with an arrow is the longer step in a line of
+    /// text. Not `alt+left`, which is going back through the places the
+    /// reader has been, and not `shift`, which only ever extends.
+    ///
+    /// Only while the tree is showing, which is only while nothing is
+    /// typed: a query turns the tree into a flat list, and from then on the
+    /// arrows are the caret's in the box. With the box empty there is
+    /// nothing for a caret to move along, so nothing is taken from it.
+    fn tree_key(&mut self, key: &KeyEvent) -> bool {
+        if !self.showing_the_tree() {
+            return false;
+        }
+        let Some(picker) = self.picker.as_ref() else {
+            return false;
+        };
+        let rows: Vec<&PickerItem> = picker.matches().collect();
+        let at = picker.selected();
+        let Some(item) = rows.get(at) else {
+            return false;
+        };
+        let path = path_of_row(item).map(Path::to_path_buf);
+        let opens = item.opens;
+        // Into it is the row under it -- when that row is its own, and not
+        // the next one along after a directory that turned out to hold
+        // nothing it shows.
+        let inside = rows
+            .get(at + 1)
+            .is_some_and(|next| next.depth > item.depth)
+            .then_some(at + 1);
+        // And up is the nearest row above standing further out. One at the
+        // top has none.
+        let parent = rows[..at].iter().rposition(|row| row.depth < item.depth);
+        match (key.modifiers, key.code) {
+            (KeyModifiers::NONE, KeyCode::Right) => match opens {
+                Some(false) => {
+                    if let Some(path) = path {
+                        self.open_directory(&path);
+                    }
+                }
+                Some(true) => {
+                    if let (Some(row), Some(picker)) = (inside, self.picker.as_mut()) {
+                        picker.select_row(row);
+                    }
+                }
+                None => {}
+            },
+            (KeyModifiers::NONE, KeyCode::Left) => match opens {
+                Some(true) => {
+                    if let Some(path) = path {
+                        self.open_directory(&path);
+                    }
+                }
+                _ => {
+                    if let (Some(parent), Some(picker)) = (parent, self.picker.as_mut()) {
+                        picker.select_row(parent);
+                    }
+                }
+            },
+            (KeyModifiers::CONTROL, KeyCode::Left) => {
+                // The row the reader is on stays theirs where it is still
+                // there, and otherwise the directory at the top it was in:
+                // the same door clearing a query goes back through.
+                self.files.stood_on = path.and_then(|path| {
+                    path.components()
+                        .next()
+                        .map(|first| PathBuf::from(first.as_os_str()))
+                });
+                self.files.opened.clear();
+                self.refresh_listing();
+            }
+            _ => return false,
+        }
         true
     }
 

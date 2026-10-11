@@ -64,21 +64,49 @@ fn list_region_rows(picker: &Picker, width: u16) -> u16 {
 /// own control, so the two places say it the same way.
 ///
 /// And none at all where none of them can be pressed, unless one of them is
-/// kept there greyed (the list of background work). The file list's
-/// changed tab was the case: every key it has is about the tree, the rows
-/// there are git's answer, so its foot was a rule and a pointer to a card
-/// of keys that were all grey -- two rows of the screen saying that
-/// nothing here answers to anything. Which lets that foot come and go as
-/// the reader walks between the two tabs, where the search's keeps its
-/// height on purpose; but each of the search's tabs has a key that works,
-/// so this never takes one of those away.
+/// kept there greyed (the list of background work): a rule and a pointer to
+/// a card of keys that are all grey is two rows of the screen saying that
+/// nothing here answers to anything. The file list's changed tab used to be
+/// the case, and its foot came and went as the reader walked between the
+/// two tabs; the keys that walk the rows ([`walking`]) work on both, so it
+/// does not any more.
 #[must_use]
 pub fn hints(picker: &Picker) -> Vec<Hint> {
-    let hints = every_hint(picker);
+    let mut hints = every_hint(picker);
+    hints.extend(walking(picker));
     match hints.iter().any(|hint| hint.usable || hint.kept) {
         true => hints,
         false => Vec::new(),
     }
+}
+
+/// The letters with control that walk a file list or a search.
+///
+/// After the list's own keys rather than before them: a foot that runs out
+/// of room stops where it is, so on a narrow screen these are what goes and
+/// a switch that says which way it is set stays. They are on the card
+/// either way.
+///
+/// On every tab, the changed files' too. A foot that was all grey went
+/// with the tab it was on, so the list was two rows taller on one tab than
+/// on the other; these work wherever there are rows, and the foot stays
+/// where it is.
+fn walking(picker: &Picker) -> Vec<Hint> {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    if !picker.says_keys() || !(picker.is_searching() || picker.is_listing()) {
+        return Vec::new();
+    }
+    let control =
+        |letter| obelus_keymap::KeyChord::new(KeyCode::Char(letter), KeyModifiers::CONTROL);
+    vec![
+        Hint::common(control('n'), "Rows")
+            .or(control('p'))
+            .saying("The next row, or the one before it"),
+        // A screenful, as the paging keys move: not half of one.
+        Hint::common(control('d'), "Pages")
+            .or(control('u'))
+            .saying("A screenful of rows on, or back"),
+    ]
 }
 
 /// Every key the list has, whether or not it does anything here.
@@ -175,6 +203,8 @@ fn every_hint(picker: &Picker) -> Vec<Hint> {
     }
     let offering = picker.offers_ignored();
     let showing = picker.offers_hidden();
+    let tree = offering.is_some() && picker.query().is_empty();
+    let arrow = obelus_keymap::KeyChord::new;
     vec![
         Hint::common(alt('i'), "Ignored files")
             .saying("Offer the files the project ignores, or leave them out")
@@ -193,6 +223,17 @@ fn every_hint(picker: &Picker) -> Vec<Hint> {
         Hint::common(alt('n'), "Rename")
             .saying("Put this file or directory somewhere else, or call it something else")
             .when(offering.is_some()),
+        // The tree's own, after the switches: on a narrow screen a switch
+        // that says which way it is set is worth more than the arrows,
+        // which a reader tries anyway. Only while the tree is up, which is
+        // only while nothing is typed -- then the arrows are the caret's.
+        Hint::common(arrow(KeyCode::Left, KeyModifiers::NONE), "Fold")
+            .or(arrow(KeyCode::Right, KeyModifiers::NONE))
+            .saying("Shut a directory or go up out of it, open one or go into it")
+            .when(tree),
+        Hint::rare(arrow(KeyCode::Left, KeyModifiers::CONTROL), "Fold all")
+            .saying("Shut every directory, back to the top of the tree")
+            .when(tree),
     ]
 }
 

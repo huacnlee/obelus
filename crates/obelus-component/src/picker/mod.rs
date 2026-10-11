@@ -2420,6 +2420,12 @@ impl Picker {
         // takes them for it before the list is asked. So they page the
         // list with control held, and bare only where nothing took them.
         let paging = matches!(key.code, KeyCode::PageUp | KeyCode::PageDown);
+        // And the letters with control, which mean a movement whatever the
+        // rules above say about modifiers: they are only ever control. Asked
+        // before anything else in the application has the key, which is
+        // what keeps `ctrl+p` here rather than opening the palette or, in a
+        // layout where it is `open-file`, the list the reader is already in.
+        let alias = Move::in_picker(key);
 
         let outcome = match key.code {
             // A list that is only read is moved, not chosen in: the keys
@@ -2431,8 +2437,8 @@ impl Picker {
             // Bare home and end among them: here there is no query for
             // a caret to move along.
             code if self.reads
-                && (bare || control)
-                && let Some(movement) = Move::of(code) =>
+                && let Some(movement) =
+                    alias.or_else(|| (bare || control).then(|| Move::of(code)).flatten()) =>
             {
                 self.scroll_reading(movement, page);
                 PickerOutcome::Consumed
@@ -2518,9 +2524,12 @@ impl Picker {
             // in it now, and bare home and end are where a caret goes in
             // every other text Obelus holds. The duplicate was what made
             // them free to give away.
-            code if (bare || (control && paging))
-                && !(bare && matches!(code, KeyCode::Home | KeyCode::End))
-                && let Some(movement) = Move::of(code) =>
+            code if let Some(movement) = alias.or_else(|| {
+                ((bare || (control && paging))
+                    && !(bare && matches!(code, KeyCode::Home | KeyCode::End)))
+                .then(|| Move::of(code))
+                .flatten()
+            }) =>
             {
                 let wrap = match self.unfinished {
                     true => Wrap::No,
@@ -2898,6 +2907,96 @@ impl Picker {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Deliberate break: replace `Move::in_picker(key)` with `None` in
+    /// `handle_key`; the first downward step stays on the first row.
+    #[test]
+    fn picker_control_navigation_keeps_the_query_and_skips_disabled_rows() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut rows = (0..20)
+            .map(|n| named(&format!("match {n}")))
+            .collect::<Vec<_>>();
+        rows[1].enabled = false;
+        let mut picker = Picker::new(rows, PickerLayout::Compact { rows: 5 });
+        picker.set_query("match");
+        let key = |letter| KeyEvent::new(KeyCode::Char(letter), KeyModifiers::CONTROL);
+        assert!(matches!(
+            picker.handle_key(&key('n'), 5),
+            PickerOutcome::Consumed
+        ));
+        assert_eq!(picker.selected(), 2);
+        picker.handle_key(&key('p'), 5);
+        assert_eq!(picker.selected(), 0);
+        picker.handle_key(&key('d'), 5);
+        assert_eq!(picker.selected(), 5);
+        picker.handle_key(&key('u'), 5);
+        assert_eq!(picker.selected(), 0);
+        picker.handle_key(&key('u'), 5);
+        assert_eq!(picker.selected(), 0, "paging must clamp rather than wrap");
+        assert_eq!(picker.query(), "match");
+        assert_eq!(picker.query_caret(), 5);
+    }
+
+    /// Deliberate break: treat bare letters as control aliases in
+    /// `Move::in_picker`; the query then loses its `n`.
+    #[test]
+    fn picker_navigation_aliases_leave_plain_letters_for_typing() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let mut picker = Picker::new(vec![named("npdu")], PickerLayout::Compact { rows: 5 });
+        for letter in ['n', 'p', 'd', 'u'] {
+            picker.handle_key(&KeyEvent::new(KeyCode::Char(letter), KeyModifiers::NONE), 5);
+        }
+        assert_eq!(picker.query(), "npdu");
+        assert_eq!(
+            Move::in_picker(&KeyEvent::new(
+                KeyCode::Char('n'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT
+            )),
+            None
+        );
+    }
+
+    /// A list with more to come does not wrap under `ctrl+n` any more than
+    /// under down: the step past its last row stays on it.
+    ///
+    /// Broken deliberately by stepping with `Wrap::Yes` whatever
+    /// `self.unfinished` says: `ctrl+n` on the last row went to the first.
+    #[test]
+    fn control_n_does_not_wrap_a_list_with_more_to_come() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let rows = (0..3).map(|n| named(&n.to_string())).collect();
+        let mut picker = Picker::new(rows, PickerLayout::Compact { rows: 5 });
+        picker.unfinished(true);
+        let key = KeyEvent::new(KeyCode::Char('n'), KeyModifiers::CONTROL);
+        for _ in 0..3 {
+            picker.handle_key(&key, 5);
+        }
+        assert_eq!(picker.selected(), 2);
+        // And one that is all in does, as down does.
+        picker.unfinished(false);
+        picker.handle_key(&key, 5);
+        assert_eq!(picker.selected(), 0);
+    }
+
+    /// Deliberate break: replace the picker aliases with `None`;
+    /// control+n then leaves the top row unchanged.
+    #[test]
+    fn picker_control_navigation_scrolls_a_read_only_list() {
+        use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
+        let rows = (0..30).map(|n| named(&n.to_string())).collect();
+        let mut picker = Picker::new(rows, PickerLayout::Compact { rows: 5 });
+        picker.only_read();
+        picker.refresh_indices(5, 40);
+        let key = |letter| KeyEvent::new(KeyCode::Char(letter), KeyModifiers::CONTROL);
+        picker.handle_key(&key('n'), 5);
+        assert_eq!(picker.window().top(), 1);
+        picker.handle_key(&key('d'), 5);
+        assert_eq!(picker.window().top(), 6);
+        picker.handle_key(&key('u'), 5);
+        picker.handle_key(&key('p'), 5);
+        assert_eq!(picker.window().top(), 0);
+        assert_eq!(picker.selected(), 0);
+    }
 
     /// A batch landing in a list the reader has dragged leaves it where
     /// they dragged it.
