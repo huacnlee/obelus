@@ -1,0 +1,412 @@
+//! Choosing which keys Obelus starts from: from the palette, from the
+//! welcome screen, and once on a first start.
+//!
+//! Every settings file here is a temporary one, through
+//! `config_file_for_test`: a test that let Obelus find its own would be
+//! answering the first start's question in the reader's `~/.config`.
+
+mod support;
+
+use crossterm::event::KeyCode;
+use obelus_app::app::App;
+use obelus_command::Command;
+use obelus_keymap::{Keymap, Layout};
+use obelus_ui::Screen as _;
+use support::press;
+
+/// The layouts the list offers, as it calls them, in the order it offers
+/// them.
+const CALLED: [&str; 4] = ["Classic", "Mnemonic", "VS Code", "TextMate"];
+
+/// What the list asks, which is how a test tells it from any other list.
+const ASKED: &str = "Which keys Obelus starts from";
+
+/// An application on a scratch project, with a settings file of its own
+/// that holds `contents` -- or that is not there at all, for `None`.
+fn on(scratch: &support::Scratch, contents: Option<&str>) -> App {
+    let file = scratch.join("settings").join("config.toml");
+    if let Some(contents) = contents {
+        std::fs::create_dir_all(file.parent().expect("a directory")).expect("the directory");
+        std::fs::write(&file, contents).expect("the settings");
+    }
+    let mut app = App::new(Vec::new());
+    app.working_directory_for_test(scratch.path().to_path_buf());
+    app.config_file_for_test(file);
+    app
+}
+
+/// Where [`on`] keeps the settings.
+fn settings(scratch: &support::Scratch) -> std::path::PathBuf {
+    scratch.join("settings").join("config.toml")
+}
+
+/// Starts it the way `main` does.
+fn start(app: &mut App) {
+    let (sender, _events) = std::sync::mpsc::channel();
+    app.start(sender);
+    support::lay_out(app, 100, 30);
+}
+
+/// What the list in front is asking, if there is one.
+fn asked(app: &App) -> Option<String> {
+    app.picker()
+        .and_then(|picker| picker.question().map(str::to_string))
+}
+
+/// Picks the layout called `called` from the open list.
+fn pick(app: &mut App, called: &str) {
+    support::type_text(app, called);
+    press(app, KeyCode::Enter);
+}
+
+/// `choose-keymap` is found in the palette by its name, and can be run.
+///
+/// Deliberate break: renaming it `choose-keys` in `obelus-command`'s
+/// table -- the palette has no row by that name, and fails here.
+#[test]
+fn the_palette_finds_choose_keymap() {
+    let scratch = support::Scratch::new("keymap-palette");
+    let mut app = on(&scratch, Some("wrap = true\n"));
+    support::lay_out(&mut app, 100, 30);
+    support::press_control(&mut app, 'p');
+    support::type_text(&mut app, "choose-keymap");
+    let dump = support::render(&mut app, 100, 30);
+    assert!(
+        support::text_block(&dump).contains("choose-keymap"),
+        "the palette has no row for it:\n{dump}"
+    );
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(
+        asked(&app).as_deref(),
+        Some(ASKED),
+        "it did not open the list"
+    );
+}
+
+/// Every layout is a row, called what it is called, with two keys it would
+/// give -- and the keys are that layout's, not the ones in force.
+///
+/// Deliberate break: building the examples from `self.keymap` instead of
+/// the layout's own table -- every row then says `F1`, and the VS Code row
+/// does not say the key VS Code puts the files on.
+#[test]
+fn the_list_says_what_each_layout_would_give() {
+    let scratch = support::Scratch::new("keymap-rows");
+    let mut app = on(&scratch, Some("wrap = true\n"));
+    support::lay_out(&mut app, 100, 30);
+    app.open_keymap_picker();
+    let picker = app.picker().expect("the list");
+    let rows: Vec<_> = picker.matches().collect();
+    let labels: Vec<&str> = rows.iter().map(|row| row.label.as_str()).collect();
+    assert_eq!(labels, CALLED);
+    for (row, layout) in rows.iter().zip(Layout::ALL) {
+        let keymap = Keymap::laid_out(layout);
+        let detail = row.detail.as_deref().expect("what it is");
+        for command in [Command::FileOpen, Command::CommandPalette] {
+            let key = keymap.chord_for(command).expect("bound").label();
+            assert!(
+                detail.contains(&key),
+                "{} does not say {key} for {}: {detail}",
+                row.label,
+                command.name()
+            );
+        }
+        assert!(
+            detail.starts_with(char::is_uppercase),
+            "copy starts with a capital: {detail}"
+        );
+    }
+}
+
+/// Choosing a layout from `alt+k` writes it, moves the keys at once, and
+/// moves what the welcome screen says they are.
+///
+/// Deliberate breaks: taking the `alt+k` binding out of `Keymap::new` --
+/// the list never opens; taking `KeymapSelect` out of the welcome screen's
+/// list -- the screen does not offer it; and dispatching `KeymapSelect` to
+/// `open_theme_picker` -- the list asks nothing, and no layout is written.
+#[test]
+fn choosing_a_layout_moves_the_keys_and_the_welcome_screen() {
+    let scratch = support::Scratch::new("keymap-choose");
+    let mut app = on(&scratch, Some("wrap = true\n"));
+    support::lay_out(&mut app, 100, 30);
+    let before = support::render(&mut app, 100, 30);
+    let classic = Keymap::laid_out(Layout::Classic);
+    let vscode = Keymap::laid_out(Layout::VsCode);
+    let opens = |keymap: &Keymap| keymap.chord_for(Command::FileOpen).expect("bound").label();
+    assert!(
+        support::text_block(&before).contains("Pick a keymap"),
+        "the welcome screen does not offer it:\n{before}"
+    );
+    assert!(support::text_block(&before).contains(&opens(&classic)));
+
+    support::press_alt(&mut app, 'k');
+    assert_eq!(asked(&app).as_deref(), Some(ASKED), "alt+k opened nothing");
+    pick(&mut app, "VS Code");
+
+    assert!(app.picker().is_none(), "the list stayed open");
+    assert_eq!(app.config().keys_from, "vscode");
+    let written = std::fs::read_to_string(settings(&scratch)).expect("the settings");
+    assert!(written.contains("keys_from = \"vscode\""), "{written}");
+    assert!(written.contains("wrap = true"), "the rest went: {written}");
+    assert_eq!(
+        app.keymap().chord_for(Command::FileOpen),
+        vscode.chord_for(Command::FileOpen)
+    );
+    let after = support::render(&mut app, 100, 30);
+    assert!(
+        support::text_block(&after).contains(&opens(&vscode)),
+        "the welcome screen still says the old key:\n{after}"
+    );
+    assert!(
+        !support::text_block(&after).contains(&opens(&classic)),
+        "the welcome screen still says the old key:\n{after}"
+    );
+
+    // And the key itself does what the screen now says.
+    support::press_control(&mut app, 'p');
+    assert!(
+        app.picker()
+            .is_some_and(|picker| picker.question().is_none()
+                && picker
+                    .invitation()
+                    .is_some_and(|said| said.contains("file"))),
+        "ctrl+p is not the files under VS Code's keys: {:?}",
+        app.picker().and_then(|picker| picker.invitation())
+    );
+}
+
+/// A first start -- no settings file at all -- asks, over the welcome
+/// screen.
+///
+/// Deliberate break: taking `ask_for_a_keymap` out of `App::start`.
+#[test]
+fn a_first_start_asks() {
+    let scratch = support::Scratch::new("keymap-first");
+    let mut app = on(&scratch, None);
+    start(&mut app);
+    assert_eq!(asked(&app).as_deref(), Some(ASKED));
+}
+
+/// A start with a settings file does not ask, whatever is in it: one that
+/// names no layout is a reader who has been here before, and one that will
+/// not read must not be answered by writing over it.
+///
+/// Deliberate break: `unchosen` set to `true` whatever was read -- both
+/// starts ask.
+#[test]
+fn a_start_with_settings_does_not_ask() {
+    for (name, contents) in [
+        ("keymap-has-settings", "wrap = true\n"),
+        ("keymap-unreadable", "not toml = [\n"),
+    ] {
+        let scratch = support::Scratch::new(name);
+        let mut app = on(&scratch, Some(contents));
+        start(&mut app);
+        assert_ne!(asked(&app).as_deref(), Some(ASKED), "{contents:?}");
+    }
+}
+
+/// Escape leaves the keys as they were and writes nothing, so the next
+/// start asks again.
+///
+/// Deliberate break: writing `classic` down when the question is put
+/// rather than when it is answered -- the file is there after escape.
+#[test]
+fn escape_keeps_the_defaults_and_writes_nothing() {
+    let scratch = support::Scratch::new("keymap-escape");
+    let mut app = on(&scratch, None);
+    start(&mut app);
+    assert_eq!(asked(&app).as_deref(), Some(ASKED));
+    press(&mut app, KeyCode::Esc);
+    assert!(app.picker().is_none(), "escape did not let it go");
+    assert_eq!(app.config().keys_from, "classic");
+    assert!(
+        !settings(&scratch).exists(),
+        "escape wrote the settings, so nothing will ask again"
+    );
+}
+
+/// Choosing the default is written down as well, so the next start does
+/// not ask -- and a start after that is a start with settings.
+///
+/// Deliberate break: `PickerValue::Setting` skipping `change_setting` when
+/// the word is the one in force -- nothing is written, and the second start
+/// asks again.
+#[test]
+fn choosing_classic_is_kept_and_not_asked_again() {
+    let scratch = support::Scratch::new("keymap-classic");
+    let mut app = on(&scratch, None);
+    start(&mut app);
+    // Opened on the one in force, which is the default.
+    press(&mut app, KeyCode::Enter);
+    let written = std::fs::read_to_string(settings(&scratch)).expect("the settings");
+    assert!(written.contains("keys_from = \"classic\""), "{written}");
+
+    let mut again = on(&scratch, None);
+    start(&mut again);
+    assert_ne!(asked(&again).as_deref(), Some(ASKED), "it asked again");
+}
+
+/// What went wrong on the way up is put up first, and the question waits
+/// for a start that has nothing to say first.
+///
+/// Deliberate break: asking before `tell_what_went_wrong` regardless of
+/// whether it told -- the keymap is over the problems.
+#[test]
+fn what_went_wrong_comes_first() {
+    let scratch = support::Scratch::new("keymap-problems");
+    std::fs::create_dir_all(scratch.path().join(".obelus")).expect("the directory");
+    std::fs::write(
+        scratch.path().join(".obelus").join("config.toml"),
+        "workflow = \"feature_branch\"\n",
+    )
+    .expect("the project's settings");
+    let mut app = on(&scratch, None);
+    start(&mut app);
+    assert_eq!(
+        asked(&app).as_deref(),
+        Some("What went wrong starting up"),
+        "the problems are not in front"
+    );
+    assert!(!settings(&scratch).exists(), "something was written");
+}
+
+/// The page asking which project is the whole screen and the more pressing
+/// question: the keymap waits for its answer, and comes then.
+///
+/// Deliberate breaks: taking the chooser out of `ask_for_a_keymap`'s
+/// guard -- the list is up under the page at start; and taking
+/// `ask_for_a_keymap` out of `settle_on` -- nothing asks once there is a
+/// project.
+#[test]
+fn which_project_comes_first() {
+    let scratch = support::Scratch::new("keymap-project");
+    let file = settings(&scratch);
+    let mut app = App::new(Vec::new());
+    app.working_directory_for_test(std::path::PathBuf::from("/tmp/obelus"));
+    app.ask_about_these_projects_for_test(vec![obelus_component::chooser::Known {
+        path: scratch.path().to_path_buf(),
+        shown: scratch.path().display().to_string(),
+        last: Some(1),
+    }]);
+    app.config_file_for_test(file);
+    start(&mut app);
+    assert!(app.choosing().is_some(), "not asking which project");
+    assert!(app.picker().is_none(), "a list is up under the page");
+
+    press(&mut app, KeyCode::Enter);
+    assert!(app.choosing().is_none(), "still asking which project");
+    assert_eq!(asked(&app).as_deref(), Some(ASKED));
+}
+
+/// Nobody is at the screen of a headless Obelus to answer.
+///
+/// Deliberate break: taking `is_headless` out of `ask_for_a_keymap`.
+#[test]
+fn headless_does_not_ask() {
+    let scratch = support::Scratch::new("keymap-headless");
+    let mut app = on(&scratch, None);
+    app.headless();
+    start(&mut app);
+    assert!(app.picker().is_none(), "a headless start put a list up");
+}
+
+/// A file named on the command line is still asked over, and escape is
+/// the way back to it; and a start that would open on the file list opens
+/// on the question instead, whose answer moves the key to that list.
+///
+/// Deliberate breaks: asking only where `reading_nothing` -- the file
+/// start does not ask; and dropping `!asked` from the file list's
+/// condition in `start` -- the list of files is put over the question.
+#[test]
+fn a_file_or_the_file_list_is_asked_over() {
+    let scratch = support::Scratch::new("keymap-file");
+    let path = scratch.join("one.rs");
+    std::fs::write(&path, "fn main() {}\n").expect("the file");
+    let mut app = App::new(vec![obelus_buffer::Buffer::open(&path).expect("open")]);
+    app.working_directory_for_test(scratch.path().to_path_buf());
+    app.config_file_for_test(settings(&scratch));
+    start(&mut app);
+    assert_eq!(asked(&app).as_deref(), Some(ASKED), "not asked over a file");
+    press(&mut app, KeyCode::Esc);
+    assert!(app.current_buffer().is_some(), "the file went");
+
+    let listing = support::Scratch::new("keymap-listing");
+    let mut app = on(&listing, None);
+    app.list_at_start();
+    start(&mut app);
+    assert_eq!(
+        asked(&app).as_deref(),
+        Some(ASKED),
+        "the files went over it"
+    );
+}
+
+/// On a screen too small for the plate the welcome screen is the keys
+/// alone, and the keymap is among them; and the question fits.
+///
+/// Deliberate break: taking `KeymapSelect` out of the welcome screen's
+/// list.
+#[test]
+fn a_narrow_screen_still_offers_it() {
+    let scratch = support::Scratch::new("keymap-narrow");
+    let mut app = on(&scratch, Some("wrap = true\n"));
+    let dump = support::render(&mut app, 40, 14);
+    assert!(
+        support::text_block(&dump).contains("Pick a keymap"),
+        "the narrow welcome does not offer it:\n{dump}"
+    );
+    let key = app
+        .keymap()
+        .chord_for(Command::KeymapSelect)
+        .expect("bound")
+        .label();
+    assert!(support::text_block(&dump).contains(&key), "{dump}");
+
+    support::press_alt(&mut app, 'k');
+    let dump = support::render(&mut app, 40, 14);
+    assert!(
+        support::text_block(&dump).contains("Classic"),
+        "the list does not fit:\n{dump}"
+    );
+}
+
+/// A file that cannot be written is said on the status row, and the keys
+/// in force are still the ones chosen for this window.
+///
+/// Unix only, because what makes the write fail is a directory nobody may
+/// write in, and Windows does not refuse a write on that.
+///
+/// Deliberate break: dropping the `wrong(..)` after `save_to` fails in
+/// `change_setting` -- nothing says so.
+#[cfg(unix)]
+#[test]
+fn a_write_that_fails_is_said() {
+    use std::os::unix::fs::PermissionsExt as _;
+
+    let scratch = support::Scratch::new("keymap-unwritable");
+    // A directory that is there and may not be written in: the file is
+    // missing, which is a first start, and nothing can be made beside it.
+    let shut = scratch.join("shut");
+    std::fs::create_dir_all(&shut).expect("the directory");
+    std::fs::set_permissions(&shut, std::fs::Permissions::from_mode(0o555)).expect("shut");
+    let mut app = App::new(Vec::new());
+    app.working_directory_for_test(scratch.path().to_path_buf());
+    app.config_file_for_test(shut.join("config.toml"));
+    start(&mut app);
+    assert_eq!(asked(&app).as_deref(), Some(ASKED));
+    pick(&mut app, "TextMate");
+    let said = app.note().map(str::to_string);
+    let written = shut.join("config.toml").exists();
+    // Opened again before asserting, so a failure leaves nothing behind
+    // that the scratch cannot take away.
+    std::fs::set_permissions(&shut, std::fs::Permissions::from_mode(0o755)).expect("open");
+    assert_eq!(app.config().keys_from, "textmate");
+    assert!(
+        said.as_deref()
+            .is_some_and(|said| said.starts_with("Not saved")),
+        "nothing said the choice was not kept: {said:?}"
+    );
+    assert!(!written, "the directory was written in after all");
+}

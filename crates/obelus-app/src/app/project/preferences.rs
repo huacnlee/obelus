@@ -191,6 +191,13 @@ pub(in crate::app) struct Settled {
     /// each -- see `obelus_themes::root`. Set where the reader's settings
     /// path is, for the reason `omarchy` is.
     pub installed: Option<PathBuf>,
+    /// Whether the reader has no settings file at all, so nobody has said
+    /// which keys Obelus starts from.
+    ///
+    /// Written down where the file is read and asked once the loop has
+    /// started (`App::ask_for_a_keymap`): a list opened while the settings
+    /// are read is a list `start` would put the file list over.
+    pub unchosen: bool,
 }
 
 impl Default for Settled {
@@ -209,6 +216,7 @@ impl Default for Settled {
             pinned: Vec::new(),
             omarchy: None,
             installed: None,
+            unchosen: false,
         }
     }
 }
@@ -499,6 +507,22 @@ impl App {
         choices: &'static [&'static str],
         word: &str,
     ) {
+        let mut picker = self.choices(key, choices, word);
+        // What the theme was, for the same reason the theme list keeps it:
+        // walking this list wears each colour in turn, and the one that was
+        // on is only in the running program.
+        if key == "theme" {
+            self.theme_before = Some((self.theme_name().to_string(), self.worn()));
+            picker.otherwise(
+                crate::app::project::themes::NONE_HERE,
+                PickerValue::MoreThemes,
+            );
+        }
+        self.show_list(picker);
+    }
+
+    /// The list of a setting's choices, opened on the one in force.
+    fn choices(&self, key: &'static str, choices: &'static [&'static str], word: &str) -> Picker {
         // The themes are the one list here the table cannot hold: which of
         // them there are is a question about two directories, and the table
         // is static data about what a setting *is*. So it is asked of the
@@ -517,16 +541,7 @@ impl App {
             // is a word to remember it by and not a description of it.
             "keys_from" => choices
                 .iter()
-                .map(|choice| {
-                    let about = match *choice {
-                        "classic" => Some("The function keys, in banks of four"),
-                        "mnemonic" => Some(
-                            "Control and alt, on the letter of the word -- which a running terminal keeps for its program",
-                        ),
-                        _ => None,
-                    };
-                    ((*choice).to_string(), about.map(str::to_string))
-                })
+                .map(|choice| ((*choice).to_string(), self.about_a_layout(choice)))
                 .collect(),
             // The chats Obelus can be reached from, after none: which there
             // are is the remote crate's list, not a row of the table.
@@ -601,17 +616,91 @@ impl App {
         // Opened on the one in force, so the list starts by saying which
         // that is.
         picker.prefer(preferred);
-        // What the theme was, for the same reason the theme list keeps it:
-        // walking this list wears each colour in turn, and the one that was
-        // on is only in the running program.
-        if key == "theme" {
-            self.theme_before = Some((self.theme_name().to_string(), self.worn()));
-            picker.otherwise(
-                crate::app::project::themes::NONE_HERE,
-                PickerValue::MoreThemes,
-            );
+        picker
+    }
+
+    /// What a layout puts the keys on, and two of them as they would be.
+    ///
+    /// Because the name is a word to remember it by and not a description
+    /// of it. The two keys are asked of the table that layout would build,
+    /// with the reader's own `[keys]` laid over it as they would be, so a
+    /// row cannot name a key the layout does not give -- and the two are
+    /// the ones a reader reaches for first: a file, and everything else.
+    fn about_a_layout(&self, word: &str) -> Option<String> {
+        let gloss = match word {
+            "classic" => "The function keys, in banks of four",
+            "mnemonic" => {
+                "Control and alt, on the letter of the word -- which a running terminal keeps for its program"
+            }
+            "vscode" => "VS Code's keys for files, search and the palette",
+            "textmate" => "TextMate's keys for files and symbols",
+            _ => return None,
+        };
+        let layout = obelus_keymap::Layout::named(word)?;
+        let (keymap, _) = obelus_keymap::Keymap::with(layout, &self.settled.config.keys);
+        let key = |command| {
+            keymap
+                .chord_for(command)
+                .map(obelus_keymap::KeyChord::label)
+        };
+        let examples: Vec<String> = [
+            ("Open a file with", Command::FileOpen),
+            ("run a command with", Command::CommandPalette),
+        ]
+        .into_iter()
+        .filter_map(|(words, command)| Some(format!("{words} {}", key(command)?)))
+        .collect();
+        if examples.is_empty() {
+            return Some(gloss.to_string());
         }
+        // A sentence of its own, so it has to start with a capital however
+        // many of the two there are.
+        let mut said = examples.join(", ");
+        if let Some(first) = said.get(..1) {
+            said.replace_range(..1, &first.to_uppercase());
+        }
+        Some(format!("{gloss}. {said}"))
+    }
+
+    /// Offers the layouts the reader's keys start from.
+    ///
+    /// The setting's own list -- the one the settings page opens, rows,
+    /// filtering and all -- with a question over it, because from the
+    /// palette or the welcome screen there is no settings row above it to
+    /// say what is being chosen. Choosing one writes it at once, as a row
+    /// of the settings page does.
+    pub fn open_keymap_picker(&mut self) {
+        let mut picker = self.choices(
+            "keys_from",
+            obelus_config::KEY_LAYOUTS,
+            &self.settled.readers.keys_from.clone(),
+        );
+        picker.ask("Which keys Obelus starts from");
+        picker.opened_by(Command::KeymapSelect);
         self.show_list(picker);
+    }
+
+    /// Asks which keys to start from, on a first start, and says whether
+    /// it did.
+    ///
+    /// A first start is one with no settings file, and nothing else: a
+    /// reader with a file has been here before, whether or not it names a
+    /// layout, and one whose file will not read must not be asked a
+    /// question whose answer is written over it. Asked once per process --
+    /// escape leaves the defaults and writes nothing, so the next start
+    /// asks again, and any answer writes the file, `classic` included, so
+    /// no start after it does.
+    ///
+    /// Not where nobody is at the screen, and not over the page asking
+    /// which project: that page is the whole screen and the more pressing
+    /// question, so this waits for the answer (`App::settle_on`).
+    pub(in crate::app) fn ask_for_a_keymap(&mut self) -> bool {
+        if !self.settled.unchosen || self.is_headless() || self.which_project.chooser.is_some() {
+            return false;
+        }
+        self.settled.unchosen = false;
+        self.open_keymap_picker();
+        true
     }
 
     /// Offers one of the agent's settings, as the same compact list.
@@ -892,6 +981,8 @@ impl App {
             "keys_from" => match word {
                 "classic" => Some("Classic".into()),
                 "mnemonic" => Some("Mnemonic".into()),
+                "vscode" => Some("VS Code".into()),
+                "textmate" => Some("TextMate".into()),
                 _ => None,
             },
             // A share of the machine, with what it comes to on this one:
@@ -1378,7 +1469,12 @@ impl App {
         // Which file, and what was in it: "my setting did nothing" is
         // answered by the path Obelus actually read, and a reader with two
         // machines or an `XDG_CONFIG_HOME` has more than one candidate.
-        match obelus_config::read_from(&path) {
+        let reading = obelus_config::read_from(&path);
+        // Only a file that is not there: one that will not read is still
+        // the reader's, and a first start's question would be answered by
+        // writing over it.
+        self.settled.unchosen = !reading.keymap_is_chosen();
+        match reading {
             obelus_config::Reading::Settings {
                 config,
                 named,

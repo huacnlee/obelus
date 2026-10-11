@@ -686,7 +686,55 @@ const WORKFLOWS: &[&str] = &["none", "in-place", "feature-branch"];
 ///
 /// `obelus_keymap::Layout` is what each one binds, and a test in
 /// `obelus-app` holds the two lists to each other.
-pub const KEY_LAYOUTS: &[&str] = &["classic", "mnemonic"];
+pub const KEY_LAYOUTS: &[&str] = &["classic", "mnemonic", "vscode", "textmate"];
+
+/// A table of keys as a reader chooses it: the word the file holds, the
+/// name it is offered under, and what it is.
+///
+/// What it is says no key. Which key a layout puts a command on is the key
+/// table's to answer, with the reader's own `[keys]` laid over it, and a
+/// line here naming one would be a second answer to that question.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KeyLayout {
+    /// The word `keys_from` holds, one of [`KEY_LAYOUTS`].
+    pub word: &'static str,
+    /// What it is called where a reader chooses it. A name, kept in its
+    /// own spelling: `VS Code`, `TextMate`.
+    pub name: &'static str,
+    /// What it puts the keys on, in a line.
+    pub about: &'static str,
+}
+
+/// Every layout, in the order of [`KEY_LAYOUTS`], with its name and what it
+/// is.
+pub const KEY_LAYOUT_CHOICES: &[KeyLayout] = &[
+    KeyLayout {
+        word: "classic",
+        name: "Classic",
+        about: "The function keys, in banks of four",
+    },
+    KeyLayout {
+        word: "mnemonic",
+        name: "Mnemonic",
+        about: "Control and alt, on the letter of the word -- which a running terminal keeps for its program",
+    },
+    KeyLayout {
+        word: "vscode",
+        name: "VS Code",
+        about: "VS Code's keys where Obelus does the same thing, and no function keys",
+    },
+    KeyLayout {
+        word: "textmate",
+        name: "TextMate",
+        about: "TextMate's keys where Obelus does the same thing, and no function keys",
+    },
+];
+
+/// The layout a word names, with its name and what it is.
+#[must_use]
+pub fn key_layout(word: &str) -> Option<&'static KeyLayout> {
+    KEY_LAYOUT_CHOICES.iter().find(|layout| layout.word == word)
+}
 /// How many build jobs at once, as a share of the machine.
 ///
 /// Logical CPUs, which is what a build counts when it sizes itself.
@@ -920,7 +968,7 @@ pub const ALL: &[Setting] = &[
     Setting {
         key: "keys_from",
         name: "Layout",
-        about: "What your own keys start from: the function keys, or control and alt on the letter of the word",
+        about: "What your own keys start from: the function keys, letters, or another editor's",
         group: Group::Keys,
         // The reader's, for the reason the keys are: a project that could
         // choose it would be moving every key that opens anything.
@@ -1391,6 +1439,22 @@ pub enum Reading {
     Unreadable(String, Option<Span>),
 }
 
+impl Reading {
+    /// Whether the reader has been here before, so a first start's question
+    /// about which keys to start from is not to be asked.
+    ///
+    /// Only no file at all is a first start. A file that names no layout is
+    /// a reader who has the classic keys and has been using them -- every
+    /// file written before there was a choice is one -- and a file that
+    /// will not read is still theirs: asking would mean writing the answer
+    /// over it. And with nowhere to keep one, an answer could not be kept,
+    /// so it would be asked at every start.
+    #[must_use]
+    pub fn keymap_is_chosen(&self) -> bool {
+        !matches!(self, Self::Nothing)
+    }
+}
+
 /// The config a file's contents describe, taking the default for anything
 /// missing or of the wrong type.
 #[must_use]
@@ -1821,6 +1885,10 @@ pub fn to_toml(config: &Config) -> String {
 /// because Obelus had written `icons = true` down for them the first time
 /// it saved. The same rule the keys and the agents already kept -- a line
 /// is something the reader said, not something Obelus was thinking about.
+///
+/// Which holds for the layout too, `classic` included: that a reader has
+/// chosen one is said by there being a file at all
+/// ([`Reading::keymap_is_chosen`]), not by a line naming the default.
 #[must_use]
 pub fn over(existing: &str, config: &Config) -> String {
     lay(existing, config, false)
@@ -2278,6 +2346,39 @@ pub fn project_path_for(root: &Path) -> PathBuf {
     root.join(".obelus").join("config.toml")
 }
 
+/// Chooses the layout the reader's keys start from, in their own settings.
+///
+/// For `ob keys set` and a first start's question, which have no settings
+/// of their own to save: what is in the file *now* is read and the one line
+/// changed, so another window's changes since this one started are not
+/// written back over. Which narrows the window two writers have and does
+/// not close it -- [`save_to`] makes the write atomic, and nothing locks a
+/// read to the write after it.
+///
+/// A word that names no layout is refused before anything is read, and so
+/// is a file that will not read, which stays as it is: writing the layout
+/// would mean writing the defaults over everything else in it.
+///
+/// The file is written even where the layout is the default and the line
+/// comes out: that the file exists is what says a layout was chosen.
+pub fn write_keymap(path: &Path, word: &str) -> std::io::Result<()> {
+    if !KEY_LAYOUTS.contains(&word) {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidInput,
+            format!("no layout is called {word}"),
+        ));
+    }
+    let mut config = match read_from(path) {
+        Reading::Settings { config, .. } => *config,
+        Reading::Nothing | Reading::Nowhere => Config::default(),
+        Reading::Unreadable(why, _) => {
+            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, why));
+        }
+    };
+    config.keys_from = word.to_string();
+    save_to(path, &config)
+}
+
 /// Writes a config to a path, making its directory if it is not there.
 ///
 /// The path is passed in rather than looked up here, so that nothing can
@@ -2601,6 +2702,173 @@ mod tests {
         let table: toml::Table = "keys_from = \"mnemonic\"".parse().expect("toml");
         apply(&mut config, &table, Whose::Reader);
         assert_eq!(config.keys_from, "mnemonic");
+    }
+
+    /// The two editors' layouts are words the file can hold, and are
+    /// written back as they were read -- the default is not written at all.
+    ///
+    /// Broken deliberately by taking `textmate` out of `KEY_LAYOUTS`: it
+    /// read as a choice nothing answers to, and the keys started from the
+    /// classic table. And by writing `keys_from` whether or not it differs
+    /// from the default (`true` for `config.keys_from != default.keys_from`
+    /// in `to_toml`): the words still round-tripped, and only the default
+    /// below caught it -- `classic` was written into a file that never
+    /// named it.
+    #[test]
+    fn the_editors_layouts_are_words_the_file_can_hold() {
+        let default = super::Config::default();
+        assert_eq!(default.keys_from, "classic");
+        assert!(
+            !to_toml(&default).contains("keys_from"),
+            "{}",
+            to_toml(&default)
+        );
+        for word in ["vscode", "textmate"] {
+            let text = format!("keys_from = \"{word}\"\n");
+            let super::Reading::Settings {
+                config, ignored, ..
+            } = super::reading_of(&text)
+            else {
+                panic!("{word} did not read");
+            };
+            assert!(ignored.is_empty(), "{word}: {ignored:?}");
+            assert_eq!(config.keys_from, word);
+            assert_eq!(to_toml(&config), text);
+        }
+    }
+
+    /// Each layout has a name to be offered under and a line saying what
+    /// it is, in the order the file's words are in.
+    ///
+    /// The names are written out here rather than read off the table, so
+    /// the test says what a reader is shown. Broken deliberately by
+    /// spelling VS Code `Vscode`, and by giving `textmate` no entry.
+    #[test]
+    fn every_layout_has_a_name_and_what_it_is() {
+        let words: Vec<_> = super::KEY_LAYOUT_CHOICES
+            .iter()
+            .map(|layout| layout.word)
+            .collect();
+        assert_eq!(words, super::KEY_LAYOUTS);
+        let names: Vec<_> = super::KEY_LAYOUTS
+            .iter()
+            .map(|word| super::key_layout(word).map(|layout| layout.name))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                Some("Classic"),
+                Some("Mnemonic"),
+                Some("VS Code"),
+                Some("TextMate")
+            ]
+        );
+        for layout in super::KEY_LAYOUT_CHOICES {
+            assert!(!layout.about.is_empty(), "{} says nothing", layout.word);
+        }
+        assert_eq!(super::key_layout("lazyvim"), None);
+    }
+
+    /// Only a file that is not there is a reader who has not chosen.
+    ///
+    /// Broken deliberately twice: by answering `matches!(self,
+    /// Self::Settings { .. })`, which asked a reader whose file will not
+    /// read and wrote the answer over it; and by answering `true` for
+    /// everything, which never asked anybody.
+    #[test]
+    fn only_a_missing_settings_file_needs_a_keymap_choice() {
+        assert!(!super::Reading::Nothing.keymap_is_chosen());
+        assert!(super::reading_of("wrap = false").keymap_is_chosen());
+        assert!(super::reading_of("").keymap_is_chosen());
+        assert!(super::reading_of("not toml = [").keymap_is_chosen());
+        assert!(super::Reading::Nowhere.keymap_is_chosen());
+    }
+
+    /// Choosing a layout changes that line and nothing the reader said: a
+    /// setting of theirs, a key of theirs and a line this version has never
+    /// heard of all stay, and going back to the default takes the line out
+    /// and leaves the file.
+    ///
+    /// Broken deliberately by starting from `Config::default()` instead of
+    /// what the file says: the setting and the key went.
+    #[test]
+    fn choosing_a_layout_keeps_what_the_reader_said() {
+        let directory =
+            std::env::temp_dir().join(format!("obelus-choosing-a-layout-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        let file = directory.join("config.toml");
+        std::fs::create_dir_all(&directory).expect("a directory");
+        std::fs::write(
+            &file,
+            "wrap = true\nfuture_setting = 3\n\n[keys]\nopen-file = \"Ctrl+o\"\n",
+        )
+        .expect("the file");
+        super::write_keymap(&file, "textmate").expect("choosing");
+        let written = std::fs::read_to_string(&file).expect("the file");
+        let config = from_toml(&written);
+        assert_eq!(config.keys_from, "textmate", "{written}");
+        assert!(config.wrap, "{written}");
+        assert_eq!(
+            config.keys.get("open-file").map(String::as_str),
+            Some("Ctrl+o"),
+            "{written}"
+        );
+        assert!(written.contains("future_setting = 3"), "{written}");
+
+        super::write_keymap(&file, "classic").expect("choosing again");
+        let written = std::fs::read_to_string(&file).expect("the file");
+        assert!(!written.contains("keys_from"), "{written}");
+        assert_eq!(from_toml(&written).keys_from, "classic");
+        assert!(from_toml(&written).wrap, "{written}");
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    /// The default chosen where there was no file still makes one, because
+    /// a file is what says a layout was chosen.
+    ///
+    /// Broken deliberately by returning early from `write_keymap` when the
+    /// word is already the one in force: nothing was written, and the next
+    /// start would have asked again.
+    #[test]
+    fn choosing_the_default_makes_the_file() {
+        let directory = std::env::temp_dir().join(format!(
+            "obelus-choosing-the-default-{}",
+            std::process::id()
+        ));
+        let _ = std::fs::remove_dir_all(&directory);
+        let file = directory.join("obelus").join("config.toml");
+        assert!(!super::read_from(&file).keymap_is_chosen());
+        super::write_keymap(&file, "classic").expect("choosing");
+        assert!(super::read_from(&file).keymap_is_chosen());
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    /// A word that names no layout, and a file that will not read, are
+    /// both refused -- and the file is left exactly as it was.
+    ///
+    /// Broken deliberately by dropping the check of the word (a layout
+    /// nothing answers to was written), and by treating an unreadable file
+    /// as none (the defaults went over it).
+    #[test]
+    fn choosing_a_layout_refuses_and_leaves_the_file() {
+        let directory =
+            std::env::temp_dir().join(format!("obelus-refusing-a-layout-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&directory);
+        let file = directory.join("config.toml");
+        std::fs::create_dir_all(&directory).expect("a directory");
+        std::fs::write(&file, "wrap = true\n").expect("the file");
+        assert!(super::write_keymap(&file, "lazyvim").is_err());
+        assert_eq!(
+            std::fs::read_to_string(&file).expect("the file"),
+            "wrap = true\n"
+        );
+        std::fs::write(&file, "wrap = [").expect("the file");
+        assert!(super::write_keymap(&file, "vscode").is_err());
+        assert_eq!(
+            std::fs::read_to_string(&file).expect("the file"),
+            "wrap = ["
+        );
+        let _ = std::fs::remove_dir_all(&directory);
     }
 
     /// A project cannot choose which keys a reader starts from: it would be

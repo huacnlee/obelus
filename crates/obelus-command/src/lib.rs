@@ -43,6 +43,8 @@ pub enum Command {
     PreviewToggle,
     /// Choose a theme.
     ThemeSelect,
+    /// Choose which keymap the reader's keys start from.
+    KeymapSelect,
     /// Choose a command by name.
     CommandPalette,
     /// Ask a language server about the symbol under the cursor.
@@ -471,6 +473,11 @@ pub const ALL: &[CommandSpec] = &[
         title: "Change the colours",
     },
     CommandSpec {
+        command: Command::KeymapSelect,
+        name: "choose-keymap",
+        title: "Choose which keys Obelus starts from",
+    },
+    CommandSpec {
         command: Command::CommandPalette,
         name: "run-command",
         title: "Run a command by name",
@@ -821,6 +828,7 @@ impl Command {
             | Self::FileRename
             | Self::PreviewToggle
             | Self::ThemeSelect
+            | Self::KeymapSelect
             | Self::CommandPalette
             | Self::SymbolMenu
             | Self::SymbolComplete
@@ -913,6 +921,7 @@ impl Command {
         match self {
             Self::CommandPalette
             | Self::ThemeSelect
+            | Self::KeymapSelect
             | Self::SymbolMenu
             | Self::CodeActions
             | Self::SymbolTroubles
@@ -1035,6 +1044,7 @@ impl Command {
             | Self::FileNew
             | Self::PreviewToggle
             | Self::ThemeSelect
+            | Self::KeymapSelect
             | Self::CommandPalette
             | Self::SymbolMenu
             | Self::SymbolComplete
@@ -1172,6 +1182,7 @@ impl Command {
             | Self::LogOpen
             | Self::LogServers
             | Self::ThemeSelect
+            | Self::KeymapSelect
             | Self::CommandPalette
             | Self::Quit => Group::Obelus
         }
@@ -1314,6 +1325,7 @@ impl Command {
             // `choose-theme`, `log.open` and the palette itself work with
             // nothing open at all.
             Self::ThemeSelect
+            | Self::KeymapSelect
             | Self::CommandPalette
             | Self::ConfigOpen
             | Self::ConfigFile
@@ -1452,6 +1464,7 @@ mod tests {
             Command::FileRename,
             Command::PreviewToggle,
             Command::ThemeSelect,
+            Command::KeymapSelect,
             Command::CommandPalette,
             Command::SymbolMenu,
             Command::SymbolOutline,
@@ -1509,6 +1522,7 @@ mod tests {
         assert_eq!(Command::LspRestart.group(), Group::Obelus);
         assert_eq!(Command::LspStop.group(), Group::Obelus);
         assert_eq!(Command::ThemeSelect.group(), Group::Obelus);
+        assert_eq!(Command::KeymapSelect.group(), Group::Obelus);
 
         assert_eq!(Command::DocumentClose.group(), Group::Files);
         assert_eq!(Command::SymbolOutline.group(), Group::Code);

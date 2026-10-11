@@ -24,9 +24,13 @@
 //!   keys every list and box takes itself;
 //! * `escape`, which Obelus keeps: give up on the nearest thing is not
 //!   negotiable, and it is the one default a reader cannot move;
-//! * anything with two modifiers, and `ctrl` with a capital letter -- a control
-//!   byte cannot say which case the letter was, so `ctrl+shift+p` works only on
-//!   a terminal speaking the keyboard protocol. `alt+P` is fine, because alt is
+//! * anything with two modifiers, which is the desktop's (`ctrl+alt`) or a
+//!   chord a terminal reports as one of its halves. Shift on a letter is not a
+//!   second modifier: it is the capital, and `ctrl+P` -- `ctrl+shift+p` -- may
+//!   be bound, because two editors' layouts are built on such chords. It works
+//!   on a terminal speaking the keyboard protocol; on the rest it arrives as
+//!   `ctrl+p`, which is why those layouts give each of them an alt chord as
+//!   well (`Keymap::laid_out`). `alt+P` is fine everywhere, because alt is
 //!   the escape prefix and really does carry the shifted letter;
 //! * a function key with anything held, for the same reason.
 //!
@@ -52,17 +56,22 @@
 //!
 //! Which table the changes are laid over is a setting of its own,
 //! `keys_from`, on the same page: the function keys ([`Layout::Classic`]),
-//! or the same commands on control and alt ([`Layout::Mnemonic`]).
+//! the same commands on control and alt ([`Layout::Mnemonic`]), or another
+//! editor's keys ([`Layout::VsCode`], [`Layout::TextMate`]) -- adapted to
+//! what Obelus has, not a copy of either.
 //!
 //! Modifiers are judged exactly, in one place. `modifiers_of` is the
 //! only judge -- it lives in [`obelus_editing`], because the caret asks it too;
 //! `SUPER`/`HYPER`/`META` disqualify a key rather than being masked
-//! away. Masking meant `ctrl+super+q` quit.
+//! away. Masking meant `ctrl+super+q` quit. Nor is super ever read as
+//! control: on Linux and Windows it is the desktop's.
 //!
 //! On macOS a window is told command where everything else is told control,
 //! and `obg` reports one as the other before a key reaches this table. So
 //! there is still one table, and it is drawn the way the reader presses it:
-//! [`draw_control_as_command`].
+//! [`draw_control_as_command`]. Which is how every layout -- the editors'
+//! included -- is on command in a window on a Mac and on control everywhere
+//! else, without a binding of its own for either.
 
 use std::sync::atomic::{AtomicBool, Ordering};
 
@@ -239,26 +248,30 @@ impl KeyChord {
     pub fn parse(text: &str) -> Option<Self> {
         let mut modifiers = KeyModifiers::NONE;
         let mut rest = text.trim();
-        loop {
-            let (modifier, tail) = match rest {
-                _ if rest.len() > 5 && rest[..5].eq_ignore_ascii_case("ctrl+") => {
-                    (KeyModifiers::CONTROL, &rest[5..])
-                }
+        // Asked a byte at a time with `get` rather than sliced: a chord is
+        // often a mark after its modifier -- `Alt+\u{2191}` is how Obelus
+        // writes one -- and slicing five bytes into that cuts the arrow in
+        // half, which panicked on the reader's own settings file.
+        let after = |rest: &'_ str, name: &str| -> Option<usize> {
+            let head = rest.get(..name.len())?;
+            (head.eq_ignore_ascii_case(name) && rest.len() > name.len()).then_some(name.len())
+        };
+        'modifiers: loop {
+            for (name, modifier) in [
+                ("ctrl+", KeyModifiers::CONTROL),
                 // What the screen calls control in `obg` on macOS -- see
                 // `label_as`.
-                _ if rest.len() > 4 && rest[..4].eq_ignore_ascii_case("cmd+") => {
-                    (KeyModifiers::CONTROL, &rest[4..])
+                ("cmd+", KeyModifiers::CONTROL),
+                ("alt+", KeyModifiers::ALT),
+                ("shift+", KeyModifiers::SHIFT),
+            ] {
+                if let Some(length) = after(rest, name) {
+                    modifiers |= modifier;
+                    rest = &rest[length..];
+                    continue 'modifiers;
                 }
-                _ if rest.len() > 4 && rest[..4].eq_ignore_ascii_case("alt+") => {
-                    (KeyModifiers::ALT, &rest[4..])
-                }
-                _ if rest.len() > 6 && rest[..6].eq_ignore_ascii_case("shift+") => {
-                    (KeyModifiers::SHIFT, &rest[6..])
-                }
-                _ => break,
-            };
-            modifiers |= modifier;
-            rest = tail;
+            }
+            break;
         }
         let code = match rest.to_ascii_lowercase().as_str() {
             "space" => KeyCode::Char(' '),
@@ -272,6 +285,9 @@ impl KeyChord {
             "delete" => KeyCode::Delete,
             "tab" => KeyCode::Tab,
             "backtab" => KeyCode::BackTab,
+            // Written by `label_in` as the key's own name, so it has to read
+            // back: `replace-toggle` and the desktop's paste are on it.
+            "insert" => KeyCode::Insert,
             // Both ways of writing an arrow: the drawn one is what Obelus
             // writes, and the word is what somebody typing the file by hand
             // reaches for.
@@ -410,9 +426,15 @@ pub struct Keymap {
 ///
 /// The function keys are a row some keyboards do not have and some laptops
 /// put behind `fn`, so a reader can start from a table with none: the same
-/// twelve commands on control and alt, by the letter of the word. A choice
-/// of where to *start*, and nothing more -- the reader's own `[keys]` are
-/// laid over whichever it is, the way they are laid over the shipped table.
+/// twelve commands on control and alt, by the letter of the word -- or on
+/// the keys another editor taught them, where it has the same command
+/// ([`Keymap::laid_out`]). None of the last three has a function key.
+/// A choice of where to *start*, and nothing more -- the reader's own
+/// `[keys]` are laid over whichever it is, the way they are laid over the
+/// shipped table, so switching keeps them.
+///
+/// The words are `obelus_config::KEY_LAYOUTS`, and each one's name and what
+/// it is are `obelus_config::key_layout`'s.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Layout {
     /// The function keys, in their banks of four.
@@ -420,11 +442,16 @@ pub enum Layout {
     Classic,
     /// Control and alt, on the letter of the word.
     Mnemonic,
+    /// VS Code's keys, where Obelus has the command: `ctrl+p` the files,
+    /// `ctrl+shift+p` the palette.
+    VsCode,
+    /// TextMate's: `ctrl+t` the files, `ctrl+shift+t` this file's symbols.
+    TextMate,
 }
 
 impl Layout {
     /// Every layout, in the order a list offers them.
-    pub const ALL: [Self; 2] = [Self::Classic, Self::Mnemonic];
+    pub const ALL: [Self; 4] = [Self::Classic, Self::Mnemonic, Self::VsCode, Self::TextMate];
 
     /// What it is called in the settings file.
     #[must_use]
@@ -432,6 +459,8 @@ impl Layout {
         match self {
             Self::Classic => "classic",
             Self::Mnemonic => "mnemonic",
+            Self::VsCode => "vscode",
+            Self::TextMate => "textmate",
         }
     }
 
@@ -482,9 +511,10 @@ const MNEMONIC: [(Command, KeyChord); 12] = [
     ),
 ];
 
-/// A chord of [`MNEMONIC`]'s, built where a `const` can be: every one of
-/// them is a lowercase letter or a mark, which `KeyChord::new` would leave
-/// as it is anyway.
+/// A chord of [`MNEMONIC`]'s, built where a `const` can be, and of the
+/// editors' layouts. A capital here is the shifted letter, which is what
+/// `KeyChord::new` folds shift into -- so it would leave every one of them as
+/// it is anyway.
 const fn mnemonic(character: char, modifiers: KeyModifiers) -> KeyChord {
     KeyChord {
         code: KeyCode::Char(character),
@@ -531,7 +561,9 @@ impl Keymap {
     /// arrow, in the editor) or reverses (`shift+tab`, in the
     /// conversation), which leaves it meaning one thing everywhere. The one
     /// exception, `shift+Insert`, is not a name Obelus chose -- see
-    /// [`why_not`].
+    /// [`why_not`]. The editors' layouts borrow chords with shift in them,
+    /// and they are those editors' names rather than Obelus's
+    /// ([`Self::laid_out`]).
     ///
     /// Everything else is reached from the palette. A chord for every
     /// command is how a key table stops being memorable, and most of what
@@ -1040,6 +1072,16 @@ impl Keymap {
                     context: Context::Normal,
                     chord: KeyChord::new(KeyCode::Char('s'), KeyModifiers::ALT),
                 },
+                // `alt+k` for keymap, and the one alt key not about the
+                // caret: it is the way back for a reader whose layout has
+                // moved every other key, so it is on a chord no layout
+                // moves -- control and the function keys are what they
+                // rearrange, and alt arrives on every terminal.
+                Binding {
+                    command: Command::KeymapSelect,
+                    context: Context::Normal,
+                    chord: KeyChord::new(KeyCode::Char('k'), KeyModifiers::ALT),
+                },
                 // `alt+e` for error: what the server says is wrong with
                 // this file, on the letter like the rest of this family.
                 Binding {
@@ -1113,15 +1155,121 @@ impl Keymap {
     /// moved onto letters and nothing else touched, so everything argued
     /// over the shipped table holds for both -- control, alt and the
     /// palette are the same keys in each.
+    ///
+    /// The two editors' layouts are on control, like everything else in
+    /// the table, and have no chord of their own for Command: `obg` on a
+    /// Mac reports Command as control and draws control as `Cmd`
+    /// ([`draw_control_as_command`]), so the same table is Command there
+    /// and control everywhere else. A terminal on a Mac keeps Command for
+    /// itself -- `cmd+c`, `cmd+v`, `cmd+w`, `cmd+q` -- and on Linux and
+    /// Windows super is the desktop's, so it is never read as control.
+    ///
+    /// What moves is the twelve keys the function keys hold, and the
+    /// palette, which is where both editors have the key a reader opens
+    /// files with. Shift does name a command here, which nothing of
+    /// Obelus's own does: these are other editors' chords, borrowed whole
+    /// (`ctrl+shift+p`), and a control byte cannot carry the case of a
+    /// letter -- so each of them has an alt chord as well, which every
+    /// terminal can send. Without the keyboard protocol `ctrl+shift+p`
+    /// arrives as `ctrl+p`, which is the files rather than the palette:
+    /// the nearer of the two wrong answers, and the alt chord is the right
+    /// one. Where neither editor has a key for something -- the history,
+    /// the agent -- it goes where [`Layout::Mnemonic`] put it, if that is
+    /// free here.
     #[must_use]
     pub fn laid_out(layout: Layout) -> Self {
         let mut keymap = Self::new();
-        if layout == Layout::Mnemonic {
-            for (command, chord) in MNEMONIC {
-                keymap.rebind(command, Some(chord));
+        let text_mate = match layout {
+            Layout::Classic => return keymap,
+            Layout::Mnemonic => {
+                for (command, chord) in MNEMONIC {
+                    keymap.rebind(command, Some(chord));
+                }
+                return keymap;
+            }
+            Layout::VsCode => false,
+            Layout::TextMate => true,
+        };
+        // Control, which is Command in `obg` on a Mac -- see above.
+        let primary = KeyModifiers::CONTROL;
+        let alt = KeyModifiers::ALT;
+        let on = mnemonic;
+        // The first chord of each is the one shown; the rest are the ones a
+        // terminal without the keyboard protocol can send.
+        let moved: [(Command, &[KeyChord]); 14] = [
+            (
+                Command::FileOpen,
+                &[on(if text_mate { 't' } else { 'p' }, primary)],
+            ),
+            (Command::CommandPalette, &[on('P', primary), on('P', alt)]),
+            (Command::DocumentList, &[on('e', primary)]),
+            (Command::FileChanged, &[on('G', primary), on('g', alt)]),
+            (Command::ConversationSelect, &[on('N', alt)]),
+            (Command::SearchFile, &[on('f', primary)]),
+            (Command::SearchProject, &[on('F', primary), on('/', alt)]),
+            (
+                Command::SymbolOutline,
+                &[on(if text_mate { 'T' } else { 'O' }, primary), on('u', alt)],
+            ),
+            // VS Code's go-to-symbol-in-workspace. TextMate has `cmd+t` for
+            // the files, so the symbols go where the mnemonic layout has
+            // them.
+            (
+                Command::SearchSymbols,
+                &[match text_mate {
+                    true => on('y', alt),
+                    false => on('t', primary),
+                }],
+            ),
+            (Command::HistoryFile, &[on('l', alt)]),
+            (Command::HistoryProject, &[on('L', alt)]),
+            (Command::SymbolDefinition, &[on('.', alt)]),
+            (Command::PullRequestReview, &[on('u', primary)]),
+            // Off `ctrl+t`, which both editors spend on something else, and
+            // beside `alt+t`, which writes a note rather than reading them.
+            (Command::TodoOpen, &[on('T', alt)]),
+        ];
+        // Where each was bound, asked of the table before any of them moves:
+        // one moving onto another's old key would otherwise take that
+        // context away from it -- the files on `ctrl+p` took the palette out
+        // of the file it is in, and left it the terminal's.
+        let contexts: Vec<Vec<Context>> = moved
+            .iter()
+            .map(|(command, _)| {
+                let mut contexts = Vec::new();
+                for binding in &keymap.bindings {
+                    if binding.command == *command && !contexts.contains(&binding.context) {
+                        contexts.push(binding.context);
+                    }
+                }
+                contexts
+            })
+            .collect();
+        keymap
+            .bindings
+            .retain(|binding| !moved.iter().any(|(command, _)| *command == binding.command));
+        for ((command, chords), contexts) in moved.iter().zip(&contexts) {
+            for context in contexts {
+                for chord in *chords {
+                    keymap.put(*command, *context, *chord);
+                }
             }
         }
+        // Redo keeps `ctrl+y`, which every terminal can send, and gains the
+        // chord both editors have it on.
+        keymap.put(Command::Redo, Context::Normal, on('Z', primary));
         keymap
+    }
+
+    /// Binds a chord in one context, taking it off whatever had it there.
+    fn put(&mut self, command: Command, context: Context, chord: KeyChord) {
+        self.bindings
+            .retain(|binding| binding.chord != chord || binding.context != context);
+        self.bindings.push(Binding {
+            command,
+            context,
+            chord,
+        });
     }
 
     /// The command a key event runs in `context`, if any.
@@ -1440,10 +1588,11 @@ pub fn why_not(chord: KeyChord) -> Option<&'static str> {
         return None;
     }
 
-    // Two of them, or shift with another: shift extends and reverses and
-    // names nothing, and a second modifier is either the desktop's
-    // (`ctrl+alt`) or something only a terminal speaking the keyboard
-    // protocol can report (`ctrl+shift`).
+    // Two of them, or shift with something that is not a letter: shift
+    // extends and reverses, and a second modifier is either the desktop's
+    // (`ctrl+alt`) or a chord the next terminal reports as one of its
+    // halves. Shift on a letter has already been folded into the capital,
+    // so `ctrl+shift+p` is `ctrl+P` by now and is not refused here.
     if !alone && !control && !alt {
         return Some("Shift extends, and two modifiers is the desktop's");
     }
@@ -1479,14 +1628,6 @@ pub fn why_not(chord: KeyChord) -> Option<&'static str> {
         // Escape has one meaning everywhere: give up on the nearest thing.
         KeyCode::Esc => Some("Escape always backs out of the nearest thing"),
         KeyCode::Char(_) if alone => Some("Typing, not a command"),
-        // `ctrl+shift+p` folds onto `ctrl+P`, and a control byte cannot
-        // carry a letter's case: only a terminal speaking the keyboard
-        // protocol tells the two apart, so the binding would work on this
-        // machine and not the next. Alt is different -- it is the escape
-        // prefix, so `alt+P` really is the shifted letter.
-        KeyCode::Char(character) if control && character.is_ascii_uppercase() => {
-            Some("A control byte cannot say which case the letter was")
-        }
         // The six the wire cannot tell from tab, enter, newline, backspace,
         // escape and NUL, whatever the reader pressed.
         KeyCode::Char(character) if control && "imjh[ 2".contains(character) => {
@@ -1551,7 +1692,10 @@ mod tests {
     ///
     /// The shipped table and the page that binds keys answer to the same
     /// function, so a default outside the families would be a key Obelus
-    /// gives itself and refuses to the reader.
+    /// gives itself and refuses to the reader. Every layout: broken
+    /// deliberately by refusing control with a capital in `why_not`, as it
+    /// was before the editors' layouts, and `ctrl+P` was a key Obelus
+    /// shipped and refused.
     #[test]
     fn every_default_binding_is_one_the_reader_could_make() {
         let tables = Layout::ALL.map(Keymap::laid_out);
@@ -1617,10 +1761,6 @@ mod tests {
             (KeyCode::Esc, KeyModifiers::NONE),
             // Two keys on the next terminal.
             (KeyCode::F(5), KeyModifiers::SHIFT),
-            (
-                KeyCode::Char('p'),
-                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
-            ),
             (
                 KeyCode::Char('x'),
                 KeyModifiers::CONTROL | KeyModifiers::ALT,
@@ -1797,7 +1937,7 @@ mod tests {
             .into_iter()
             .collect();
         let control_p = crossterm::event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
-        for layout in Layout::ALL {
+        for layout in [Layout::Classic, Layout::Mnemonic] {
             let (keymap, _) = Keymap::with(layout, &lines);
             assert_eq!(
                 keymap.lookup(&control_p, Context::Normal),

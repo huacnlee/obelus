@@ -367,7 +367,10 @@ command is gone and `App::blame` reads the setting.
   modifier: one terminal reports `shift+f5` and the next reports `f17` for the
   same press. That is the `classic` layout; a keyboard without the row starts
   from `mnemonic` (`keys_from`), the same twelve on control and alt by the
-  letter of the word, and nothing else moved (`keymap::Layout`).
+  letter of the word, and nothing else moved -- or from another editor's,
+  `vscode` or `textmate`, which have no function key at all and are on
+  control like everything else, so a Mac's window makes them command too
+  (`keymap::Layout`).
 * **Control does something to the file in front of you**, on the letter of the
   word (`ctrl+p` the palette, `ctrl+w` close, `ctrl+c` copy, `ctrl+q` leave).
   In `obg` on a Mac it is command, and drawn so: one table, two names for the

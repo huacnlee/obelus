@@ -50,7 +50,7 @@ mod window;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use obelus_app::startup;
 
 /// A code editor in a window, with the agent built in.
@@ -59,6 +59,10 @@ use obelus_app::startup;
 // name from the crate, and `obelus-gui --version` is a name nobody has.
 #[command(name = "obg", version, about)]
 struct Arguments {
+    /// Something to do instead of opening anything.
+    #[command(subcommand)]
+    command: Option<Management>,
+
     /// What to open: a file, or a directory to work in.
     ///
     /// A file names the tree it is in and is opened. A directory is the
@@ -71,11 +75,42 @@ struct Arguments {
     connect_remote: bool,
 }
 
+/// What `obg` can do without opening anything: what `ob` can, so either
+/// name answers the same question.
+///
+/// A word that is also a path: `obg keys` is this, and a file called
+/// `keys` is `obg ./keys` or `obg -- keys`.
+#[derive(Subcommand)]
+enum Management {
+    /// Say which keys Obelus starts from, or choose them.
+    Keys {
+        #[command(subcommand)]
+        choose: Option<Keys>,
+    },
+}
+
+/// What `keys` can be asked to do besides saying.
+#[derive(Subcommand)]
+enum Keys {
+    /// Choose the keys every Obelus starts from, keeping your own.
+    Set {
+        /// The layout.
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(startup::keys::PRESETS.iter().copied()))]
+        layout: String,
+    },
+}
+
 fn main() -> Result<()> {
     // Before the arguments, because `--help` is said on it.
     #[cfg(windows)]
     take_the_console_it_was_started_from();
     let arguments = Arguments::parse();
+    // Before the log and the window: it opens nothing, so it has nothing to
+    // say in either, and what it says goes to the console taken above.
+    if let Some(Management::Keys { choose }) = &arguments.command {
+        let layout = choose.as_ref().map(|Keys::Set { layout }| layout.as_str());
+        return startup::keys::run("obg", layout);
+    }
     // Before anything else starts a thread, because changing the
     // environment while another thread reads it is undefined. And before
     // the log, which starts one -- so what happened is said after it.
@@ -221,5 +256,28 @@ mod tests {
         assert!(shown("font_size"));
         // And what both of them are drawn with is nobody's front end.
         assert!(shown("theme"));
+    }
+
+    /// `obg keys` is what `ob keys` is, and a file called `keys` still
+    /// opens.
+    ///
+    /// Broken deliberately by taking the value parser off `layout`:
+    /// `lazyvim` was taken.
+    #[test]
+    fn keys_is_a_subcommand_here_too() {
+        use clap::Parser as _;
+        let parse = |words: &[&str]| {
+            super::Arguments::try_parse_from(std::iter::once("obg").chain(words.iter().copied()))
+        };
+        assert!(matches!(
+            parse(&["keys", "set", "textmate"]).expect("choosing").command,
+            Some(super::Management::Keys {
+                choose: Some(super::Keys::Set { ref layout }),
+            }) if layout == "textmate"
+        ));
+        assert!(parse(&["keys", "set", "lazyvim"]).is_err());
+        let escaped = parse(&["--", "keys"]).expect("a file called keys");
+        assert!(escaped.command.is_none());
+        assert_eq!(escaped.paths, [std::path::PathBuf::from("keys")]);
     }
 }
