@@ -223,7 +223,7 @@ fn style_of(ink: Ink, span: &obelus_row::Span, theme: &Theme, base: Style) -> St
         Ink::Plain => style,
         Ink::Heading(_) => style.fg(theme.syntax.keyword).add_modifier(Modifier::BOLD),
         Ink::Code => style.fg(theme.syntax.string),
-        Ink::Syntax(kind) => style.fg(theme.syntax.colour(kind)),
+        Ink::Syntax(kind) => style.patch(theme.syntax.style(kind)),
         Ink::Aside => style.fg(theme.syntax.comment),
         Ink::Mark => style.fg(theme.gutter),
         Ink::Name => style.fg(theme.syntax.type_name),

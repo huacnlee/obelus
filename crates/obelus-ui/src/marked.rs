@@ -136,7 +136,7 @@ pub fn write_marked(
                     .find(|(from, to, _)| at >= *from && at < *to)
                     .map(|(_, _, kind)| *kind)
             }) {
-                Some(kind) => style.fg(theme.syntax.colour(kind)),
+                Some(kind) => style.patch(theme.syntax.style(kind)),
                 None => style,
             },
             None => style,

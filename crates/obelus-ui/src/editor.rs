@@ -1210,8 +1210,7 @@ impl Widget for EditorView<'_> {
                                 at + mark_width,
                                 y,
                                 &elision.closing,
-                                Style::new()
-                                    .fg(self.theme.colour_for(self.highlights.kind_at(elision.at))),
+                                self.theme.style_for(self.highlights.kind_at(elision.at)),
                             );
                         }
                     }
@@ -1615,15 +1614,16 @@ fn draw_row(
         if offset >= width {
             break;
         }
-        let colour = painting.ink.unwrap_or_else(|| {
-            painting
-                .theme
-                .colour_for(painting.highlights.kind_at(glyph.first_byte))
-        });
-
         // A foreground, so the background the fill painted stays — except
-        // where the run being marked needs one of its own.
-        let mut style = Style::new().fg(colour);
+        // where the run being marked needs one of its own. The slant comes
+        // with the kind, so an ink laid over the whole row -- which says
+        // what the row is instead -- replaces both.
+        let mut style = match painting.ink {
+            Some(colour) => Style::new().fg(colour),
+            None => painting
+                .theme
+                .style_for(painting.highlights.kind_at(glyph.first_byte)),
+        };
         if painting
             .marked
             .iter()

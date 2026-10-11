@@ -9,7 +9,7 @@ pub mod builtin;
 pub mod written;
 
 use obelus_text::kind::SyntaxKind;
-use ratatui::style::Color;
+use ratatui::style::{Color, Modifier, Style};
 
 /// One colour per [`SyntaxKind`].
 #[derive(Clone, Copy, Debug)]
@@ -54,9 +54,57 @@ pub struct SyntaxTheme {
     pub error: Color,
     /// See [`SyntaxKind::Warning`].
     pub warning: Color,
+    /// The kinds drawn slanted.
+    ///
+    /// Comments, in every theme Obelus ships: a comment is the one kind
+    /// that is prose rather than code, and the slant says so before the
+    /// colour is read -- which matters most in the themes whose comment
+    /// colour is only a shade off the ink. A set rather than a style per
+    /// kind, because a slant is the one thing a terminal draws reliably
+    /// beside a colour: bold changes the colour in some of them, and an
+    /// underline is what a problem is marked with.
+    pub italic: Kinds,
+}
+
+/// A set of [`SyntaxKind`]s.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct Kinds(u32);
+
+impl Kinds {
+    /// None of them.
+    pub const NONE: Self = Self(0);
+    /// Comments, and nothing else.
+    pub const COMMENT: Self = Self::NONE.with(SyntaxKind::Comment);
+
+    /// This set and `kind`.
+    #[must_use]
+    pub const fn with(self, kind: SyntaxKind) -> Self {
+        Self(self.0 | 1 << kind as u32)
+    }
+
+    /// Whether `kind` is in it.
+    #[must_use]
+    pub const fn contains(self, kind: SyntaxKind) -> bool {
+        self.0 & 1 << kind as u32 != 0
+    }
 }
 
 impl SyntaxTheme {
+    /// How text of a kind is drawn: its colour, and the slant where the
+    /// theme gives it one.
+    ///
+    /// The one place a kind becomes a style, so the file, a preview of it
+    /// and a row of a list that quotes it agree about what a comment looks
+    /// like.
+    #[must_use]
+    pub const fn style(&self, kind: SyntaxKind) -> Style {
+        let style = Style::new().fg(self.colour(kind));
+        match self.italic.contains(kind) {
+            true => style.add_modifier(Modifier::ITALIC),
+            false => style,
+        }
+    }
+
     /// The colour for a kind.
     #[must_use]
     pub const fn colour(&self, kind: SyntaxKind) -> Color {
@@ -325,6 +373,15 @@ impl Theme {
         match kind {
             Some(kind) => self.syntax.colour(kind),
             None => self.foreground,
+        }
+    }
+
+    /// How text of this kind is drawn, falling back to plain text.
+    #[must_use]
+    pub const fn style_for(&self, kind: Option<SyntaxKind>) -> Style {
+        match kind {
+            Some(kind) => self.syntax.style(kind),
+            None => Style::new().fg(self.foreground),
         }
     }
 }

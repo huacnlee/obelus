@@ -13,9 +13,10 @@
 
 use std::path::{Path, PathBuf};
 
+use obelus_text::kind::SyntaxKind;
 use ratatui::style::Color;
 
-use crate::{SyntaxTheme, Theme, builtin};
+use crate::{Kinds, SyntaxTheme, Theme, builtin};
 
 /// The directory a layer's themes live in, beside its settings file.
 #[must_use]
@@ -147,6 +148,9 @@ pub fn over(table: &toml::Table) -> Theme {
             variable: syn("variable", base.syntax.variable),
             error: syn("error", base.syntax.error),
             warning: syn("warning", base.syntax.warning),
+            italic: syntax
+                .and_then(|table| table.get("italic"))
+                .map_or(base.syntax.italic, slanted),
         },
         // What the file names, and what the base names where it does not:
         // a colour left to Obelus stays left, so it is worked out from
@@ -169,6 +173,54 @@ pub fn over(table: &toml::Table) -> Theme {
                 .or(base.terminal[index])
         }),
     }
+}
+
+/// The kinds a theme file draws slanted: `italic = ["comment"]`, by the
+/// names the colours are given under -- so `[]` is none at all, and a file
+/// that says nothing keeps its base's.
+///
+/// A word that names no kind is left out with a word in the log, for the
+/// same reason a colour that will not parse is: the rest of the list is
+/// still what the reader asked for.
+fn slanted(said: &toml::Value) -> Kinds {
+    let Some(words) = said.as_array() else {
+        tracing::warn!(?said, "not a list of kinds, so nothing is slanted");
+        return Kinds::NONE;
+    };
+    words.iter().fold(Kinds::NONE, |kinds, word| {
+        match word.as_str().and_then(kind_named) {
+            Some(kind) => kinds.with(kind),
+            None => {
+                tracing::warn!(?word, "not a kind, so it was left out");
+                kinds
+            }
+        }
+    })
+}
+
+/// A kind by the name its colour has in a theme file.
+fn kind_named(name: &str) -> Option<SyntaxKind> {
+    Some(match name {
+        "attribute" => SyntaxKind::Attribute,
+        "boolean" => SyntaxKind::Boolean,
+        "comment" => SyntaxKind::Comment,
+        "constant" => SyntaxKind::Constant,
+        "constructor" => SyntaxKind::Constructor,
+        "escape" => SyntaxKind::Escape,
+        "function" => SyntaxKind::Function,
+        "keyword" => SyntaxKind::Keyword,
+        "label" => SyntaxKind::Label,
+        "number" => SyntaxKind::Number,
+        "operator" => SyntaxKind::Operator,
+        "property" => SyntaxKind::Property,
+        "punctuation" => SyntaxKind::Punctuation,
+        "string" => SyntaxKind::String,
+        "type_name" => SyntaxKind::Type,
+        "variable" => SyntaxKind::Variable,
+        "error" => SyntaxKind::Error,
+        "warning" => SyntaxKind::Warning,
+        _ => return None,
+    })
 }
 
 /// One colour out of a table, or what it inherits.
