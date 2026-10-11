@@ -17,9 +17,98 @@
 //! they are one byte each -- and most terminals send nothing at all for
 //! `ctrl+shift+X`. Here they arrive as themselves, because a window is told
 //! which key went down rather than which bytes to read.
+//!
+//! And where a platform names a modifier differently from the rest. On macOS
+//! command is what a reader presses a program with -- `cmd+s`, `cmd+w`,
+//! `cmd+q` -- and control is the text fields' own, for the line motions
+//! Obelus does not have. So there command is reported as control, and the
+//! one table answers both; control still works, which is the hand a reader
+//! brings over from `ob` in a terminal, where command never arrives because
+//! the terminal keeps it. Both held together is still a key Obelus does not
+//! understand, as `ctrl+super+q` is everywhere else (`modifiers_of`).
 
 use crossterm::event::{KeyCode, KeyEvent, KeyEventKind, KeyEventState, KeyModifiers};
 use winit::keyboard::{Key, KeyCode as Physical, ModifiersState, NamedKey, PhysicalKey};
+
+/// Whether command is reported as control: on macOS, and nowhere else,
+/// where super is the window manager's and never reaches a window.
+///
+/// One constant for the two halves -- what a key arrives as and what the
+/// foot calls it (`obelus_keymap::draw_control_as_command`, from `main`) --
+/// because a foot that says `Cmd` over a key that does nothing is worse than
+/// either alone.
+pub(crate) const COMMAND_IS_CONTROL: bool = cfg!(target_os = "macos");
+
+/// What the window system is asked for with command, rather than Obelus.
+///
+/// The three a Mac window answers whatever program it belongs to. The menu
+/// winit puts up answered the first two, and its `Quit` ended the process
+/// without asking about unwritten files, so `obg` has no menu and answers
+/// these itself -- and `cmd+q` is the key that leaves, question included.
+///
+/// Which mends the key and not every way of quitting. Quit from the Dock,
+/// from the switcher and at logging out still end the process unasked:
+/// they go to the application rather than to a key, and winit gives no way
+/// to answer them (`applicationShouldTerminate:` is not one it implements).
+#[cfg(any(test, target_os = "macos"))]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Asked {
+    /// `cmd+h`: put Obelus away.
+    Hide,
+    /// `alt+cmd+h`: put everything else away.
+    HideOthers,
+    /// `cmd+m`: this window into the Dock.
+    Minimize,
+}
+
+/// Which of [`Asked`] a press is, if any.
+///
+/// Asked before [`pressed`], which would make every one of them control.
+#[cfg(any(test, target_os = "macos"))]
+pub(crate) fn asked_of_the_window(
+    logical: &Key,
+    physical: PhysicalKey,
+    modifiers: ModifiersState,
+) -> Option<Asked> {
+    if !modifiers.super_key() || modifiers.control_key() || modifiers.shift_key() {
+        return None;
+    }
+    let alt = modifiers.alt_key();
+    // Asked as the control it is about to become, so a layout that is not
+    // Latin -- where `cmd+h` arrives as `р` -- is taken back to the key the
+    // way a binding is (`code_of`).
+    let mut bits = KeyModifiers::CONTROL;
+    bits.set(KeyModifiers::ALT, alt);
+    match (code_of(logical, physical, bits)?, alt) {
+        (KeyCode::Char('h'), false) => Some(Asked::Hide),
+        (KeyCode::Char('h'), true) => Some(Asked::HideOthers),
+        (KeyCode::Char('m'), false) => Some(Asked::Minimize),
+        _ => None,
+    }
+}
+
+/// Whether a press is reported as control because command was held --
+/// which a terminal in Obelus has to know (`Event::Command`).
+pub(crate) fn by_command(modifiers: ModifiersState) -> bool {
+    command_stands_for_control(modifiers, COMMAND_IS_CONTROL)
+}
+
+/// Whether command is held and stands for control: not with control as
+/// well, which is a chord Obelus does not understand.
+fn command_stands_for_control(modifiers: ModifiersState, command_is_control: bool) -> bool {
+    command_is_control && modifiers.super_key() && !modifiers.control_key()
+}
+
+/// The modifiers held, as the rest of Obelus names them.
+fn modifiers_of(modifiers: ModifiersState, command_is_control: bool) -> KeyModifiers {
+    let command = command_stands_for_control(modifiers, command_is_control);
+    let mut bits = KeyModifiers::empty();
+    bits.set(KeyModifiers::SHIFT, modifiers.shift_key());
+    bits.set(KeyModifiers::CONTROL, modifiers.control_key() || command);
+    bits.set(KeyModifiers::ALT, modifiers.alt_key());
+    bits.set(KeyModifiers::SUPER, modifiers.super_key() && !command);
+    bits
+}
 
 /// Whether a key event is the reader pressing a key.
 ///
@@ -46,12 +135,7 @@ pub(crate) fn pressed(
     modifiers: ModifiersState,
     repeat: bool,
 ) -> Option<KeyEvent> {
-    let mut bits = KeyModifiers::empty();
-    bits.set(KeyModifiers::SHIFT, modifiers.shift_key());
-    bits.set(KeyModifiers::CONTROL, modifiers.control_key());
-    bits.set(KeyModifiers::ALT, modifiers.alt_key());
-    bits.set(KeyModifiers::SUPER, modifiers.super_key());
-
+    let bits = modifiers_of(modifiers, COMMAND_IS_CONTROL);
     let code = code_of(logical, physical, bits)?;
     // `shift+tab` is its own code in crossterm, and the whole of Obelus
     // reads it as one: it is the key that goes backwards through a row of
@@ -196,6 +280,101 @@ fn ascii_of(physical: PhysicalKey) -> Option<char> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Command is control where it is told to be, and both held together is
+    /// neither.
+    ///
+    /// Deliberate break: dropping `command` from the control bit fails the
+    /// first assertion, and dropping `!modifiers.control_key()` from
+    /// `command_stands_for_control` fails the last -- `ctrl+cmd+q` would
+    /// leave.
+    #[test]
+    fn command_is_control_where_it_is_told_to_be() {
+        let command = ModifiersState::SUPER;
+        assert_eq!(modifiers_of(command, true), KeyModifiers::CONTROL);
+        assert_eq!(modifiers_of(command, false), KeyModifiers::SUPER);
+        assert_eq!(
+            modifiers_of(command | ModifiersState::SHIFT, true),
+            KeyModifiers::CONTROL | KeyModifiers::SHIFT
+        );
+        assert_eq!(
+            modifiers_of(ModifiersState::CONTROL, true),
+            KeyModifiers::CONTROL,
+            "control is still control"
+        );
+        assert!(
+            modifiers_of(command | ModifiersState::CONTROL, true).contains(KeyModifiers::SUPER),
+            "control and command together is a key Obelus does not understand"
+        );
+    }
+
+    /// What a press with command arrives as follows the platform's constant,
+    /// and so does whether a terminal is told it was command.
+    ///
+    /// Deliberate break: passing `false` to `modifiers_of` in `pressed`
+    /// fails this on macOS, and passing `true` fails it everywhere else.
+    #[test]
+    fn a_press_with_command_is_what_the_platform_says() {
+        let save = pressed(
+            &character("s"),
+            PhysicalKey::Code(Physical::KeyS),
+            ModifiersState::SUPER,
+            false,
+        )
+        .expect("cmd+s is a press");
+        let wanted = match COMMAND_IS_CONTROL {
+            true => KeyModifiers::CONTROL,
+            false => KeyModifiers::SUPER,
+        };
+        assert_eq!(save.modifiers, wanted);
+        assert_eq!(by_command(ModifiersState::SUPER), COMMAND_IS_CONTROL);
+        assert!(!by_command(ModifiersState::CONTROL));
+    }
+
+    /// The three keys a Mac window answers are the window's, and the rest of
+    /// command is Obelus's.
+    ///
+    /// Deliberate break: answering `h` whether alt is held or not fails the
+    /// second assertion; asking `code_of` without control fails the one on
+    /// a Russian layout; dropping the `control_key` refusal fails the last.
+    #[test]
+    fn the_window_keeps_three_keys_of_command() {
+        let h = PhysicalKey::Code(Physical::KeyH);
+        let command = ModifiersState::SUPER;
+        assert_eq!(
+            asked_of_the_window(&character("h"), h, command),
+            Some(Asked::Hide)
+        );
+        // With command held winit names the key without alt, so this is
+        // `h` rather than the `˙` alt alone would compose.
+        assert_eq!(
+            asked_of_the_window(&character("h"), h, command | ModifiersState::ALT),
+            Some(Asked::HideOthers)
+        );
+        // And on a layout that is not Latin it names the layout's letter.
+        assert_eq!(
+            asked_of_the_window(&character("\u{440}"), h, command),
+            Some(Asked::Hide),
+            "cmd+h on a Russian layout is still cmd+h"
+        );
+        assert_eq!(
+            asked_of_the_window(&character("m"), PhysicalKey::Code(Physical::KeyM), command),
+            Some(Asked::Minimize)
+        );
+        assert_eq!(
+            asked_of_the_window(&character("q"), PhysicalKey::Code(Physical::KeyQ), command),
+            None,
+            "cmd+q is the key that leaves, which is Obelus's"
+        );
+        assert_eq!(
+            asked_of_the_window(&character("h"), h, ModifiersState::CONTROL),
+            None
+        );
+        assert_eq!(
+            asked_of_the_window(&character("h"), h, command | ModifiersState::CONTROL),
+            None
+        );
+    }
 
     fn character(text: &str) -> Key {
         Key::Character(text.into())

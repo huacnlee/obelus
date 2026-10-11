@@ -110,7 +110,15 @@ pub(crate) enum Waking {
 
 /// Runs Obelus in a window until the reader leaves.
 pub(crate) fn show(app: App) -> Result<()> {
-    let events = EventLoop::<Waking>::with_user_event()
+    let mut events = EventLoop::<Waking>::with_user_event();
+    // No menu, because the one winit puts up quits on `cmd+q` without
+    // asking about unwritten files -- see `keys::Asked`.
+    #[cfg(target_os = "macos")]
+    {
+        use winit::platform::macos::EventLoopBuilderExtMacOS;
+        events.with_default_menu(false);
+    }
+    let events = events
         .build()
         .context("no window system to open a window on")?;
     let mut showing = Showing::new(app, events.create_proxy());
@@ -1595,6 +1603,24 @@ impl ApplicationHandler<Waking> for Showing {
                     return;
                 }
                 self.stir();
+                #[cfg(target_os = "macos")]
+                if let Some(asked) = keys::asked_of_the_window(
+                    &event.logical_key,
+                    event.physical_key,
+                    self.modifiers,
+                ) {
+                    use winit::platform::macos::ActiveEventLoopExtMacOS;
+                    match asked {
+                        keys::Asked::Hide => events.hide_application(),
+                        keys::Asked::HideOthers => events.hide_other_applications(),
+                        keys::Asked::Minimize => {
+                            if let Some(window) = self.window.as_ref() {
+                                window.set_minimized(true);
+                            }
+                        }
+                    }
+                    return;
+                }
                 let Some(key) = keys::pressed(
                     &event.logical_key,
                     event.physical_key,
@@ -1612,7 +1638,10 @@ impl ApplicationHandler<Waking> for Showing {
                 if self.composing && plain {
                     return;
                 }
-                self.tell(Event::Key(key));
+                self.tell(match keys::by_command(self.modifiers) {
+                    true => Event::Command(key),
+                    false => Event::Key(key),
+                });
             }
             WindowEvent::CursorMoved { position, .. } => {
                 self.over_the_title = crate::title::under(position.y, self.titled);

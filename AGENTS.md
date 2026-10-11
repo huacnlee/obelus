@@ -370,6 +370,8 @@ command is gone and `App::blame` reads the setting.
   letter of the word, and nothing else moved (`keymap::Layout`).
 * **Control does something to the file in front of you**, on the letter of the
   word (`ctrl+p` the palette, `ctrl+w` close, `ctrl+c` copy, `ctrl+q` leave).
+  In `obg` on a Mac it is command, and drawn so: one table, two names for the
+  key (`obelus_gui::keys`).
 * **Alt asks about the cursor, or walks what was found** -- and alt is the
   escape prefix, so it arrives everywhere.
 * **Shift names no command of Obelus's own.** It only extends (`shift` plus an
@@ -824,10 +826,11 @@ crates/
                       (main); `App` crosses a thread and stays there, and what
                       an input method is spelling is on the page and is not in
                       the file (window); closing the window is the key that
-                      leaves (keys); the page is what Obelus said and motion is
-                      only how the window is showing it, a moment and a rate
-                      are two kinds of waiting, and none of it crosses to the
-                      application (motion); a full-width character takes the
+                      leaves, and on macOS command is control (keys); the page
+                      is what Obelus said and motion is only how the window
+                      is showing it, a moment and a rate are two kinds of
+                      waiting, and none of it crosses to the application
+                      (motion); a full-width character takes the
                       cells it covers with it, because the diff will not
                       (grid); the colours go through untouched, only a window
                       can draw the caret's shape, a pane joined to the page has

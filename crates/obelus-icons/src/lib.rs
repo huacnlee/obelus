@@ -56,15 +56,19 @@ pub fn enabled() -> bool {
 
 /// The glyphs for the modifiers, for whatever shows a binding.
 ///
-/// Only these three. The keys that are words had glyphs too, and a chord
-/// of two pictures -- `End` as a bar with an arrow at it, behind the one
-/// for control -- was a chord nobody could read; the words are what is on
-/// the keyboard. A modifier is printed as its picture on most of them, and
-/// is the part of a chord that repeats down a column of keys, so it is
-/// where a glyph saves columns and costs nothing to read.
+/// Only the modifiers -- control twice, because on a Mac in a window it is
+/// pressed as command and drawn as what is pressed. The keys that are words had
+/// glyphs too, and a chord of two pictures -- `End` as a bar with an arrow at
+/// it, behind the one for control -- was a chord nobody could read; the words
+/// are what is on the keyboard. A modifier is printed as its picture on most of
+/// them, and is the part of a chord that repeats down a column of keys, so it
+/// is where a glyph saves columns and costs nothing to read.
 pub mod key {
     /// `ctrl`.
     pub const CONTROL: char = '\u{f0634}';
+    /// `ctrl` where the key the reader presses for it is command -- `obg`
+    /// on macOS.
+    pub const COMMAND: char = '\u{f0633}';
     /// `alt`.
     pub const ALT: char = '\u{f0635}';
     /// `shift`.
