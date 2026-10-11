@@ -137,7 +137,7 @@ cannot tell.
 ## Keys
 
 Obelus starts from one of four layouts, and the first start with no
-settings file asks which. `classic` puts what you open on the function
+settings file asks which. `obelus` puts what you open on the function
 keys; `mnemonic` puts the same twelve on `ctrl` and `alt` by the letter of
 the word; `vscode` and `textmate` use those editors' keys wherever Obelus
 has the command (`ctrl+p` for a file, `ctrl+shift+p` for the palette in

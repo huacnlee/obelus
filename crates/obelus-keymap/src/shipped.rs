@@ -63,7 +63,7 @@ struct Bound {
 /// The file a layout is written in.
 pub(crate) const fn source(layout: Layout) -> &'static str {
     match layout {
-        Layout::Classic => include_str!("../keymaps/classic.json"),
+        Layout::Obelus => include_str!("../keymaps/obelus.json"),
         Layout::Mnemonic => include_str!("../keymaps/mnemonic.json"),
         Layout::VsCode => include_str!("../keymaps/vscode.json"),
         Layout::TextMate => include_str!("../keymaps/textmate.json"),
@@ -229,7 +229,7 @@ pub(crate) fn plain_json(text: &str) -> String {
 mod tests {
     use super::*;
 
-    /// Broken deliberately by having `source` hand back `classic.json` for
+    /// Broken deliberately by having `source` hand back `obelus.json` for
     /// [`Layout::VsCode`], which still read and failed on the keys.
     #[test]
     fn every_layout_reads() {
@@ -244,7 +244,7 @@ mod tests {
                 .iter()
                 .any(|binding| binding.command == command && binding.chord == chord)
         };
-        assert!(has(Layout::Classic, Command::FileOpen, "f1"));
+        assert!(has(Layout::Obelus, Command::FileOpen, "f1"));
         assert!(has(Layout::VsCode, Command::FileOpen, "ctrl+p"));
         assert!(has(Layout::TextMate, Command::FileOpen, "ctrl+t"));
         assert!(!has(Layout::VsCode, Command::FileOpen, "f1"));
@@ -272,9 +272,9 @@ mod tests {
     #[test]
     fn a_mistake_in_a_file_is_said_and_not_skipped() {
         let fails = |text: &str| build(text, None).unwrap_err();
-        // `new-file` has no key in the classic table.
+        // `new-file` has no key in the obelus table.
         let moved =
-            r#"{ "extends": "classic", "move": [{ "command": "new-file", "keys": ["alt+z"] }] }"#;
+            r#"{ "extends": "obelus", "move": [{ "command": "new-file", "keys": ["alt+z"] }] }"#;
         assert!(fails(moved).contains("no key to move"), "{}", fails(moved));
         let context =
             r#"{ "bindings": [{ "command": "redo", "context": "nowhere", "key": "ctrl+y" }] }"#;
@@ -285,7 +285,7 @@ mod tests {
         let key =
             r#"{ "bindings": [{ "command": "redo", "context": "normal", "key": "ctrl+yy" }] }"#;
         assert!(fails(key).contains("is not a key"));
-        assert!(build(r#"{ "extends": "classic" }"#, Some(Layout::Classic)).is_err());
+        assert!(build(r#"{ "extends": "obelus" }"#, Some(Layout::Obelus)).is_err());
         assert!(build(r#"{ "binding": [] }"#, None).is_err());
     }
 }

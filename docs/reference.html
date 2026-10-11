@@ -75,15 +75,15 @@
     <section id="keys">
       <h2><span class="num">01</span><span>Keys &amp; commands</span></h2>
 
-      <p>There are no modes, so every key below does the same thing whenever you press it, like VS Code or Emacs and unlike vim or helix. The keys come in three families: function keys, <kbd>Ctrl</kbd> and <kbd>Alt</kbd>. Remember what each family is for and the rest follows. These are the defaults (the <code>classic</code> layout below), and you can rebind any of them: see <a href="#config">settings</a>.</p>
+      <p>There are no modes, so every key below does the same thing whenever you press it, like VS Code or Emacs and unlike vim or helix. The keys come in three families: function keys, <kbd>Ctrl</kbd> and <kbd>Alt</kbd>. Remember what each family is for and the rest follows. These are the defaults (the <code>obelus</code> layout below), and you can rebind any of them: see <a href="#config">settings</a>.</p>
 
       <h3 id="layouts">Four layouts</h3>
-      <p>Which keys you start from is the <code>keys_from</code> setting, and there are four. <code>classic</code> is the tables on this page. <code>mnemonic</code> moves the twelve function keys onto <kbd>Ctrl</kbd> and <kbd>Alt</kbd> by the letter of the word, for a keyboard without the row, and nothing else. <code>vscode</code> and <code>textmate</code> use the keys those editors taught you wherever Obelus has the same command, and have no function keys at all; the rest of <kbd>Ctrl</kbd> and <kbd>Alt</kbd> stays as below. They adapt those editors' keys to what Obelus has; they are not a copy of either.</p>
+      <p>Which keys you start from is the <code>keys_from</code> setting, and there are four. <code>obelus</code> is the tables on this page. <code>mnemonic</code> moves the twelve function keys onto <kbd>Ctrl</kbd> and <kbd>Alt</kbd> by the letter of the word, for a keyboard without the row, and nothing else. <code>vscode</code> and <code>textmate</code> use the keys those editors taught you wherever Obelus has the same command, and have no function keys at all; the rest of <kbd>Ctrl</kbd> and <kbd>Alt</kbd> stays as below. They adapt those editors' keys to what Obelus has; they are not a copy of either.</p>
       <div class="table-wrap">
       <table>
         <thead><tr>
           <th><span>Command</span></th>
-          <th><span>classic</span></th>
+          <th><span>obelus</span></th>
           <th><span>mnemonic</span></th>
           <th><span>vscode</span></th>
           <th><span>textmate</span></th>
@@ -108,7 +108,7 @@
       </table>
       </div>
       <p class="quiet small">The screen writes a shifted letter as its capital: <kbd>Ctrl+P</kbd> is <kbd>Ctrl+Shift+p</kbd>. Most terminals can't send <kbd>Ctrl</kbd> with <kbd>Shift</kbd> on a letter, and send plain <kbd>Ctrl+p</kbd> instead, which is why each of those has an <kbd>Alt</kbd> key beside it that every terminal can send. <code>obg</code> gets them as they are. In <code>obg</code> on a Mac, <kbd>Ctrl</kbd> is <kbd>Cmd</kbd>, in every layout: press <kbd>Cmd+p</kbd> where this page says <kbd>Ctrl+p</kbd>, and the screen says <kbd>Cmd</kbd> too. <kbd>Ctrl</kbd> itself still works there, and the settings file still says <code>Ctrl</code>, because <code>ob</code> in a terminal reads the same file and a terminal keeps <kbd>Cmd</kbd> for itself. Elsewhere the Super or Windows key is never read as <kbd>Ctrl</kbd>; it belongs to the desktop.</p>
-      <p>To choose, run <code>choose-keymap</code> (<kbd>Alt+k</kbd> in every layout), or pick <em>Pick a keymap</em> on the welcome screen. Each row shows what that layout puts the files and the palette on. The very first time Obelus starts with no settings file, it asks; <kbd>Esc</kbd> keeps <code>classic</code> and asks again next time, and any choice is saved straight away, <code>classic</code> included, so it never asks again. Whatever you have under <code>[keys]</code> is laid over the layout, so switching layouts keeps your own keys.</p>
+      <p>To choose, run <code>choose-keymap</code> (<kbd>Alt+k</kbd> in every layout), or pick <em>Pick a keymap</em> on the welcome screen. Each row shows what that layout puts the files and the palette on. The very first time Obelus starts with no settings file, it asks; <kbd>Esc</kbd> keeps <code>obelus</code> and asks again next time, and any choice is saved straight away, <code>obelus</code> included, so it never asks again. Whatever you have under <code>[keys]</code> is laid over the layout, so switching layouts keeps your own keys.</p>
       <p>From a shell, <code>ob keys</code> says which layout you're on and lists the others, and <code>ob keys set vscode</code> chooses one without opening anything (<code>obg keys</code> does the same). Every Obelus window that's open picks the change up. To open a file that is called <code>keys</code>, write <code>ob ./keys</code> or <code>ob -- keys</code>.</p>
 
       <h3>Function keys open something to look at</h3>
@@ -299,7 +299,7 @@
         </tr></thead>
         <tbody>
           <tr><td><code>theme</code></td><td><code>"dark"</code></td><td>The colours Obelus draws in</td></tr>
-          <tr><td><code>keys_from</code></td><td><code>"classic"</code></td><td>Which keys yours start from: <code>classic</code>, <code>mnemonic</code>, <code>vscode</code> or <code>textmate</code>. See <a href="#layouts">four layouts</a></td></tr>
+          <tr><td><code>keys_from</code></td><td><code>"obelus"</code></td><td>Which keys yours start from: <code>obelus</code>, <code>mnemonic</code>, <code>vscode</code> or <code>textmate</code>. See <a href="#layouts">four layouts</a></td></tr>
           <tr><td><code>icons</code></td><td><code>false</code></td><td><em>Terminal only.</em> Draw Nerd Font icons. Without a patched font they show up as boxes. <code>obg</code> has the icons built in, so this doesn't apply there</td></tr>
           <tr><td><code>wrap</code></td><td><code>false</code></td><td>Wrap lines too long for the screen onto the next row. Off by default, so one line is one row</td></tr>
           <tr><td><code>blame_margin</code></td><td><code>true</code></td><td>Show in the margin who last changed each line</td></tr>

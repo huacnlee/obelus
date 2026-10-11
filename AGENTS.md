@@ -365,7 +365,7 @@ command is gone and `App::blame` reads the setting.
   what is on its way into the history: the pull requests and issues. Bare,
   never with a
   modifier: one terminal reports `shift+f5` and the next reports `f17` for the
-  same press. That is the `classic` layout; a keyboard without the row starts
+  same press. That is the `obelus` layout; a keyboard without the row starts
   from `mnemonic` (`keys_from`), the same twelve on control and alt by the
   letter of the word, and nothing else moved -- or from another editor's,
   `vscode` or `textmate`, which have no function key at all and are on

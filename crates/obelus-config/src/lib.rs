@@ -686,7 +686,7 @@ const WORKFLOWS: &[&str] = &["none", "in-place", "feature-branch"];
 ///
 /// `obelus_keymap::Layout` is what each one binds, and a test in
 /// `obelus-app` holds the two lists to each other.
-pub const KEY_LAYOUTS: &[&str] = &["classic", "mnemonic", "vscode", "textmate"];
+pub const KEY_LAYOUTS: &[&str] = &["obelus", "mnemonic", "vscode", "textmate"];
 
 /// A table of keys as a reader chooses it: the word the file holds, the
 /// name it is offered under, and what it is.
@@ -709,8 +709,8 @@ pub struct KeyLayout {
 /// is.
 pub const KEY_LAYOUT_CHOICES: &[KeyLayout] = &[
     KeyLayout {
-        word: "classic",
-        name: "Classic",
+        word: "obelus",
+        name: "Obelus",
         about: "The function keys, in banks of four",
     },
     KeyLayout {
@@ -1444,7 +1444,7 @@ impl Reading {
     /// about which keys to start from is not to be asked.
     ///
     /// Only no file at all is a first start. A file that names no layout is
-    /// a reader who has the classic keys and has been using them -- every
+    /// a reader who has the default keys and has been using them -- every
     /// file written before there was a choice is one -- and a file that
     /// will not read is still theirs: asking would mean writing the answer
     /// over it. And with nowhere to keep one, an answer could not be kept,
@@ -1663,6 +1663,12 @@ pub fn apply(config: &mut Config, table: &toml::Table, whose: Whose) -> Applied 
     if let Some(word) = table.get("keys_from").and_then(toml::Value::as_str)
         && allowed("keys_from")
     {
+        // What the default was called before it was named after Obelus, read
+        // as the default -- and so left out of the file at the next save.
+        let word = match word {
+            "classic" => KEY_LAYOUTS[0],
+            word => word,
+        };
         if !KEY_LAYOUTS.contains(&word) {
             tracing::warn!(
                 word,
@@ -1886,7 +1892,7 @@ pub fn to_toml(config: &Config) -> String {
 /// it saved. The same rule the keys and the agents already kept -- a line
 /// is something the reader said, not something Obelus was thinking about.
 ///
-/// Which holds for the layout too, `classic` included: that a reader has
+/// Which holds for the layout too, `obelus` included: that a reader has
 /// chosen one is said by there being a file at all
 /// ([`Reading::keymap_is_chosen`]), not by a line naming the default.
 #[must_use]
@@ -2704,20 +2710,39 @@ mod tests {
         assert_eq!(config.keys_from, "mnemonic");
     }
 
+    /// A file from before the default was named after Obelus still reads:
+    /// `classic` is the default under its old name, not a word nothing
+    /// answers to, and the next save leaves it out as it leaves any default.
+    ///
+    /// Broken deliberately by taking the `"classic"` arm out of the reading
+    /// of `keys_from`: the line came back ignored, as `NoSuchChoice`.
+    #[test]
+    fn the_default_is_read_under_its_old_name() {
+        let super::Reading::Settings {
+            config, ignored, ..
+        } = super::reading_of("keys_from = \"classic\"\n")
+        else {
+            panic!("did not read");
+        };
+        assert!(ignored.is_empty(), "{ignored:?}");
+        assert_eq!(config.keys_from, "obelus");
+        assert!(!to_toml(&config).contains("keys_from"));
+    }
+
     /// The two editors' layouts are words the file can hold, and are
     /// written back as they were read -- the default is not written at all.
     ///
     /// Broken deliberately by taking `textmate` out of `KEY_LAYOUTS`: it
     /// read as a choice nothing answers to, and the keys started from the
-    /// classic table. And by writing `keys_from` whether or not it differs
+    /// obelus table. And by writing `keys_from` whether or not it differs
     /// from the default (`true` for `config.keys_from != default.keys_from`
     /// in `to_toml`): the words still round-tripped, and only the default
-    /// below caught it -- `classic` was written into a file that never
+    /// below caught it -- `obelus` was written into a file that never
     /// named it.
     #[test]
     fn the_editors_layouts_are_words_the_file_can_hold() {
         let default = super::Config::default();
-        assert_eq!(default.keys_from, "classic");
+        assert_eq!(default.keys_from, "obelus");
         assert!(
             !to_toml(&default).contains("keys_from"),
             "{}",
@@ -2757,7 +2782,7 @@ mod tests {
         assert_eq!(
             names,
             [
-                Some("Classic"),
+                Some("Obelus"),
                 Some("Mnemonic"),
                 Some("VS Code"),
                 Some("TextMate")
@@ -2815,10 +2840,10 @@ mod tests {
         );
         assert!(written.contains("future_setting = 3"), "{written}");
 
-        super::write_keymap(&file, "classic").expect("choosing again");
+        super::write_keymap(&file, "obelus").expect("choosing again");
         let written = std::fs::read_to_string(&file).expect("the file");
         assert!(!written.contains("keys_from"), "{written}");
-        assert_eq!(from_toml(&written).keys_from, "classic");
+        assert_eq!(from_toml(&written).keys_from, "obelus");
         assert!(from_toml(&written).wrap, "{written}");
         let _ = std::fs::remove_dir_all(&directory);
     }
@@ -2838,7 +2863,7 @@ mod tests {
         let _ = std::fs::remove_dir_all(&directory);
         let file = directory.join("obelus").join("config.toml");
         assert!(!super::read_from(&file).keymap_is_chosen());
-        super::write_keymap(&file, "classic").expect("choosing");
+        super::write_keymap(&file, "obelus").expect("choosing");
         assert!(super::read_from(&file).keymap_is_chosen());
         let _ = std::fs::remove_dir_all(&directory);
     }
@@ -2880,7 +2905,7 @@ mod tests {
         let mut config = Config::default();
         let table: toml::Table = "keys_from = \"mnemonic\"".parse().expect("toml");
         let applied = apply(&mut config, &table, Whose::Project);
-        assert_eq!(config.keys_from, "classic");
+        assert_eq!(config.keys_from, "obelus");
         assert!(
             applied
                 .ignored

@@ -23,7 +23,7 @@ Obelus 是贴合一个人工作习惯、内置 agent 的编辑器；不是追求
 | `crates/obelus-keymap/tests/keymap.rs` | 新预设和 Cmd 的测试、调整旧 SUPER 预期 | 尚未执行故意破坏验证 |
 | `crates/obelus-keymap/Cargo.toml`、`Cargo.lock` | 增加 `obelus-config` 依赖，识别前端 | 随预设草稿产生 |
 | `crates/obelus-editing/src/lib.rs` | `BINDABLE_MODIFIERS` 接受 SUPER，仍精确匹配修饰键 | 旧模块说明未更新 |
-| `crates/obelus-config/src/lib.rs` | 四种预设、首次启动判定、保存预设 helper、显式保存 `classic` | 配置测试和故意破坏验证已执行 |
+| `crates/obelus-config/src/lib.rs` | 四种预设、首次启动判定、保存预设 helper、显式保存 `obelus` | 配置测试和故意破坏验证已执行 |
 | `crates/obelus-app/src/startup.rs` | 导出 `pub mod keys` | 未整体编译验证 |
 | `crates/obelus-app/src/startup/keys.rs` | 新文件，共享 CLI 查询和切换逻辑，输出 stderr | 未测试 |
 | `crates/obelus-cli/src/main.rs` | `ob keys` / `ob keys set <preset>` | 未编译、未测试 |
@@ -44,11 +44,11 @@ keys_from = "vscode"
 open-file = "Ctrl+o"
 ```
 
-预设值：`classic`、`mnemonic`、`vscode`、`textmate`。`mnemonic` 是既有可选项，保留兼容，不擅自删除。
+预设值：`obelus`、`mnemonic`、`vscode`、`textmate`。`mnemonic` 是既有可选项，保留兼容，不擅自删除。
 
-四个预设写在 `crates/obelus-keymap/keymaps/*.json`（扩展名是 `.json`，按 JSONC 解析：可写 `//` 注释，允许末尾逗号），由 `include_str!` 编进二进制，首次用到时解析并缓存（`src/shipped.rs`）。`classic.json` 是完整的表；其余用 `extends` 继承它，`move` 把命令原有的键全部换成新键（保留原上下文），`bindings` 逐条追加。命令名与键的写法和设置文件的 `[keys]` 一致，键不区分大小写（`ctrl+t` 与 `Ctrl+T` 相同，Shift 要写成 `shift+`），文件里统一用全小写。改预设只改 JSON，不动 Rust；用户不能另加预设文件，自定义仍走 `[keys]`。
+四个预设写在 `crates/obelus-keymap/keymaps/*.json`（扩展名是 `.json`，按 JSONC 解析：可写 `//` 注释，允许末尾逗号），由 `include_str!` 编进二进制，首次用到时解析并缓存（`src/shipped.rs`）。`obelus.json` 是完整的表；其余用 `extends` 继承它，`move` 把命令原有的键全部换成新键（保留原上下文），`bindings` 逐条追加。命令名与键的写法和设置文件的 `[keys]` 一致，键不区分大小写（`ctrl+t` 与 `Ctrl+T` 相同，Shift 要写成 `shift+`），文件里统一用全小写。改预设只改 JSON，不动 Rust；用户不能另加预设文件，自定义仍走 `[keys]`。
 
-- 旧配置没有 `keys_from` 时保持原先的 `classic` 行为。
+- 旧配置没有 `keys_from` 时保持原先的 `obelus` 行为。
 - 切换预设保留 `[keys]` 自定义覆盖；应让界面说明覆盖仍有效。
 - macOS 窗口的新预设使用 Cmd；其他系统与终端使用 Ctrl。
 - 窗口/增强键盘协议可提供 Ctrl+Shift 常用键，传统终端另有可达的 Alt 备用键。
@@ -86,12 +86,12 @@ open-file = "Ctrl+o"
 1. 在 `obelus-command` 增加 `Command::KeymapSelect`，命令名 `choose-keymap`，分类 Obelus，要求 `Requires::Nothing`。
 2. 补齐所有穷尽匹配：command 元数据、`drawn`、`opens_a_list`、`opens_a_view`、`group`、`requires` 等，以及 `obelus-icons::for_command` 与 `app::dispatch`。dispatch 不得加入 wildcard。
 3. 实现 `App::open_keymap_picker`，复用 `app/project/preferences.rs` 的 `open_choices("keys_from", ...)` 和 `PickerValue::Setting`。可为专用入口设置 opener、标题/占位文本。
-4. 当前 `open_choices` 只解释 `classic/mnemonic`，`called` 只显示 Classic/Mnemonic。增加 VS Code、TextMate 的显示名称、简短说明，最好显示文件与命令面板的示例键位。
+4. 当前 `open_choices` 只解释 `classic/mnemonic`，`called` 只显示 Obelus/Mnemonic。增加 VS Code、TextMate 的显示名称、简短说明，最好显示文件与命令面板的示例键位。
 5. 在 `obelus-ui/src/welcome.rs` 增加“Choose a keymap”入口。候选单键为 `Alt+k`：用户拒绝的是 leader，不是切换预设的命令键。该键尚未加入；检查冲突后实现。
 6. 所有提示从 App 的键表读取，不能硬编码预设中的实际按键。
 7. 只有全局配置文件不存在时自动显示首次选择。已有配置（即使没有 `keys_from`）不重复 onboarding；不可读文件不触发会覆盖它的设置流程。
 8. 首次选择可以 Esc 放弃，继续使用原默认键位；无需制造无法退出的 onboarding。
-9. 选中后立刻应用并保存。选择 `classic` 也要记录，避免每次启动又询问。写入失败应沿用现有状态提示并保留原文件。
+9. 选中后立刻应用并保存。选择 `obelus` 也要记录，避免每次启动又询问。写入失败应沿用现有状态提示并保留原文件。
 
 配置草稿提供 `Reading::keymap_is_chosen()`：只有 `Reading::Nothing` 返回 false，已有 Settings、Unreadable、Nowhere 都返回 true。
 
@@ -112,7 +112,7 @@ open-file = "Ctrl+o"
 ob keys
 ob keys set vscode
 ob keys set textmate
-ob keys set classic
+ob keys set obelus
 obg keys set vscode
 ```
 
@@ -163,7 +163,7 @@ obg keys set vscode
 
 - 每个新预设无 F 键；已知键执行预期动作；Cmd/Ctrl/Shift 精确匹配；额外修饰键不误执行。
 - macOS Cmd 的 GUI 翻译、输入法/布局处理，以及终端 Ctrl 备用键实际可达。
-- keymap 配置往返、自定义覆盖保留、默认 classic 兼容、不可读配置拒绝覆盖。
+- keymap 配置往返、自定义覆盖保留、默认 obelus 兼容，旧值 `classic` 读作 `obelus`、不可读配置拒绝覆盖。
 - welcome 的首次显示、旧用户跳过、Esc、选中保存、重启不重复、窄屏、启动问题与项目选择的优先级。
 - choose-keymap 在命令面板可发现，切换后 welcome/命令提示与行为同步。
 - picker Ctrl+n/p/d/u 的选择、query 不丢失、裸字母输入、禁用行与分页边界，以及不同预设下的上下文优先级。

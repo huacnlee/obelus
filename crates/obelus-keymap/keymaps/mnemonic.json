@@ -1,9 +1,9 @@
-// The mnemonic layout: classic with what the twelve function keys hold moved
+// The mnemonic layout: obelus with what the twelve function keys hold moved
 // onto letters, and nothing else touched -- so everything argued over the
-// classic table holds for both, and control, alt and the palette are the same
+// obelus table holds for both, and control, alt and the palette are the same
 // keys in each.
 //
-// A command in `move` loses every key the classic table gave it and takes
+// A command in `move` loses every key the obelus table gave it and takes
 // these, in each context it was bound in.
 //
 // Control where a letter of the word was free -- `o` open, `e` the editor
@@ -21,7 +21,7 @@
 // have been a switch rather than a way out. `y` and `u` are the next letters
 // of the two words that nothing has.
 {
-  "extends": "classic",
+  "extends": "obelus",
   "move": [
     { "command": "open-file", "keys": ["ctrl+o"] },
     { "command": "switch-document", "keys": ["ctrl+e"] },

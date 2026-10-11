@@ -4877,7 +4877,7 @@ fn the_agents_go_where_their_bar_is_dragged() {
 /// leaves `Layout` off the top of the page; its row drawn with `entry`
 /// false, which puts `open-file` straight under the gloss; the list of
 /// layouts without `details_whole`, which loses what a terminal does;
-/// `apply_config` building the classic table whatever the setting says,
+/// `apply_config` building the obelus table whatever the setting says,
 /// which leaves `ctrl+o` on nothing; and `lay` not writing `keys_from`,
 /// which leaves the file without it.
 #[test]
@@ -4905,7 +4905,7 @@ fn the_keys_page_chooses_where_the_keys_start() {
         .iter()
         .position(|row| row.contains("Layout"))
         .unwrap_or_else(|| panic!("the layout is not on the page:\n{dump}"));
-    assert!(rows[at].contains("Classic"), "{dump}");
+    assert!(rows[at].contains("Obelus"), "{dump}");
     // What it does under it, then the blank, then the table.
     assert!(
         rows[at + 1].contains("What your own keys start from"),
@@ -4966,7 +4966,7 @@ fn the_keys_page_chooses_where_the_keys_start() {
 
 /// Every layout the settings offer is one the key table can lay out, and
 /// each a different one: a word with no table behind it would be a choice
-/// that silently starts from the classic keys.
+/// that silently starts from the default keys.
 ///
 /// Broken deliberately by adding a third word to `KEY_LAYOUTS`.
 #[test]
@@ -5026,7 +5026,7 @@ fn a_layout_nothing_answers_to_stays_in_the_file() {
 /// a name the reader can say, and a line that says which keys it means.
 ///
 /// Broken deliberately by giving a third word to `KEY_LAYOUTS`, which has
-/// neither, by taking `mnemonic` out of `called`, and by giving `classic`
+/// neither, by taking `mnemonic` out of `called`, and by giving `obelus`
 /// nothing to say in the list.
 #[test]
 fn every_layout_is_offered_with_a_name_and_what_it_is() {

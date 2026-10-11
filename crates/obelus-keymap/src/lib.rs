@@ -55,7 +55,7 @@
 //! the very next keystroke.
 //!
 //! Which table the changes are laid over is a setting of its own,
-//! `keys_from`, on the same page: the function keys ([`Layout::Classic`]),
+//! `keys_from`, on the same page: the function keys ([`Layout::Obelus`]),
 //! the same commands on control and alt ([`Layout::Mnemonic`]), or another
 //! editor's keys ([`Layout::VsCode`], [`Layout::TextMate`]) -- adapted to
 //! what Obelus has, not a copy of either.
@@ -461,9 +461,9 @@ pub struct Keymap {
 /// it is are `obelus_config::key_layout`'s.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Layout {
-    /// The function keys, in their banks of four.
+    /// Obelus's own keys: the function keys, in their banks of four.
     #[default]
-    Classic,
+    Obelus,
     /// Control and alt, on the letter of the word.
     Mnemonic,
     /// VS Code's keys, where Obelus has the command: `ctrl+p` the files,
@@ -475,13 +475,13 @@ pub enum Layout {
 
 impl Layout {
     /// Every layout, in the order a list offers them.
-    pub const ALL: [Self; 4] = [Self::Classic, Self::Mnemonic, Self::VsCode, Self::TextMate];
+    pub const ALL: [Self; 4] = [Self::Obelus, Self::Mnemonic, Self::VsCode, Self::TextMate];
 
     /// What it is called in the settings file.
     #[must_use]
     pub const fn name(self) -> &'static str {
         match self {
-            Self::Classic => "classic",
+            Self::Obelus => "obelus",
             Self::Mnemonic => "mnemonic",
             Self::VsCode => "vscode",
             Self::TextMate => "textmate",
@@ -491,6 +491,11 @@ impl Layout {
     /// The layout the file's word names, if one does.
     #[must_use]
     pub fn named(name: &str) -> Option<Self> {
+        // What [`Self::Obelus`] was called before it was named after the
+        // program whose keys they are: a file that says it says the default.
+        if name == "classic" {
+            return Some(Self::Obelus);
+        }
         Self::ALL.into_iter().find(|layout| layout.name() == name)
     }
 }
@@ -516,7 +521,7 @@ impl Keymap {
     /// history, a project's and a line's, which are one question at three
     /// widths -- and `F12`, the jump to a definition, which is the one jump
     /// this whole program is for. Each is argued where it is bound, in
-    /// `keymaps/classic.json`.
+    /// `keymaps/obelus.json`.
     ///
     /// **Control does something to the file in front of you**, on the
     /// letter of the word: `p` the palette, `w` close, `r` re-read, `d`
@@ -545,7 +550,7 @@ impl Keymap {
     /// and not again.
     #[must_use]
     pub fn new() -> Self {
-        Self::laid_out(Layout::Classic)
+        Self::laid_out(Layout::Obelus)
     }
 
     /// The bindings a layout starts from, as its file in `keymaps/` says.
@@ -1159,11 +1164,11 @@ mod tests {
     /// the outline is on, and by not rebinding at all in `laid_out`.
     #[test]
     fn the_mnemonic_layout_moves_the_function_keys_onto_letters() {
-        let classic = Keymap::laid_out(Layout::Classic);
+        let obelus = Keymap::laid_out(Layout::Obelus);
         let mnemonic = Keymap::laid_out(Layout::Mnemonic);
         for number in 1..=12 {
             let function = KeyChord::new(KeyCode::F(number), KeyModifiers::NONE);
-            let command = classic.command_on(function).expect("a bank with a gap");
+            let command = obelus.command_on(function).expect("a bank with a gap");
             assert_eq!(
                 mnemonic.command_on(function),
                 None,
@@ -1183,10 +1188,10 @@ mod tests {
                     .map_or("nothing", |other| other.name()),
             );
         }
-        // And nothing else moved: every key the classic table has that is
+        // And nothing else moved: every key the obelus table has that is
         // not a function key means the same in the mnemonic one, in the
         // same context -- `ctrl+p` is bound in two of them.
-        for binding in classic.bindings() {
+        for binding in obelus.bindings() {
             if matches!(binding.chord.code, KeyCode::F(_)) {
                 continue;
             }
@@ -1238,7 +1243,7 @@ mod tests {
             .into_iter()
             .collect();
         let control_p = crossterm::event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
-        for layout in [Layout::Classic, Layout::Mnemonic] {
+        for layout in [Layout::Obelus, Layout::Mnemonic] {
             let (keymap, _) = Keymap::with(layout, &lines);
             assert_eq!(
                 keymap.lookup(&control_p, Context::Normal),

@@ -1,4 +1,4 @@
-// The classic layout: the table Obelus ships with, and the one every other
+// The obelus layout: the table Obelus ships with, and the one every other
 // layout in this directory starts from.
 //
 // One binding is one command, in one context, on one key. The command is its

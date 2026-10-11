@@ -17,11 +17,11 @@
 // right one. The first key of each is the one shown; the rest are the ones a
 // terminal without the protocol can send.
 //
-// A command in `move` loses every key the classic table gave it and takes
+// A command in `move` loses every key the obelus table gave it and takes
 // these, in each context it was bound in -- and a key it takes is taken off
 // whatever had it there. `bindings` adds a key beside the ones a command has.
 {
-  "extends": "classic",
+  "extends": "obelus",
   "move": [
     { "command": "open-file", "keys": ["ctrl+t"] },
     { "command": "run-command", "keys": ["ctrl+shift+p", "alt+shift+p"] },

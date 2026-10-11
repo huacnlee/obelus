@@ -628,7 +628,7 @@ impl App {
     /// the ones a reader reaches for first: a file, and everything else.
     fn about_a_layout(&self, word: &str) -> Option<String> {
         let gloss = match word {
-            "classic" => "The function keys, in banks of four",
+            "obelus" => "The function keys, in banks of four",
             "mnemonic" => {
                 "Control and alt, on the letter of the word -- which a running terminal keeps for its program"
             }
@@ -688,7 +688,7 @@ impl App {
     /// layout, and one whose file will not read must not be asked a
     /// question whose answer is written over it. Asked once per process --
     /// escape leaves the defaults and writes nothing, so the next start
-    /// asks again, and any answer writes the file, `classic` included, so
+    /// asks again, and any answer writes the file, `obelus` included, so
     /// no start after it does.
     ///
     /// Not where nobody is at the screen, and not over the page asking
@@ -979,7 +979,7 @@ impl App {
                 key => obelus_remote::platform::named(key).map(|platform| platform.name.into()),
             },
             "keys_from" => match word {
-                "classic" => Some("Classic".into()),
+                "obelus" => Some("Obelus".into()),
                 "mnemonic" => Some("Mnemonic".into()),
                 "vscode" => Some("VS Code".into()),
                 "textmate" => Some("TextMate".into()),

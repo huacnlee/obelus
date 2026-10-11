@@ -16,7 +16,7 @@ use support::press;
 
 /// The layouts the list offers, as it calls them, in the order it offers
 /// them.
-const CALLED: [&str; 4] = ["Classic", "Mnemonic", "VS Code", "TextMate"];
+const CALLED: [&str; 4] = ["Obelus", "Mnemonic", "VS Code", "TextMate"];
 
 /// What the list asks, which is how a test tells it from any other list.
 const ASKED: &str = "Which keys Obelus starts from";
@@ -131,14 +131,14 @@ fn choosing_a_layout_moves_the_keys_and_the_welcome_screen() {
     let mut app = on(&scratch, Some("wrap = true\n"));
     support::lay_out(&mut app, 100, 30);
     let before = support::render(&mut app, 100, 30);
-    let classic = Keymap::laid_out(Layout::Classic);
+    let obelus = Keymap::laid_out(Layout::Obelus);
     let vscode = Keymap::laid_out(Layout::VsCode);
     let opens = |keymap: &Keymap| keymap.chord_for(Command::FileOpen).expect("bound").label();
     assert!(
         support::text_block(&before).contains("Pick a keymap"),
         "the welcome screen does not offer it:\n{before}"
     );
-    assert!(support::text_block(&before).contains(&opens(&classic)));
+    assert!(support::text_block(&before).contains(&opens(&obelus)));
 
     support::press_alt(&mut app, 'k');
     assert_eq!(asked(&app).as_deref(), Some(ASKED), "alt+k opened nothing");
@@ -159,7 +159,7 @@ fn choosing_a_layout_moves_the_keys_and_the_welcome_screen() {
         "the welcome screen still says the old key:\n{after}"
     );
     assert!(
-        !support::text_block(&after).contains(&opens(&classic)),
+        !support::text_block(&after).contains(&opens(&obelus)),
         "the welcome screen still says the old key:\n{after}"
     );
 
@@ -210,7 +210,7 @@ fn a_start_with_settings_does_not_ask() {
 /// Escape leaves the keys as they were and writes nothing, so the next
 /// start asks again.
 ///
-/// Deliberate break: writing `classic` down when the question is put
+/// Deliberate break: writing `obelus` down when the question is put
 /// rather than when it is answered -- the file is there after escape.
 #[test]
 fn escape_keeps_the_defaults_and_writes_nothing() {
@@ -220,7 +220,7 @@ fn escape_keeps_the_defaults_and_writes_nothing() {
     assert_eq!(asked(&app).as_deref(), Some(ASKED));
     press(&mut app, KeyCode::Esc);
     assert!(app.picker().is_none(), "escape did not let it go");
-    assert_eq!(app.config().keys_from, "classic");
+    assert_eq!(app.config().keys_from, "obelus");
     assert!(
         !settings(&scratch).exists(),
         "escape wrote the settings, so nothing will ask again"
@@ -234,14 +234,14 @@ fn escape_keeps_the_defaults_and_writes_nothing() {
 /// the word is the one in force -- nothing is written, and the second start
 /// asks again.
 #[test]
-fn choosing_classic_is_kept_and_not_asked_again() {
-    let scratch = support::Scratch::new("keymap-classic");
+fn choosing_obelus_is_kept_and_not_asked_again() {
+    let scratch = support::Scratch::new("keymap-obelus");
     let mut app = on(&scratch, None);
     start(&mut app);
     // Opened on the one in force, which is the default.
     press(&mut app, KeyCode::Enter);
     let written = std::fs::read_to_string(settings(&scratch)).expect("the settings");
-    assert!(written.contains("keys_from = \"classic\""), "{written}");
+    assert!(written.contains("keys_from = \"obelus\""), "{written}");
 
     let mut again = on(&scratch, None);
     start(&mut again);
@@ -367,7 +367,7 @@ fn a_narrow_screen_still_offers_it() {
     support::press_alt(&mut app, 'k');
     let dump = support::render(&mut app, 40, 14);
     assert!(
-        support::text_block(&dump).contains("Classic"),
+        support::text_block(&dump).contains("Obelus"),
         "the list does not fit:\n{dump}"
     );
 }

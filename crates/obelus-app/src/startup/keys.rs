@@ -86,7 +86,7 @@ mod tests {
     ///
     /// Broken deliberately by not writing in `run_at` (the file never
     /// named the layout), and by marking the first layout rather than the
-    /// one in force (`classic` wore the mark after `vscode` was chosen).
+    /// one in force (`obelus` wore the mark after `vscode` was chosen).
     #[test]
     fn choosing_and_asking_go_through_the_file() {
         let directory = scratch("choosing");
@@ -111,7 +111,7 @@ mod tests {
         let said = String::from_utf8(said).expect("words");
         assert!(said.starts_with("Keys start from VS Code\n"), "{said}");
         assert!(said.contains("\n* vscode    VS Code: "), "{said}");
-        assert!(said.contains("\n  classic   Classic: "), "{said}");
+        assert!(said.contains("\n  obelus    Obelus: "), "{said}");
         assert!(said.contains("\n  textmate  TextMate: "), "{said}");
         assert!(said.contains("obg keys set <layout>"), "{said}");
         let _ = std::fs::remove_dir_all(&directory);
@@ -122,7 +122,7 @@ mod tests {
     ///
     /// Broken deliberately by choosing in `run_at` whatever the word (an
     /// ask wrote a file), and by treating an unreadable file as the
-    /// defaults (the ask said `Classic` about a file it could not read).
+    /// defaults (the ask said `Obelus` about a file it could not read).
     #[test]
     fn asking_writes_nothing_and_a_broken_file_is_said() {
         let directory = scratch("asking");
@@ -132,7 +132,7 @@ mod tests {
         assert!(
             String::from_utf8(said)
                 .expect("words")
-                .starts_with("Keys start from Classic\n")
+                .starts_with("Keys start from Obelus\n")
         );
         assert!(!file.exists(), "asking wrote the file");
 
