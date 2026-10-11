@@ -473,3 +473,432 @@ fn rebinding_a_command_with_two_chords_leaves_it_one_key_per_context() {
         None
     );
 }
+
+/// The keys each editor's layout is documented as having, written out by
+/// hand rather than read off the table -- on control, which `obg` on a Mac
+/// is told for command before a key reaches the table.
+///
+/// Broken deliberately by putting the TextMate symbols on `ctrl+y` rather
+/// than `alt+y` (`ctrl+y` was no longer redo), by dropping the palette's
+/// `alt+P`, and by putting the files on `ctrl+t` in both layouts (`ctrl+p`
+/// found nothing in VS Code).
+#[test]
+fn each_editors_layout_has_that_editors_keys() {
+    let control = KeyModifiers::CONTROL;
+    let alt = KeyModifiers::ALT;
+    let shift = KeyModifiers::SHIFT;
+    let shared = [
+        (KeyCode::Char('p'), control | shift, Command::CommandPalette),
+        (KeyCode::Char('p'), alt | shift, Command::CommandPalette),
+        (KeyCode::Char('e'), control, Command::DocumentList),
+        (KeyCode::Char('g'), control | shift, Command::FileChanged),
+        (KeyCode::Char('g'), alt, Command::FileChanged),
+        (KeyCode::Char('n'), alt | shift, Command::ConversationSelect),
+        (KeyCode::Char('f'), control, Command::SearchFile),
+        (KeyCode::Char('f'), control | shift, Command::SearchProject),
+        (KeyCode::Char('/'), alt, Command::SearchProject),
+        (KeyCode::Char('u'), alt, Command::SymbolOutline),
+        (KeyCode::Char('l'), alt, Command::HistoryFile),
+        (KeyCode::Char('l'), alt | shift, Command::HistoryProject),
+        (KeyCode::Char('.'), alt, Command::SymbolDefinition),
+        (KeyCode::Char('u'), control, Command::PullRequestReview),
+        (KeyCode::Char('t'), alt | shift, Command::TodoOpen),
+        (KeyCode::Char('z'), control | shift, Command::Redo),
+        (KeyCode::Char('y'), control, Command::Redo),
+        (KeyCode::Char('z'), control, Command::Undo),
+        (KeyCode::Char('s'), control, Command::FileSave),
+        (KeyCode::Char('c'), control, Command::SelectionCopy),
+        (KeyCode::Char('q'), control, Command::Quit),
+        // What the shipped table has on alt, still there.
+        (KeyCode::Char('t'), alt, Command::TodoAdd),
+        (KeyCode::Char('e'), alt, Command::SymbolTroubles),
+        (KeyCode::Char('h'), alt, Command::SymbolHover),
+        (KeyCode::Char('d'), alt, Command::GitHunk),
+    ];
+    let vs_code = [
+        (KeyCode::Char('p'), control, Some(Command::FileOpen)),
+        (
+            KeyCode::Char('o'),
+            control | shift,
+            Some(Command::SymbolOutline),
+        ),
+        (KeyCode::Char('t'), control, Some(Command::SearchSymbols)),
+        (KeyCode::Char('y'), alt, None),
+    ];
+    let text_mate = [
+        (KeyCode::Char('t'), control, Some(Command::FileOpen)),
+        (
+            KeyCode::Char('t'),
+            control | shift,
+            Some(Command::SymbolOutline),
+        ),
+        (KeyCode::Char('y'), alt, Some(Command::SearchSymbols)),
+        (KeyCode::Char('p'), control, None),
+    ];
+    for (layout, own) in [(Layout::VsCode, vs_code), (Layout::TextMate, text_mate)] {
+        let keymap = Keymap::laid_out(layout);
+        let keys = shared
+            .iter()
+            .map(|(code, modifiers, command)| (*code, *modifiers, Some(*command)))
+            .chain(own);
+        for (code, modifiers, command) in keys {
+            assert_eq!(
+                keymap.lookup(&press(code, modifiers), Context::Normal),
+                command,
+                "{} in {layout:?}",
+                KeyChord::new(code, modifiers).label_in(false)
+            );
+        }
+    }
+}
+
+/// None of the editors' layouts has a function key, over a file or in a
+/// terminal, where the function keys reach through to the file's table.
+///
+/// Broken deliberately by moving `FileReload` in place of `HistoryFile`:
+/// `f9` still opened the history.
+#[test]
+fn the_editors_layouts_have_no_function_keys() {
+    for layout in [Layout::VsCode, Layout::TextMate] {
+        let keymap = Keymap::laid_out(layout);
+        for number in 1..=12 {
+            let function = KeyChord::new(KeyCode::F(number), KeyModifiers::NONE);
+            assert_eq!(keymap.command_on(function), None, "f{number} in {layout:?}");
+            for context in [Context::Normal, Context::Terminal] {
+                assert_eq!(
+                    keymap.lookup(&press(KeyCode::F(number), KeyModifiers::NONE), context),
+                    None,
+                    "f{number} in {layout:?} {context:?}"
+                );
+            }
+        }
+    }
+}
+
+/// Every command the shipped table binds is still bound in every layout,
+/// in every context it was bound in -- and no key is two things in one
+/// context, and nothing shadows what is bound everywhere.
+///
+/// Broken deliberately by putting the file's history on `alt+h` (hover lost
+/// its key), and by asking where each moved command was bound only after
+/// they had all been taken out of the table (every one of them lost its
+/// key).
+#[test]
+fn no_layout_loses_a_command_or_doubles_a_key() {
+    let shipped = Keymap::new();
+    for layout in Layout::ALL {
+        let keymap = Keymap::laid_out(layout);
+        for binding in shipped.bindings() {
+            assert!(
+                keymap
+                    .bindings()
+                    .iter()
+                    .any(|kept| kept.command == binding.command
+                        && kept.context == binding.context),
+                "{layout:?} lost {} in {:?}",
+                binding.command.name(),
+                binding.context
+            );
+        }
+        let bindings = keymap.bindings();
+        for (index, binding) in bindings.iter().enumerate() {
+            for earlier in &bindings[..index] {
+                assert!(
+                    earlier.context != binding.context || earlier.chord != binding.chord,
+                    "{} is {} and {} in {:?} in {layout:?}",
+                    binding.chord.label_in(false),
+                    earlier.command.name(),
+                    binding.command.name(),
+                    binding.context
+                );
+                let (global, specific) = match (earlier.context, binding.context) {
+                    (Context::Always, Context::Always) => continue,
+                    (Context::Always, _) => (earlier, binding),
+                    (_, Context::Always) => (binding, earlier),
+                    _ => continue,
+                };
+                assert!(
+                    global.chord != specific.chord || global.command == specific.command,
+                    "{} shadows {} in {layout:?}",
+                    specific.command.name(),
+                    global.command.name()
+                );
+            }
+        }
+    }
+}
+
+/// A chord with shift on a letter under control needs a window or the
+/// keyboard protocol to arrive as itself, so every command on one has a
+/// second chord, in the same context, that any terminal can send: alt with
+/// anything, or control with a lowercase letter.
+///
+/// Broken deliberately by dropping the outline's `alt+u`.
+#[test]
+fn every_shifted_chord_has_one_every_terminal_can_send() {
+    for layout in Layout::ALL {
+        let keymap = Keymap::laid_out(layout);
+        for binding in keymap.bindings() {
+            let label = binding.chord.label_in(false);
+            let shifted = label
+                .strip_prefix("Ctrl+")
+                .is_some_and(|key| key.chars().all(|character| character.is_ascii_uppercase()));
+            if !shifted {
+                continue;
+            }
+            let sendable = keymap.bindings().iter().any(|other| {
+                let other_label = other.chord.label_in(false);
+                let lowercase = other_label
+                    .strip_prefix("Ctrl+")
+                    .is_some_and(|key| key.chars().all(|character| character.is_ascii_lowercase()));
+                other.command == binding.command
+                    && other.context == binding.context
+                    && (other_label.starts_with("Alt+") || lowercase)
+            });
+            assert!(
+                sendable,
+                "{} is only on {label} in {:?}, in {layout:?}",
+                binding.command.name(),
+                binding.context
+            );
+        }
+    }
+}
+
+/// A terminal keeps for Obelus what it kept before, and gives the rest to
+/// the program -- including `ctrl+p`, which in the editors' layouts is not
+/// the palette.
+///
+/// Broken deliberately by leaving the terminal's palette on `ctrl+p`.
+#[test]
+fn a_terminal_in_an_editors_layout_keeps_what_it_kept() {
+    let control = KeyModifiers::CONTROL;
+    for layout in [Layout::VsCode, Layout::TextMate] {
+        let keymap = Keymap::laid_out(layout);
+        let terminal = |code, modifiers| keymap.lookup(&press(code, modifiers), Context::Terminal);
+        assert_eq!(
+            terminal(KeyCode::Char('p'), control | KeyModifiers::SHIFT),
+            Some(Command::CommandPalette)
+        );
+        assert_eq!(
+            terminal(KeyCode::Char('p'), KeyModifiers::ALT | KeyModifiers::SHIFT),
+            Some(Command::CommandPalette)
+        );
+        assert_eq!(terminal(KeyCode::Char('p'), control), None);
+        assert_eq!(terminal(KeyCode::Char('q'), control), Some(Command::Quit));
+        assert_eq!(terminal(KeyCode::Char('v'), control), Some(Command::Paste));
+        assert_eq!(
+            terminal(KeyCode::Char('w'), control),
+            Some(Command::DocumentClose)
+        );
+        assert_eq!(
+            terminal(KeyCode::Insert, KeyModifiers::SHIFT),
+            Some(Command::Paste)
+        );
+        // The alt chords a file has are a shell's in a terminal.
+        assert_eq!(terminal(KeyCode::Char('/'), KeyModifiers::ALT), None);
+        assert_eq!(terminal(KeyCode::Char('.'), KeyModifiers::ALT), None);
+    }
+}
+
+/// What a label spells, for pressing it: the modifiers it names and its
+/// key, with a capital letter pressed as the letter with shift.
+fn pressed_as(label: &str) -> (KeyCode, KeyModifiers) {
+    let mut modifiers = KeyModifiers::NONE;
+    let mut rest = label;
+    for (prefix, modifier) in [
+        ("Ctrl+", KeyModifiers::CONTROL),
+        ("Alt+", KeyModifiers::ALT),
+        ("Shift+", KeyModifiers::SHIFT),
+    ] {
+        if let Some(tail) = rest.strip_prefix(prefix) {
+            modifiers |= modifier;
+            rest = tail;
+        }
+    }
+    let code = match rest {
+        "Insert" => KeyCode::Insert,
+        "Enter" => KeyCode::Enter,
+        "Esc" => KeyCode::Esc,
+        "\u{2190}" => KeyCode::Left,
+        "\u{2191}" => KeyCode::Up,
+        "\u{2192}" => KeyCode::Right,
+        "\u{2193}" => KeyCode::Down,
+        word if word.len() > 1 && word.starts_with('F') => {
+            KeyCode::F(word[1..].parse().expect("a function key"))
+        }
+        word => {
+            let character = word.chars().next().expect("a key");
+            if character.is_ascii_uppercase() {
+                modifiers |= KeyModifiers::SHIFT;
+                KeyCode::Char(character.to_ascii_lowercase())
+            } else {
+                KeyCode::Char(character)
+            }
+        }
+    };
+    (code, modifiers)
+}
+
+/// A key held with one more modifier than a binding names is not that
+/// binding, in any layout: `ctrl+super+q` does not leave, `alt+ctrl+u` is
+/// not the outline. And every binding's key, pressed as written, is that
+/// binding -- so the first half is not passing because nothing is ever
+/// found.
+///
+/// Broken deliberately by masking `SUPER` off in `KeyChord::from_event`
+/// (`ctrl+super+q` left), and by matching in `find` on a chord whose
+/// modifiers *contain* the binding's (`ctrl+alt+t` wrote a note).
+#[test]
+fn one_more_modifier_is_another_key_in_every_layout() {
+    for layout in Layout::ALL {
+        let keymap = Keymap::laid_out(layout);
+        for binding in keymap.bindings() {
+            let label = binding.chord.label_in(false);
+            assert_eq!(KeyChord::parse(&label), Some(binding.chord), "{label}");
+            let (code, modifiers) = pressed_as(&label);
+            if binding.context != Context::Always {
+                assert_eq!(
+                    keymap.bound_here(&press(code, modifiers), binding.context),
+                    Some(binding.command),
+                    "{label} pressed as written, in {layout:?}"
+                );
+            }
+            // A bare key with one modifier added is a chord of one
+            // modifier, which may well be bound: `Insert` and
+            // `ctrl+Insert` are two bindings.
+            if (modifiers - KeyModifiers::SHIFT).is_empty() {
+                continue;
+            }
+            for extra in [KeyModifiers::CONTROL, KeyModifiers::ALT, KeyModifiers::SUPER] {
+                if modifiers.contains(extra) {
+                    continue;
+                }
+                for context in [
+                    Context::Normal,
+                    Context::Terminal,
+                    Context::Dialog,
+                    Context::Documents,
+                ] {
+                    assert_eq!(
+                        keymap.lookup(&press(code, modifiers | extra), context),
+                        None,
+                        "{label} with {extra:?} in {context:?}, {layout:?}"
+                    );
+                }
+            }
+        }
+    }
+}
+
+/// A reader's own key is theirs whichever layout it is laid over, so
+/// switching layouts keeps it -- and the layout's own key for that command
+/// goes, rather than firing behind it.
+///
+/// Broken deliberately by pushing the reader's chord in `Keymap::with`
+/// rather than rebinding the command: the layout's own key stayed beside
+/// it.
+#[test]
+fn a_readers_keys_survive_a_change_of_layout() {
+    let lines = [("open-file".to_string(), "Alt+z".to_string())]
+        .into_iter()
+        .collect();
+    for layout in Layout::ALL {
+        let (keymap, unbound) = Keymap::with(layout, &lines);
+        assert!(unbound.is_empty(), "{unbound:?}");
+        assert_eq!(
+            keymap.lookup(
+                &press(KeyCode::Char('z'), KeyModifiers::ALT),
+                Context::Normal
+            ),
+            Some(Command::FileOpen),
+            "{layout:?}"
+        );
+        let bound = keymap
+            .bindings()
+            .iter()
+            .filter(|binding| binding.command == Command::FileOpen)
+            .count();
+        assert_eq!(bound, 1, "{layout:?} kept its own key for the files");
+    }
+}
+
+/// The editors' layouts take command from `obg` on a Mac as the control it
+/// arrives as, so what the screen there says of a shifted chord reads back
+/// as that chord -- and super is never read as control anywhere, held alone
+/// or beside it.
+///
+/// Broken deliberately by reading `cmd+` as `SUPER` in `KeyChord::parse`
+/// (the palette's `Cmd+P` read as another key), and by masking `SUPER` off
+/// in `KeyChord::from_event` (`super+ctrl+q` left).
+#[test]
+fn command_is_control_in_the_editors_layouts_and_super_never_is() {
+    let palette = KeyChord::new(KeyCode::Char('p'), KeyModifiers::CONTROL | KeyModifiers::SHIFT);
+    assert_eq!(palette.label_as(false, true), "Cmd+P");
+    assert_eq!(KeyChord::parse("Cmd+P"), Some(palette));
+    assert_eq!(KeyChord::parse("Cmd+Shift+p"), Some(palette));
+    for layout in [Layout::VsCode, Layout::TextMate] {
+        let keymap = Keymap::laid_out(layout);
+        assert_eq!(keymap.chord_for(Command::CommandPalette), Some(palette));
+        for (code, modifiers) in [
+            (KeyCode::Char('p'), KeyModifiers::SUPER),
+            (KeyCode::Char('p'), KeyModifiers::SUPER | KeyModifiers::SHIFT),
+            (KeyCode::Char('s'), KeyModifiers::SUPER),
+            (
+                KeyCode::Char('q'),
+                KeyModifiers::SUPER | KeyModifiers::CONTROL,
+            ),
+        ] {
+            for context in [Context::Normal, Context::Terminal, Context::Dialog] {
+                assert_eq!(
+                    keymap.lookup(&press(code, modifiers), context),
+                    None,
+                    "{code:?} with {modifiers:?} in {context:?}, {layout:?}"
+                );
+            }
+        }
+    }
+}
+
+/// Deliberately broken by removing the KeymapSelect binding from the
+/// constructor.
+#[test]
+fn every_preset_has_the_same_keymap_chooser_key() {
+    for layout in Layout::ALL {
+        let keymap = Keymap::laid_out(layout);
+        assert_eq!(
+            keymap.lookup(
+                &press(KeyCode::Char('k'), KeyModifiers::ALT),
+                Context::Normal
+            ),
+            Some(Command::KeymapSelect),
+            "{layout:?}"
+        );
+    }
+}
+
+/// What Obelus writes for a key with a mark or a name in it reads back as
+/// that key: an arrow after a modifier, and `Insert`.
+///
+/// Broken deliberately by slicing the modifiers off by byte again
+/// (`rest[..5]`), which panicked on `Alt+\u{2191}` -- the arrow is three
+/// bytes and the fifth is inside it -- and by taking `insert` out of
+/// `parse`, which read `Shift+Insert` as nothing.
+#[test]
+fn a_chord_with_a_mark_or_a_name_reads_back() {
+    for chord in [
+        KeyChord::new(KeyCode::Up, KeyModifiers::ALT),
+        KeyChord::new(KeyCode::Left, KeyModifiers::ALT),
+        KeyChord::new(KeyCode::Insert, KeyModifiers::SHIFT),
+        KeyChord::new(KeyCode::Insert, KeyModifiers::CONTROL),
+        KeyChord::new(KeyCode::Insert, KeyModifiers::NONE),
+    ] {
+        let written = chord.label_in(false);
+        assert_eq!(KeyChord::parse(&written), Some(chord), "{written}");
+    }
+    assert_eq!(
+        KeyChord::parse("alt+\u{2193}"),
+        Some(KeyChord::new(KeyCode::Down, KeyModifiers::ALT))
+    );
+    assert_eq!(KeyChord::parse("\u{2191}+"), None);
+}

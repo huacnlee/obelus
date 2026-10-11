@@ -113,3 +113,25 @@ cargo test --workspace -- --ignored      # the slow real-server tests, and the d
 Tests assert on the terminal cell grid, colours included: a widget can write
 every character correctly and paint none of them, and an assertion on the text
 cannot tell.
+
+## Keys
+
+Obelus starts from one of four layouts, and the first start with no
+settings file asks which. `classic` puts what you open on the function
+keys; `mnemonic` puts the same twelve on `ctrl` and `alt` by the letter of
+the word; `vscode` and `textmate` use those editors' keys wherever Obelus
+has the command (`ctrl+p` for a file, `ctrl+shift+p` for the palette in
+`vscode`; `ctrl+t` for a file in `textmate`) and no function key at all.
+In `obg` on a Mac, `ctrl` is `cmd` in every layout.
+
+`choose-keymap` (`alt+k` in every layout, and a row on the welcome screen)
+switches between them, and your own `[keys]` lines are kept on top of
+whichever you pick. From a shell:
+
+```
+ob keys              # which layout, and the others
+ob keys set vscode   # choose one without opening anything
+```
+
+Every key, and each layout's, is in
+[the reference](https://obelus-editor.github.io/obelus/reference.html#layouts).

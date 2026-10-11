@@ -75,7 +75,41 @@
     <section id="keys">
       <h2><span class="num">01</span><span>按键与命令</span></h2>
 
-      <p>没有模式，所以下面每个键什么时候按都是同一个意思——像 VS Code、Emacs，不像 vim、helix。按键分三类：功能键、<kbd>Ctrl</kbd>、<kbd>Alt</kbd>，记住每一类管什么，具体的键就好记了。这里是默认按键，每个都能改，见<a href="#config">设置</a>。</p>
+      <p>没有模式，所以下面每个键什么时候按都是同一个意思——像 VS Code、Emacs，不像 vim、helix。按键分三类：功能键、<kbd>Ctrl</kbd>、<kbd>Alt</kbd>，记住每一类管什么，具体的键就好记了。这里是默认按键（也就是下面的 <code>classic</code> 方案），每个都能改，见<a href="#config">设置</a>。</p>
+
+      <h3 id="layouts">四套按键方案</h3>
+      <p>从哪套按键出发，由设置 <code>keys_from</code> 决定，一共四套。<code>classic</code> 就是本页各表。<code>mnemonic</code> 把十二个功能键按单词首字母挪到 <kbd>Ctrl</kbd> 和 <kbd>Alt</kbd> 上，给没有那一排键的键盘用，别的都不动。<code>vscode</code> 和 <code>textmate</code> 在 Obelus 有同样命令的地方用那两个编辑器教会你的键，完全不用功能键；其余的 <kbd>Ctrl</kbd>、<kbd>Alt</kbd> 键和下面一样。它们是按 Obelus 有的东西改编的，不是照搬。</p>
+      <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th><span>命令</span></th>
+          <th><span>classic</span></th>
+          <th><span>mnemonic</span></th>
+          <th><span>vscode</span></th>
+          <th><span>textmate</span></th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>open-file</code></td><td><kbd>F1</kbd></td><td><kbd>Ctrl+o</kbd></td><td><kbd>Ctrl+p</kbd></td><td><kbd>Ctrl+t</kbd></td></tr>
+          <tr><td><code>run-command</code></td><td><kbd>Ctrl+p</kbd></td><td><kbd>Ctrl+p</kbd></td><td><kbd>Ctrl+Shift+p</kbd> <kbd>Alt+Shift+p</kbd></td><td><kbd>Ctrl+Shift+p</kbd> <kbd>Alt+Shift+p</kbd></td></tr>
+          <tr><td><code>switch-document</code></td><td><kbd>F2</kbd></td><td><kbd>Ctrl+e</kbd></td><td><kbd>Ctrl+e</kbd></td><td><kbd>Ctrl+e</kbd></td></tr>
+          <tr><td><code>open-changed-file</code></td><td><kbd>F3</kbd></td><td><kbd>Ctrl+g</kbd></td><td><kbd>Ctrl+Shift+g</kbd> <kbd>Alt+g</kbd></td><td><kbd>Ctrl+Shift+g</kbd> <kbd>Alt+g</kbd></td></tr>
+          <tr><td><code>choose-conversation</code></td><td><kbd>F4</kbd></td><td><kbd>Ctrl+n</kbd></td><td><kbd>Alt+Shift+n</kbd></td><td><kbd>Alt+Shift+n</kbd></td></tr>
+          <tr><td><code>search-file</code></td><td><kbd>F5</kbd></td><td><kbd>Ctrl+f</kbd></td><td><kbd>Ctrl+f</kbd></td><td><kbd>Ctrl+f</kbd></td></tr>
+          <tr><td><code>search-project</code></td><td><kbd>F6</kbd></td><td><kbd>Alt+/</kbd></td><td><kbd>Ctrl+Shift+f</kbd> <kbd>Alt+/</kbd></td><td><kbd>Ctrl+Shift+f</kbd> <kbd>Alt+/</kbd></td></tr>
+          <tr><td><code>show-outline</code></td><td><kbd>F7</kbd></td><td><kbd>Alt+u</kbd></td><td><kbd>Ctrl+Shift+o</kbd> <kbd>Alt+u</kbd></td><td><kbd>Ctrl+Shift+t</kbd> <kbd>Alt+u</kbd></td></tr>
+          <tr><td><code>search-symbols</code></td><td><kbd>F8</kbd></td><td><kbd>Alt+y</kbd></td><td><kbd>Ctrl+t</kbd></td><td><kbd>Alt+y</kbd></td></tr>
+          <tr><td><code>show-file-history</code></td><td><kbd>F9</kbd></td><td><kbd>Alt+l</kbd></td><td><kbd>Alt+l</kbd></td><td><kbd>Alt+l</kbd></td></tr>
+          <tr><td><code>show-project-history</code></td><td><kbd>F10</kbd></td><td><kbd>Alt+g</kbd></td><td><kbd>Alt+Shift+l</kbd></td><td><kbd>Alt+Shift+l</kbd></td></tr>
+          <tr><td><code>go-to-definition</code></td><td><kbd>F11</kbd></td><td><kbd>Alt+.</kbd></td><td><kbd>Alt+.</kbd></td><td><kbd>Alt+.</kbd></td></tr>
+          <tr><td><code>review-pull-request</code></td><td><kbd>F12</kbd></td><td><kbd>Ctrl+u</kbd></td><td><kbd>Ctrl+u</kbd></td><td><kbd>Ctrl+u</kbd></td></tr>
+          <tr><td><code>todo</code></td><td><kbd>Ctrl+t</kbd></td><td><kbd>Ctrl+t</kbd></td><td><kbd>Alt+Shift+t</kbd></td><td><kbd>Alt+Shift+t</kbd></td></tr>
+          <tr><td><code>redo</code></td><td><kbd>Ctrl+y</kbd></td><td><kbd>Ctrl+y</kbd></td><td><kbd>Ctrl+y</kbd> <kbd>Ctrl+Shift+z</kbd></td><td><kbd>Ctrl+y</kbd> <kbd>Ctrl+Shift+z</kbd></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="quiet small">屏幕上把按了 Shift 的字母写成大写：<kbd>Ctrl+P</kbd> 就是 <kbd>Ctrl+Shift+p</kbd>。多数终端发不出字母上的 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>，只会发普通的 <kbd>Ctrl+p</kbd>，所以这些键旁边都另有一个每个终端都能发的 <kbd>Alt</kbd> 键。<code>obg</code> 收到的就是按下的键本身。在 Mac 上的 <code>obg</code> 里，每套方案的 <kbd>Ctrl</kbd> 都是 <kbd>Cmd</kbd>：本页写 <kbd>Ctrl+p</kbd> 的地方按 <kbd>Cmd+p</kbd>，屏幕上也写 <kbd>Cmd</kbd>。<kbd>Ctrl</kbd> 本身在那里照样能用；设置文件里仍写 <code>Ctrl</code>，因为终端里的 <code>ob</code> 读的是同一个文件，而终端会把 <kbd>Cmd</kbd> 留给自己。别的系统上 Super 键（Windows 键）从不当作 <kbd>Ctrl</kbd>，它是桌面的。</p>
+      <p>切换方案用 <code>choose-keymap</code>（每套方案里都是 <kbd>Alt+k</kbd>），或者在欢迎页选 <em>Pick a keymap</em>。每一行都写着这套方案把打开文件和命令面板放在哪个键上。没有设置文件时第一次启动 Obelus，会问一次；<kbd>Esc</kbd> 保留 <code>classic</code>，下次启动还会再问；选了任何一套（包括 <code>classic</code>）都马上写进设置，以后不再问。你在 <code>[keys]</code> 里写的键叠在方案之上，所以换方案不会丢掉你自己的键。</p>
+      <p>在 shell 里，<code>ob keys</code> 告诉你当前用的是哪套并列出其他几套，<code>ob keys set vscode</code> 不打开任何东西直接选定（<code>obg keys</code> 也一样）。已经开着的 Obelus 窗口都会跟着换。要打开一个名叫 <code>keys</code> 的文件，写 <code>ob ./keys</code> 或 <code>ob -- keys</code>。</p>
 
       <h3><span class="mono">F1</span>–<span class="mono">F12</span>：打开要看的东西</h3>
       <p class="quiet small">四个一组，跟键盘上的分组一样：F1–F4 打开要读的东西，F5–F8 是搜索，F9–F12 是 Git 历史、跳转定义，以及 PR 和 issue。功能键都不带修饰键，因为 <kbd>Shift+F5</kbd> 这类组合在不同终端里发出来的东西不一样，在这台机器上能用，换一台就不行了。</p>
@@ -152,6 +186,7 @@
           <tr><td><kbd>Alt+←</kbd> <kbd>Alt+→</kbd></td><td><code>go-back</code> <code>go-forward</code></td><td>回到跳转之前的地方，再按另一个跳回来</td></tr>
           <tr><td><kbd>Alt+t</kbd></td><td><code>todo-add</code></td><td>就着这一行写一条笔记（在对话里则是打开笔记）</td></tr>
           <tr><td><kbd>Alt+s</kbd></td><td><code>show-signature</code></td><td>光标所在的这个函数调用要哪些参数</td></tr>
+          <tr><td><kbd>Alt+k</kbd></td><td><code>choose-keymap</code></td><td>你的按键从<a href="#layouts">四套方案</a>里的哪一套出发。和光标无关，放在 <kbd>Alt</kbd> 上是因为没有哪套方案会挪动它</td></tr>
           <tr><td><kbd>Alt+w</kbd></td><td><code>widen-selection</code></td><td>按语法一层一层扩大选区</td></tr>
           <tr><td><kbd>Alt+c</kbd></td><td><code>toggle-comment</code></td><td>和 <kbd>Ctrl+/</kbd> 一样</td></tr>
           <tr><td><kbd>Alt+↑</kbd> <kbd>Alt+↓</kbd></td><td><code>move-line-up</code> <code>move-line-down</code></td><td>把这一行或选中的几行上移、下移</td></tr>
@@ -209,7 +244,7 @@
           </tr>
           <tr>
             <td>Obelus</td>
-            <td><code>choose-theme</code> <code>new-conversation</code> <code>choose-conversation</code> <code>open-terminal</code> <code>open-settings</code> <code>connect-remote</code> <code>disconnect-remote</code> <code>open-project-settings</code> <code>open-settings-file</code> <code>open-log</code> <code>open-server-log</code> <code>restart-server</code> <code>stop-server</code> <code>quit</code></td>
+            <td><code>choose-theme</code> <code>choose-keymap</code> <code>new-conversation</code> <code>choose-conversation</code> <code>open-terminal</code> <code>open-settings</code> <code>connect-remote</code> <code>disconnect-remote</code> <code>open-project-settings</code> <code>open-settings-file</code> <code>open-log</code> <code>open-server-log</code> <code>restart-server</code> <code>stop-server</code> <code>quit</code></td>
           </tr>
         </tbody>
       </table>
@@ -264,6 +299,7 @@
         </tr></thead>
         <tbody>
           <tr><td><code>theme</code></td><td><code>"dark"</code></td><td>Obelus 用哪套颜色画</td></tr>
+          <tr><td><code>keys_from</code></td><td><code>"classic"</code></td><td>你的按键从哪套出发：<code>classic</code>、<code>mnemonic</code>、<code>vscode</code> 或 <code>textmate</code>，见<a href="#layouts">四套按键方案</a></td></tr>
           <tr><td><code>icons</code></td><td><code>false</code></td><td><em>只对终端版。</em>显不显示 Nerd Font 图标——没装补丁字体的话会显示成方框。窗口版自带图标，不看这一项</td></tr>
           <tr><td><code>wrap</code></td><td><code>false</code></td><td>太长的行要不要折到下一行显示。默认关，一行就是一行</td></tr>
           <tr><td><code>blame_margin</code></td><td><code>true</code></td><td>边栏上显示每一行最后是谁改的</td></tr>
@@ -287,7 +323,7 @@
       </div>
 
       <h3>改键</h3>
-      <p>只写你要改的：改了一个键，其他的照旧用默认，以后 Obelus 加的新键你也能用上。空字符串表示去掉这个键。命令名就是上面那些；键的写法和屏幕上显示的一样，不区分大小写。</p>
+      <p>只写你要改的：改了一个键，其他的照旧用默认，以后 Obelus 加的新键你也能用上。空字符串表示去掉这个键。命令名就是上面那些；键的写法和屏幕上显示的一样，不区分大小写——只有大写字母例外，它表示按住 <kbd>Shift</kbd> 的那个字母。你写的这些叠在 <code>keys_from</code> 指定的方案之上，换方案也还在。</p>
       <pre><code>theme = "light"
 wrap = true
 blame_margin = false

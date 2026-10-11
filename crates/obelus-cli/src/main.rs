@@ -8,7 +8,7 @@
 use std::{path::PathBuf, process::ExitCode};
 
 use anyhow::Result;
-use clap::Parser;
+use clap::{Parser, Subcommand};
 use obelus_app::{app, event, startup};
 
 /// A code editor in a terminal, with the agent built in.
@@ -18,6 +18,10 @@ use obelus_app::{app, event, startup};
 // the command a reader types. `obelus-cli --version` is a name nobody has.
 #[command(name = "ob", version, about)]
 struct Arguments {
+    /// Something to do instead of opening anything.
+    #[command(subcommand)]
+    command: Option<Management>,
+
     /// What to open: a file, or a directory to work in.
     ///
     /// A file names the tree it is in and is opened. A directory is the
@@ -39,8 +43,40 @@ struct Arguments {
     headless: bool,
 }
 
+/// What `ob` can do without opening anything.
+///
+/// A word that is also a path: `ob keys` is this, and a file called `keys`
+/// is `ob ./keys` or `ob -- keys`, which is how every program with
+/// subcommands tells the two apart.
+#[derive(Subcommand)]
+enum Management {
+    /// Say which keys Obelus starts from, or choose them.
+    Keys {
+        #[command(subcommand)]
+        choose: Option<Keys>,
+    },
+}
+
+/// What `keys` can be asked to do besides saying.
+#[derive(Subcommand)]
+enum Keys {
+    /// Choose the keys every Obelus starts from, keeping your own.
+    Set {
+        /// The layout.
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(startup::keys::PRESETS.iter().copied()))]
+        layout: String,
+    },
+}
+
 fn main() -> Result<ExitCode> {
     let arguments = Arguments::parse();
+    // Before the log and everything else: it opens nothing, so it has
+    // nothing to say there.
+    if let Some(Management::Keys { choose }) = &arguments.command {
+        let layout = choose.as_ref().map(|Keys::Set { layout }| layout.as_str());
+        startup::keys::run("ob", layout)?;
+        return Ok(ExitCode::SUCCESS);
+    }
 
     // Held until main returns, so buffered log lines are flushed on the way
     // out.
@@ -248,5 +284,48 @@ fn enable_mouse() -> bool {
             tracing::warn!(%error, "no mouse reporting");
             false
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    /// `keys` is the subcommand, `keys set` takes only a layout's word,
+    /// and a file called `keys` can still be opened.
+    ///
+    /// Broken deliberately by renaming the subcommand (`keys set vscode`
+    /// became three paths), and by taking the value parser off `layout`
+    /// (`lazyvim` was taken, to be refused only once the file was read).
+    #[test]
+    fn keys_is_a_subcommand_and_a_path_called_keys_still_opens() {
+        use clap::Parser as _;
+        let parse = |words: &[&str]| {
+            super::Arguments::try_parse_from(std::iter::once("ob").chain(words.iter().copied()))
+        };
+        let chosen = parse(&["keys", "set", "vscode"]).expect("choosing");
+        assert!(chosen.paths.is_empty());
+        assert!(matches!(
+            chosen.command,
+            Some(super::Management::Keys {
+                choose: Some(super::Keys::Set { ref layout }),
+            }) if layout == "vscode"
+        ));
+        for word in obelus_app::startup::keys::PRESETS {
+            assert!(parse(&["keys", "set", word]).is_ok(), "{word}");
+        }
+        let asked = parse(&["keys"]).expect("asking");
+        assert!(matches!(
+            asked.command,
+            Some(super::Management::Keys { choose: None })
+        ));
+        assert!(parse(&["keys", "set", "lazyvim"]).is_err());
+        assert!(parse(&["keys", "set"]).is_err());
+        for path in ["./keys", "main.rs"] {
+            let opening = parse(&[path]).expect("a path");
+            assert!(opening.command.is_none());
+            assert_eq!(opening.paths, [std::path::PathBuf::from(path)]);
+        }
+        let escaped = parse(&["--", "keys"]).expect("a file called keys");
+        assert!(escaped.command.is_none());
+        assert_eq!(escaped.paths, [std::path::PathBuf::from("keys")]);
     }
 }

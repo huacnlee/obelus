@@ -37,9 +37,15 @@ use crate::{Screen, put, write};
 /// The commands worth naming, with the words this screen says them in.
 ///
 /// Ways *in*, which is what this screen is for: a file, a file that has
-/// changed, a search of the project, the agent, everything by name, and the way
-/// out. Not `switch-document` -- there is nothing open to switch to on the one
-/// screen where this is showing.
+/// changed, a search of the project, the agent, everything by name, which keys
+/// those are, and the way out. Not `switch-document` -- there is nothing open
+/// to switch to on the one screen where this is showing.
+///
+/// The keymap is here because the keys above it are: a reader who came from
+/// another editor and finds `F1` where they expected `ctrl+p` is looking at
+/// the one screen that says how to move every key at once. Said as "Pick a
+/// keymap" rather than the palette's "Choose": the fifteen columns of the
+/// longer one push two of them past the plate.
 ///
 /// The words are this screen's own, not [`obelus_command::CommandSpec`]'s.
 /// A palette row is read once, in a list, with the whole width to say what
@@ -54,6 +60,7 @@ const OFFERED: &[(Command, &str)] = &[
     (Command::SearchProject, "Search files"),
     (Command::ConversationSelect, "Ask the agent"),
     (Command::CommandPalette, "Run a command"),
+    (Command::KeymapSelect, "Pick a keymap"),
     (Command::Quit, "Leave Obelus"),
 ];
 
@@ -85,7 +92,7 @@ const GUTTER: u16 = 4;
 /// How many rows of screen one row of the grid takes.
 ///
 /// Two: the keys are read one at a time, and a blank between them is what
-/// makes a block of six read as six things rather than as a paragraph.
+/// makes a block of seven read as seven things rather than as a paragraph.
 const ROW_HEIGHT: u16 = 2;
 
 /// The gap between a key and what it opens.

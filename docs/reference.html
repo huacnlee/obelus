@@ -75,7 +75,41 @@
     <section id="keys">
       <h2><span class="num">01</span><span>Keys &amp; commands</span></h2>
 
-      <p>There are no modes, so every key below does the same thing whenever you press it, like VS Code or Emacs and unlike vim or helix. The keys come in three families: function keys, <kbd>Ctrl</kbd> and <kbd>Alt</kbd>. Remember what each family is for and the rest follows. These are the defaults, and you can rebind any of them: see <a href="#config">settings</a>.</p>
+      <p>There are no modes, so every key below does the same thing whenever you press it, like VS Code or Emacs and unlike vim or helix. The keys come in three families: function keys, <kbd>Ctrl</kbd> and <kbd>Alt</kbd>. Remember what each family is for and the rest follows. These are the defaults (the <code>classic</code> layout below), and you can rebind any of them: see <a href="#config">settings</a>.</p>
+
+      <h3 id="layouts">Four layouts</h3>
+      <p>Which keys you start from is the <code>keys_from</code> setting, and there are four. <code>classic</code> is the tables on this page. <code>mnemonic</code> moves the twelve function keys onto <kbd>Ctrl</kbd> and <kbd>Alt</kbd> by the letter of the word, for a keyboard without the row, and nothing else. <code>vscode</code> and <code>textmate</code> use the keys those editors taught you wherever Obelus has the same command, and have no function keys at all; the rest of <kbd>Ctrl</kbd> and <kbd>Alt</kbd> stays as below. They adapt those editors' keys to what Obelus has; they are not a copy of either.</p>
+      <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th><span>Command</span></th>
+          <th><span>classic</span></th>
+          <th><span>mnemonic</span></th>
+          <th><span>vscode</span></th>
+          <th><span>textmate</span></th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>open-file</code></td><td><kbd>F1</kbd></td><td><kbd>Ctrl+o</kbd></td><td><kbd>Ctrl+p</kbd></td><td><kbd>Ctrl+t</kbd></td></tr>
+          <tr><td><code>run-command</code></td><td><kbd>Ctrl+p</kbd></td><td><kbd>Ctrl+p</kbd></td><td><kbd>Ctrl+Shift+p</kbd> <kbd>Alt+Shift+p</kbd></td><td><kbd>Ctrl+Shift+p</kbd> <kbd>Alt+Shift+p</kbd></td></tr>
+          <tr><td><code>switch-document</code></td><td><kbd>F2</kbd></td><td><kbd>Ctrl+e</kbd></td><td><kbd>Ctrl+e</kbd></td><td><kbd>Ctrl+e</kbd></td></tr>
+          <tr><td><code>open-changed-file</code></td><td><kbd>F3</kbd></td><td><kbd>Ctrl+g</kbd></td><td><kbd>Ctrl+Shift+g</kbd> <kbd>Alt+g</kbd></td><td><kbd>Ctrl+Shift+g</kbd> <kbd>Alt+g</kbd></td></tr>
+          <tr><td><code>choose-conversation</code></td><td><kbd>F4</kbd></td><td><kbd>Ctrl+n</kbd></td><td><kbd>Alt+Shift+n</kbd></td><td><kbd>Alt+Shift+n</kbd></td></tr>
+          <tr><td><code>search-file</code></td><td><kbd>F5</kbd></td><td><kbd>Ctrl+f</kbd></td><td><kbd>Ctrl+f</kbd></td><td><kbd>Ctrl+f</kbd></td></tr>
+          <tr><td><code>search-project</code></td><td><kbd>F6</kbd></td><td><kbd>Alt+/</kbd></td><td><kbd>Ctrl+Shift+f</kbd> <kbd>Alt+/</kbd></td><td><kbd>Ctrl+Shift+f</kbd> <kbd>Alt+/</kbd></td></tr>
+          <tr><td><code>show-outline</code></td><td><kbd>F7</kbd></td><td><kbd>Alt+u</kbd></td><td><kbd>Ctrl+Shift+o</kbd> <kbd>Alt+u</kbd></td><td><kbd>Ctrl+Shift+t</kbd> <kbd>Alt+u</kbd></td></tr>
+          <tr><td><code>search-symbols</code></td><td><kbd>F8</kbd></td><td><kbd>Alt+y</kbd></td><td><kbd>Ctrl+t</kbd></td><td><kbd>Alt+y</kbd></td></tr>
+          <tr><td><code>show-file-history</code></td><td><kbd>F9</kbd></td><td><kbd>Alt+l</kbd></td><td><kbd>Alt+l</kbd></td><td><kbd>Alt+l</kbd></td></tr>
+          <tr><td><code>show-project-history</code></td><td><kbd>F10</kbd></td><td><kbd>Alt+g</kbd></td><td><kbd>Alt+Shift+l</kbd></td><td><kbd>Alt+Shift+l</kbd></td></tr>
+          <tr><td><code>go-to-definition</code></td><td><kbd>F11</kbd></td><td><kbd>Alt+.</kbd></td><td><kbd>Alt+.</kbd></td><td><kbd>Alt+.</kbd></td></tr>
+          <tr><td><code>review-pull-request</code></td><td><kbd>F12</kbd></td><td><kbd>Ctrl+u</kbd></td><td><kbd>Ctrl+u</kbd></td><td><kbd>Ctrl+u</kbd></td></tr>
+          <tr><td><code>todo</code></td><td><kbd>Ctrl+t</kbd></td><td><kbd>Ctrl+t</kbd></td><td><kbd>Alt+Shift+t</kbd></td><td><kbd>Alt+Shift+t</kbd></td></tr>
+          <tr><td><code>redo</code></td><td><kbd>Ctrl+y</kbd></td><td><kbd>Ctrl+y</kbd></td><td><kbd>Ctrl+y</kbd> <kbd>Ctrl+Shift+z</kbd></td><td><kbd>Ctrl+y</kbd> <kbd>Ctrl+Shift+z</kbd></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="quiet small">The screen writes a shifted letter as its capital: <kbd>Ctrl+P</kbd> is <kbd>Ctrl+Shift+p</kbd>. Most terminals can't send <kbd>Ctrl</kbd> with <kbd>Shift</kbd> on a letter, and send plain <kbd>Ctrl+p</kbd> instead, which is why each of those has an <kbd>Alt</kbd> key beside it that every terminal can send. <code>obg</code> gets them as they are. In <code>obg</code> on a Mac, <kbd>Ctrl</kbd> is <kbd>Cmd</kbd>, in every layout: press <kbd>Cmd+p</kbd> where this page says <kbd>Ctrl+p</kbd>, and the screen says <kbd>Cmd</kbd> too. <kbd>Ctrl</kbd> itself still works there, and the settings file still says <code>Ctrl</code>, because <code>ob</code> in a terminal reads the same file and a terminal keeps <kbd>Cmd</kbd> for itself. Elsewhere the Super or Windows key is never read as <kbd>Ctrl</kbd>; it belongs to the desktop.</p>
+      <p>To choose, run <code>choose-keymap</code> (<kbd>Alt+k</kbd> in every layout), or pick <em>Pick a keymap</em> on the welcome screen. Each row shows what that layout puts the files and the palette on. The very first time Obelus starts with no settings file, it asks; <kbd>Esc</kbd> keeps <code>classic</code> and asks again next time, and any choice is saved straight away, <code>classic</code> included, so it never asks again. Whatever you have under <code>[keys]</code> is laid over the layout, so switching layouts keeps your own keys.</p>
+      <p>From a shell, <code>ob keys</code> says which layout you're on and lists the others, and <code>ob keys set vscode</code> chooses one without opening anything (<code>obg keys</code> does the same). Every Obelus window that's open picks the change up. To open a file that is called <code>keys</code>, write <code>ob ./keys</code> or <code>ob -- keys</code>.</p>
 
       <h3>Function keys open something to look at</h3>
       <p class="quiet small">Three groups of four, the way they sit on the keyboard: F1–F4 open things to read, F5–F8 search, F9–F12 are Git's history, go-to-definition, and the pull requests and issues. None of them takes a modifier, because terminals disagree about what something like <kbd>Shift+F5</kbd> sends, so a binding like that works on one machine and not the next.</p>
@@ -152,6 +186,7 @@
           <tr><td><kbd>Alt+←</kbd> <kbd>Alt+→</kbd></td><td><code>go-back</code> <code>go-forward</code></td><td>Go back to where you jumped from, and forward again</td></tr>
           <tr><td><kbd>Alt+t</kbd></td><td><code>todo-add</code></td><td>Write a note against this line (in a conversation, it opens the notes)</td></tr>
           <tr><td><kbd>Alt+s</kbd></td><td><code>show-signature</code></td><td>The parameters of the call the cursor is in</td></tr>
+          <tr><td><kbd>Alt+k</kbd></td><td><code>choose-keymap</code></td><td>Which of the <a href="#layouts">four layouts</a> your keys start from. Not about the cursor, but on <kbd>Alt</kbd> because no layout moves it</td></tr>
           <tr><td><kbd>Alt+w</kbd></td><td><code>widen-selection</code></td><td>Grow the selection one piece of syntax at a time</td></tr>
           <tr><td><kbd>Alt+c</kbd></td><td><code>toggle-comment</code></td><td>The same as <kbd>Ctrl+/</kbd></td></tr>
           <tr><td><kbd>Alt+↑</kbd> <kbd>Alt+↓</kbd></td><td><code>move-line-up</code> <code>move-line-down</code></td><td>Move this line, or the selected ones</td></tr>
@@ -209,7 +244,7 @@
           </tr>
           <tr>
             <td>Obelus</td>
-            <td><code>choose-theme</code> <code>new-conversation</code> <code>choose-conversation</code> <code>open-terminal</code> <code>open-settings</code> <code>connect-remote</code> <code>disconnect-remote</code> <code>open-project-settings</code> <code>open-settings-file</code> <code>open-log</code> <code>open-server-log</code> <code>restart-server</code> <code>stop-server</code> <code>quit</code></td>
+            <td><code>choose-theme</code> <code>choose-keymap</code> <code>new-conversation</code> <code>choose-conversation</code> <code>open-terminal</code> <code>open-settings</code> <code>connect-remote</code> <code>disconnect-remote</code> <code>open-project-settings</code> <code>open-settings-file</code> <code>open-log</code> <code>open-server-log</code> <code>restart-server</code> <code>stop-server</code> <code>quit</code></td>
           </tr>
         </tbody>
       </table>
@@ -264,6 +299,7 @@
         </tr></thead>
         <tbody>
           <tr><td><code>theme</code></td><td><code>"dark"</code></td><td>The colours Obelus draws in</td></tr>
+          <tr><td><code>keys_from</code></td><td><code>"classic"</code></td><td>Which keys yours start from: <code>classic</code>, <code>mnemonic</code>, <code>vscode</code> or <code>textmate</code>. See <a href="#layouts">four layouts</a></td></tr>
           <tr><td><code>icons</code></td><td><code>false</code></td><td><em>Terminal only.</em> Draw Nerd Font icons. Without a patched font they show up as boxes. <code>obg</code> has the icons built in, so this doesn't apply there</td></tr>
           <tr><td><code>wrap</code></td><td><code>false</code></td><td>Wrap lines too long for the screen onto the next row. Off by default, so one line is one row</td></tr>
           <tr><td><code>blame_margin</code></td><td><code>true</code></td><td>Show in the margin who last changed each line</td></tr>
@@ -287,7 +323,7 @@
       </div>
 
       <h3>Rebinding</h3>
-      <p>Write only what you want to change: rebind one key and everything else keeps its default, including keys Obelus adds later. An empty string removes a binding. Use the command names from above, and write keys the way the screen shows them (case doesn't matter).</p>
+      <p>Write only what you want to change: rebind one key and everything else keeps its default, including keys Obelus adds later. An empty string removes a binding. Use the command names from above, and write keys the way the screen shows them (case doesn't matter, except that a capital letter is that letter with <kbd>Shift</kbd>). Your lines are laid over whichever layout <code>keys_from</code> names, so they survive a change of layout.</p>
       <pre><code>theme = "light"
 wrap = true
 blame_margin = false
