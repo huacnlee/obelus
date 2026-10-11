@@ -37,6 +37,15 @@ Either one takes the latest release, checks what it downloaded against the
 release's own `SHA256SUMS`, and puts **`obg`** on your PATH — Obelus in a
 window of its own.
 
+With [mise](https://mise.jdx.dev), on any of the three:
+
+```
+mise use -g github:obelus-editor/obelus
+```
+
+That is `ob` alone — the terminal one, with no window and no desktop
+entry — and `mise upgrade` keeps it current.
+
 **`ob`, the same editor in a terminal**, is the other binary and is asked
 for by name. The two are gvim's relation to vim rather than two programs:
 the same grid, the same views and the same keys. What the window has is the
