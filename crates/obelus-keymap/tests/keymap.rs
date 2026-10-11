@@ -833,7 +833,10 @@ fn a_readers_keys_survive_a_change_of_layout() {
 /// in `KeyChord::from_event` (`super+ctrl+q` left).
 #[test]
 fn command_is_control_in_the_editors_layouts_and_super_never_is() {
-    let palette = KeyChord::new(KeyCode::Char('p'), KeyModifiers::CONTROL | KeyModifiers::SHIFT);
+    let palette = KeyChord::new(
+        KeyCode::Char('p'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+    );
     assert_eq!(palette.label_as(false, true), "Cmd+P");
     assert_eq!(KeyChord::parse("Cmd+P"), Some(palette));
     assert_eq!(KeyChord::parse("Cmd+Shift+p"), Some(palette));
@@ -842,7 +845,10 @@ fn command_is_control_in_the_editors_layouts_and_super_never_is() {
         assert_eq!(keymap.chord_for(Command::CommandPalette), Some(palette));
         for (code, modifiers) in [
             (KeyCode::Char('p'), KeyModifiers::SUPER),
-            (KeyCode::Char('p'), KeyModifiers::SUPER | KeyModifiers::SHIFT),
+            (
+                KeyCode::Char('p'),
+                KeyModifiers::SUPER | KeyModifiers::SHIFT,
+            ),
             (KeyCode::Char('s'), KeyModifiers::SUPER),
             (
                 KeyCode::Char('q'),
