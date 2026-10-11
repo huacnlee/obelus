@@ -20,17 +20,16 @@ cargo build --workspace
 cargo test --workspace
 cargo +nightly fmt --all        # NOT `cargo fmt`
 cargo clippy --workspace --all-features --all-targets
-cargo run -- crates/obelus-app/src/app/mod.rs           # obg, in a window
-cargo run --bin ob -- crates/obelus-app/src/app/mod.rs  # ob, here
+cargo run -- crates/obelus-app/src/app/mod.rs   # ob, here
 UPDATE_FIXTURES=1 cargo test --workspace    # regenerate golden cell grids
 cargo test --workspace -- --ignored         # the slow real-server tests, and the diff sweep
 OBELUS_REQUIRE_LSP=1 cargo test --workspace # a missing rust-analyzer fails rather than skips
 OBELUS_PATIENCE=10 cargo test --workspace   # an agent test that fails gives up in 10s, not 180
 ```
 
-`obg` is the workspace's `default-members`, so a bare `cargo run` is the
-window -- and a bare `build`, `test` or `clippy` is only `obg` and what it is
-made of. **Always `--workspace`** for those.
+`ob` is the workspace's `default-members`, so a bare `cargo run` is `ob` --
+and a bare `build`, `test` or `clippy` is only `ob` and what it is made of.
+**Always `--workspace`** for those.
 
 `.rustfmt.toml` uses five nightly-only options. Stable `cargo fmt` silently
 ignores them, and mixing the two makes the formatting oscillate. **Always
@@ -39,7 +38,7 @@ ignores them, and mixing the two makes the formatting oscillate. **Always
 Clippy must be silent. The lints are the workspace's, in the root
 `Cargo.toml` -- `missing_docs`, `unreachable_pub`, `private_interfaces` --
 because a `#![deny(..)]` in one crate root would silently stop applying to
-the other thirty-four. Every member opts in with a `[lints] workspace = true`
+the other thirty-two. Every member opts in with a `[lints] workspace = true`
 of its own, which Cargo does not inherit for it, and every public item needs
 a doc comment.
 
@@ -463,22 +462,9 @@ Writing to a server's stdin needs its own thread, because a busy server stops
 draining the pipe. An answer that arrives after the world has moved on is the
 normal case, which is why requests record the version they asked against.
 
-**Obelus is drawn on two things, and the loop knows neither.** `ob` is the
-terminal and `obg` is a window -- gvim's relation to vim, not a second
-program: the same grid, the same `component/` and `ui/`, the same `App`. The
-window is for the two things a terminal cannot give: keys a terminal sends as
-one byte or not at all, and a font carried in the binary rather than guessed
-at. The seam is one trait and one channel -- `ratatui::backend::Backend`, and
-the receiving end of the loop's channel handed to `app::run` -- and a key is a
-`crossterm::event::KeyEvent` everywhere inside Obelus, `obg` included. What is
-not shared -- the drawing, the clipboard, which settings apply (`Drawn`), an
-input method's spelling -- is argued in `obelus-gui`'s modules and
-`obelus-clipboard`; and a measurement in columns has to ask which front end it
-is for.
-
 **The caret's shape says what the next character will do**: a bar between two
 characters, a block on one, following the mode, and only in a document
-(`App::caret`). Only a window can draw the shape, so the status row says
+(`App::caret`). A terminal draws its own caret, so the status row says
 `Replacing` in a word as well.
 
 **Obelus does not split its window, so several Obelus processes is the
@@ -816,47 +802,6 @@ crates/
   obelus-cli/       the `ob` binary: Obelus drawn on a terminal
                     · two keys need the terminal's permission, and nothing
                       else depends on the protocol (main)
-  obelus-gui/       the `obg` binary, and the window: what a screenful of
-                    cells becomes when it is not a terminal -- the grid on
-                    its way over, the glyphs, the quads, and the one clock
-                    the window keeps
-                    · Obelus is drawn on two things and the loop knows neither
-                      (main); `App` crosses a thread and stays there, and what
-                      an input method is spelling is on the page and is not in
-                      the file (window); closing the window is the key that
-                      leaves (keys); the page is what Obelus said and motion is
-                      only how the window is showing it, a moment and a rate
-                      are two kinds of waiting, and none of it crosses to the
-                      application (motion); a full-width character takes the
-                      cells it covers with it, because the diff will not
-                      (grid); the colours go through untouched, only a window
-                      can draw the caret's shape, a pane joined to the page has
-                      one edge and so no corners while a box joined to nothing
-                      has four, a line is drawn where its glyph would be and
-                      the glass starts at the line, glass is a bend and a light
-                      before it is a blur, a region of the frame is put
-                      back somewhere else rather than drawn again, a pane
-                      that has gone leaves out of a picture of the screen it
-                      went from, and every pane and every box is glass over
-                      everything said before it (paint); a
-                      window owns the selection and hands the words
-                      over on the way out (clipboard); a thread that borrows
-                      somebody else's connection stops before the owner takes
-                      it back, and a file dropped on the window is heard
-                      there too (clipboard/wayland); a window may not put itself
-                      in front of the reader, so whatever comes forward comes
-                      on the permission of the window they are in (elsewhere)
-  obelus-font/      the faces a window draws Obelus in, the size of a cell,
-                    and where a glyph's pixels come from -- the half of `obg`
-                    that knows nothing of the window
-                    · a mark is one cell here and two in a terminal, so a
-                      column asks which front end it is for, and a key's cap is
-                      the one place the grid is not what a cell is measured in
-                      (lib); a face Obelus cannot draw is not a face it has
-                      (faces); a face only CoreText can draw is drawn by
-                      CoreText, in the face CoreText itself would choose
-                      (coretext); what comes after the monospaced face is the
-                      machine's own answer, asked of the machine (cascade)
   */tests/          integration tests, most of them `obelus-app`'s, plus
                     obelus-app/tests/fixtures/*.txt golden grids
                     · why the fake agent is `sh`, and what it checks back
@@ -914,7 +859,7 @@ strip -- the heaviest thing Obelus draws -- out of the smallest part of the
 screen. What is left of that band is `raised_background`, one shade off the
 page, behind the cap a key is drawn in at the foot of a view -- a few cells
 wide, and a box, never a row. Not behind a panel, which is on the page's
-colour with a frame round it: in a window its ground is its glass.
+colour with a frame round it.
 
 A preview's margin comes from git, so a fixture that shows one depends on
 the fixture file being *committed*: edit `obelus-app/tests/fixtures/long.rs`

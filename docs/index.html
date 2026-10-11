@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Obelus — an editor built around my own habits, with the agent built in</title>
-<meta name="description" content="Obelus is a code editor with the agent built in, in its own window or in a terminal. Hand a task to an agent and it works in a separate worktree; look in on it any time, try it, have it reviewed, and open a pull request to merge it.">
+<meta name="description" content="Obelus is a code editor with the agent built in, in your terminal. Hand a task to an agent and it works in a separate worktree; look in on it any time, try it, have it reviewed, and open a pull request to merge it.">
 <link rel="icon" href="obelus.svg">
 <link rel="alternate" hreflang="zh-Hans" href="zh/">
 <!-- The page is set in the two families omarchy's web rules name: the mono
@@ -56,7 +56,7 @@
       <div class="mark">÷</div>
       <h1>Obelus</h1>
       <p class="lede">An editor built around my own habits — <strong>with the agent built in.</strong></p>
-      <p class="sub">Obelus is a code editor that runs in its own window or in a terminal. It doesn't try to have every feature. It's built around how I work: you hand a task to an agent, and it makes the changes in a separate worktree. You can look in on it whenever you like. When it's done you try it, have it reviewed, and open a pull request to merge it. You never leave the editor, and you never type a <code>git</code> command.</p>
+      <p class="sub">Obelus is a code editor that runs in your terminal. It doesn't try to have every feature. It's built around how I work: you hand a task to an agent, and it makes the changes in a separate worktree. You can look in on it whenever you like. When it's done you try it, have it reviewed, and open a pull request to merge it. You never leave the editor, and you never type a <code>git</code> command.</p>
 
       <div class="buttons">
         <a class="button primary" href="#start"><span>Install</span></a>
@@ -119,30 +119,10 @@
     <section id="start">
       <h2><span class="num">01</span><span>Install</span></h2>
 
-      <p>Pick your system, download the package and double-click it. To install with one command instead, or to get the terminal version too, read on.</p>
-
-      <h3>Download</h3>
-      <div class="table-wrap">
-      <table>
-        <thead><tr><th><span>System</span></th><th><span>Download</span></th></tr></thead>
-        <tbody>
-          <tr><td>macOS (Intel and Apple silicon)</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/Obelus-@VERSION@-universal2-apple-darwin.app.zip">Obelus.app</a></td></tr>
-          <tr><td>Windows x64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/Obelus-@VERSION@-x86_64-pc-windows-msvc.msi">Installer (.msi)</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obg-@VERSION@-x86_64-pc-windows-msvc.zip">Archive (.zip)</a></td></tr>
-          <tr><td>Windows ARM64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/Obelus-@VERSION@-aarch64-pc-windows-msvc.msi">Installer (.msi)</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obg-@VERSION@-aarch64-pc-windows-msvc.zip">Archive (.zip)</a></td></tr>
-          <tr><td>Linux x86_64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-gui_@VERSION@-1_amd64.deb">.deb</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-gui-@VERSION@-1.x86_64.rpm">.rpm</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obg-@VERSION@-x86_64.AppImage">AppImage</a></td></tr>
-          <tr><td>Linux arm64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-gui_@VERSION@-1_arm64.deb">.deb</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-gui-@VERSION@-1.aarch64.rpm">.rpm</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obg-@VERSION@-aarch64.AppImage">AppImage</a></td></tr>
-        </tbody>
-      </table>
-      </div>
-
-      <ul>
-        <li>These are all <code>obg</code>, the window version. For <code>ob</code>, the terminal version, use the script below or grab an archive from <a href="https://github.com/obelus-editor/obelus/releases/latest">the releases page</a>, which also lists every file's SHA256.</li>
-        <li>macOS: Obelus isn't notarized by Apple, so the first time you open it macOS says it can't verify the developer. Go to System Settings → Privacy &amp; Security and click Open Anyway, or run <code>xattr -dr com.apple.quarantine /Applications/Obelus.app</code> in a terminal.</li>
-        <li>Windows: the installer isn't signed, so SmartScreen may stop it; click More info → Run anyway. The MSI installs into your own user folder without asking for an administrator, adds a Start menu entry and a PATH entry, and can be uninstalled from Settings → Apps.</li>
-      </ul>
+      <p>Obelus is one program, <code>ob</code>, and it runs in your terminal. The quickest way to get it is the one-line script; the archives and packages are below if you'd rather pick one yourself.</p>
 
       <h3>Install with one command</h3>
-      <p>The script downloads the latest release, checks it against the release's <code>SHA256SUMS</code>, and puts <code>obg</code>, the window version, somewhere on your PATH.</p>
+      <p>The script downloads the latest release, checks it against the release's <code>SHA256SUMS</code>, and puts <code>ob</code> somewhere on your PATH.</p>
 
       <h4>Linux and macOS</h4>
       <pre><code>curl -fsSL https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.sh | sh</code></pre>
@@ -150,19 +130,33 @@
       <h4>Windows, in PowerShell</h4>
       <pre><code>irm https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.ps1 | iex</code></pre>
 
-      <h4>With the terminal version too</h4>
-      <p><code>ob</code>, the terminal version, is a separate program and you have to ask for it. On Windows you can't pass arguments through a pipe, so download the script first and then run it.</p>
+      <ul>
+        <li>On Linux and macOS, <code>ob</code> goes into <code>~/.local/bin</code>; <code>--dir</code> says where else to put it, <code>--version</code> picks a release other than the latest, and <code>--help</code> lists the rest. To pass them, end the line with <code>sh -s -- --dir /usr/local/bin</code> instead of <code>sh</code>.</li>
+        <li>On Linux the script also adds a launcher entry and an icon under <code>~/.local/share</code> that open Obelus in a terminal, so any app launcher can find it, omarchy's <code>Apps</code> menu included (<code>--no-desktop</code> skips them, and <code>--no-omarchy</code> skips Obelus's omarchy theme template). If the directory isn't on your PATH, the script tells you which line to add.</li>
+        <li>On Windows, <code>ob.exe</code> goes into <code>%LOCALAPPDATA%\Obelus\bin</code>, and the script adds that directory to your PATH.</li>
+        <li>To uninstall, use <code>-Uninstall</code> on Windows, or <code>--uninstall</code> on Linux and macOS. If you installed with <code>--dir</code>, pass it again. Your settings are left alone either way.</li>
+      </ul>
 
-      <pre><code>curl -fsSL https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.sh | sh -s -- --bin both</code></pre>
+      <h3>With mise</h3>
+      <pre><code>mise use -g github:obelus-editor/obelus</code></pre>
+      <p>This installs the executable and nothing else: no launcher entry. <code>mise upgrade</code> moves it to a newer release.</p>
 
-      <pre><code>irm https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.ps1 -OutFile install.ps1
-.\install.ps1 -Binary both</code></pre>
+      <h3>Download</h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th><span>System</span></th><th><span>Download</span></th></tr></thead>
+        <tbody>
+          <tr><td>macOS (Intel and Apple silicon)</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-universal2-apple-darwin.tar.xz">Archive (.tar.xz)</a></td></tr>
+          <tr><td>Windows x64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-x86_64-pc-windows-msvc.zip">Archive (.zip)</a></td></tr>
+          <tr><td>Windows ARM64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-aarch64-pc-windows-msvc.zip">Archive (.zip)</a></td></tr>
+          <tr><td>Linux x86_64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus_@VERSION@-1_amd64.deb">.deb</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-@VERSION@-1.x86_64.rpm">.rpm</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-x86_64-unknown-linux-gnu.tar.xz">glibc (.tar.xz)</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-x86_64-unknown-linux-musl.tar.xz">musl (.tar.xz)</a></td></tr>
+          <tr><td>Linux arm64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus_@VERSION@-1_arm64.deb">.deb</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-@VERSION@-1.aarch64.rpm">.rpm</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-aarch64-unknown-linux-gnu.tar.xz">glibc (.tar.xz)</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-aarch64-unknown-linux-musl.tar.xz">musl (.tar.xz)</a></td></tr>
+        </tbody>
+      </table>
+      </div>
 
       <ul>
-        <li><code>--bin ob</code> installs only the terminal version, <code>--dir</code> says where to put it, and <code>--help</code> lists the rest.</li>
-        <li>On Windows the script adds its directory to your PATH and creates a Start menu entry (<code>-NoShortcut</code> skips it). On Linux it adds launcher entries and an icon under <code>~/.local/share</code> so any app launcher can find it, omarchy's <code>Apps</code> menu included (<code>--no-desktop</code> skips them). If the directory isn't on your PATH, the script tells you which line to add.</li>
-        <li>To uninstall, use <code>-Uninstall</code> on Windows, or <code>--uninstall</code> on Linux and macOS. If you installed with <code>--dir</code>, pass it again. Your settings are left alone either way.</li>
-        <li>There's no window version on musl: the window loads Vulkan, Wayland and X11 at runtime, which a static binary can't do. The script says so and installs <code>ob</code> instead.</li>
+        <li>An archive holds <code>ob</code> and nothing else: put it anywhere on your PATH. <a href="https://github.com/obelus-editor/obelus/releases/latest">The releases page</a> lists every file's SHA256 in <code>SHA256SUMS</code>.</li>
       </ul>
 
       <h3>From source</h3>
@@ -170,28 +164,19 @@
 
       <pre><code>git clone https://github.com/obelus-editor/obelus
 cd obelus
-
-# the window version, installed into ~/.cargo/bin as `obg`
-cargo install --path crates/obelus-gui
-
-# the terminal version, installed as `ob`
-cargo install --path crates/obelus-cli
-
-# or just build both: target/release/obg and target/release/ob
-cargo build --release</code></pre>
+cargo build --release   # target/release/ob</code></pre>
 
       <h3>Also worth installing</h3>
       <ul>
         <li>A <strong>language server</strong> for your language (<code>rust-analyzer</code> for Rust). Without one you can still read code; you just don't get go-to-definition, errors or an outline.</li>
         <li>An agent that speaks <strong>ACP</strong>. If you don't have one, Obelus can install one for you: see <a href="#agent">bring the agent you already use</a>.</li>
-        <li>A <strong>Nerd Font</strong>, if you want icons in the terminal version. Icons are off by default, so you won't see empty boxes without one. The window version has its own and needs nothing.</li>
+        <li>A <strong>Nerd Font</strong> in your terminal, if you want icons. Icons are off by default, so you won't see empty boxes without one.</li>
       </ul>
 
       <h3>Run it</h3>
-      <pre><code>obg                  # no arguments: the welcome screen for this directory
-obg src/main.rs      # open a file; its repository is the project
-obg ../another-repo  # open a directory; that is the project
-ob src/main.rs       # the same file, in the terminal</code></pre>
+      <pre><code>ob                  # no arguments: the welcome screen for this directory
+ob src/main.rs      # open a file; its repository is the project
+ob ../another-repo  # open a directory; that is the project</code></pre>
 
       <h3>The first five minutes</h3>
       <ol>
@@ -284,7 +269,7 @@ ob src/main.rs       # the same file, in the terminal</code></pre>
           <a class="light" href="screens/worktree-list-light.webp"><img src="screens/worktree-list-light.webp" width="1300" height="420" loading="lazy" alt="The Worktrees tab: tally on main and tally/.worktree/stable-tie-order on its branch, both with a window open."></a>
         </figure>
       </div>
-      <p class="quiet small">In the terminal version, <code>ob</code>, that's <kbd>Enter</kbd> on the tree, and it's the only key there is: <code>ob</code> can't open a new terminal for you or bring another terminal window to the front. In the window version, <code>obg</code>, it's <kbd>Ctrl+Enter</kbd>, because <kbd>Enter</kbd> goes to another window instead: on a tree it opens a new one there, and on a window it brings that one to the front.</p>
+      <p class="quiet small">Moving is <kbd>Enter</kbd> on the tree, and it's the only key there is: Obelus can't open a new terminal for you or bring another terminal window to the front.</p>
       <ul>
         <li>All the worktrees of a repository share <em>one</em> set of notes. What you write in one window shows up in the others straight away.</li>
         <li>A conversation can only be open in one window at a time, so two windows can't talk over each other.</li>
@@ -352,12 +337,11 @@ ob src/main.rs       # the same file, in the terminal</code></pre>
         </div>
 
         <div class="card">
-          <h4>Window or terminal</h4>
+          <h4>In your terminal</h4>
           <ul>
-            <li><code>obg</code> is the window version and <code>ob</code> the terminal version, like gvim and vim: the same screens and the same keys</li>
-            <li>The window can tell apart keys a terminal can't, like <kbd>Ctrl+i</kbd> and <kbd>Tab</kbd>, <kbd>Ctrl+m</kbd> and <kbd>Enter</kbd>, <kbd>Ctrl+[</kbd> and <kbd>Esc</kbd>; most terminals send nothing at all for something like <kbd>Ctrl+Shift+X</kbd></li>
-            <li>The window carries its own icon font, so there's no Nerd Font to install and no empty boxes</li>
-            <li>In the window, the cursor and lists glide instead of jumping, and an input method shows what you're typing as you type it</li>
+            <li>Obelus runs in the terminal you already use; its tabs and splits are how you put two pieces of code side by side</li>
+            <li>Clicks, the wheel and a scrollbar you can drag work as well as the keys</li>
+            <li>Icons need a Nerd Font and are off until you turn them on, so there are no empty boxes</li>
           </ul>
         </div>
 

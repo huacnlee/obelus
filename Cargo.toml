@@ -1,31 +1,26 @@
 [workspace]
 resolver = "3"
 members = ["crates/*"]
-# What a bare `cargo run` starts: the window. A workspace has no
-# `default-run` of its own, so with two binaries in it `cargo run` could not
-# choose and said so. The cost is that `build`, `test` and `clippy` without
-# `--workspace` now cover `obg` and what it is made of, and not the rest --
-# which is why CI and the commands in AGENTS.md all say `--workspace`.
-default-members = ["crates/obelus-gui"]
+# What a bare `cargo run` starts: `ob`. A workspace has no `default-run` of
+# its own, and without this `cargo run` from the root would ask which of the
+# members to build. The cost is that `build`, `test` and `clippy` without
+# `--workspace` cover `ob` and what it is made of, and not the rest -- which
+# is why CI and the commands in AGENTS.md all say `--workspace`.
+default-members = ["crates/obelus-cli"]
 
 [workspace.package]
 version = "0.12.0"
 edition = "2024"
 license = "Apache-2.0"
 # What this project is. Inherited by nothing: every crate says what it is,
-# in its own line, and the two binaries say which half of Obelus they are.
-# So this is the manifest's own answer to the question the README and the
-# repository's About answer, and it is kept in the same words as those.
-#
-# It said "terminal" while there was only one front end. `obg` arrived and
-# the sentence stayed, so the one crate that did inherit it -- `obelus-cli`
-# -- was right by accident, and the project was described as the half of
-# itself that was there first.
-description = "A code editor that fits how I work, with the agent built in, in a window of its own or in a terminal."
+# in its own line. So this is the manifest's own answer to the question the
+# README and the repository's About answer, and it is kept in the same words
+# as those.
+description = "A code editor that fits how I work, with the agent built in, in a terminal."
 
 # The lints the whole of Obelus is written under. Crate attributes do not
 # travel, so `#![deny(..)]` in one crate root would silently stop applying to
-# the other twenty-nine; here they are stated once and each member opts in with
+# the other thirty-two; here they are stated once and each member opts in with
 # a `[lints] workspace = true` of its own, which Cargo does not inherit for it.
 [workspace.lints.rust]
 missing_docs = "warn"
@@ -45,7 +40,6 @@ obelus-command = { path = "crates/obelus-command" }
 obelus-component = { path = "crates/obelus-component" }
 obelus-config = { path = "crates/obelus-config" }
 obelus-editing = { path = "crates/obelus-editing" }
-obelus-font = { path = "crates/obelus-font" }
 obelus-git = { path = "crates/obelus-git" }
 obelus-github = { path = "crates/obelus-github" }
 obelus-icons = { path = "crates/obelus-icons" }
@@ -300,12 +294,10 @@ zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
 # squares.
 ratatui-image = { version = "11.0.8", default-features = false, features = ["crossterm"] }
 # The pixels themselves. `png` is the buffer type `ratatui-image` takes.
-# `ico` is decoded, in one place: the window reads its own icon out of the
-# very file Windows reads it out of, so what a title bar draws and what a
-# taskbar draws cannot become two pictures. And the four shapes a picture
-# goes to an agent in are decoded, and PNG and JPEG written, for one picture
-# too large to send as it is -- see `obelus_agent::acp::picture`.
-image = { version = "0.25.10", default-features = false, features = ["png", "ico", "jpeg", "gif", "webp"] }
+# And the four shapes a picture goes to an agent in are decoded, and PNG and
+# JPEG written, for one picture too large to send as it is -- see
+# `obelus_agent::acp::picture`.
+image = { version = "0.25.10", default-features = false, features = ["png", "jpeg", "gif", "webp"] }
 # The registry's marks are SVG, so something has to draw them. Without its
 # default features: no text, no system fonts, no raster images inside an SVG.
 # These are single-path drawings, and the text support alone is a font stack
@@ -373,48 +365,6 @@ schemars = "1"
 # normaliser -- a dozen crates to open a link.
 open = "5"
 
-# The window, for the binary that draws Obelus in one rather than in a
-# terminal. winit is the only crate here that owns a thread it is not given:
-# a platform's event loop has to be the process's first thread on macOS and
-# Windows, which is why `obg` runs the loop there and Obelus's own loop on a
-# thread of its own.
-#
-# 0.30 rather than 0.31, which is still a beta.
-wayland-client = "0.31"
-# The one Wayland protocol the client crate does not carry and the window
-# needs: activation, which is how a window another Obelus asked for comes to
-# the front. The version winit's toolkit already builds, with the features
-# it already asks for, so this adds nothing to compile.
-wayland-protocols = { version = "0.32", features = ["client", "staging"] }
-winit = "0.30"
-x11rb = "0.13"
-
-# What the window is painted with. Metal on macOS, D3D12 on Windows, Vulkan
-# on Linux -- which is the whole reason for it: one pipeline written once
-# against three drivers nobody has to think about again.
-wgpu = "30"
-
-# Fonts: finding what this machine has, falling back for a character the
-# chosen face does not cover, shaping, and turning a glyph into pixels.
-#
-# Its own layout is *not* used. The layout is Obelus's grid -- every cell at
-# a place worked out from a column, the way a terminal does it -- and asking
-# a text engine to lay out a screenful of cells would be asking it to answer
-# a question that is already answered.
-cosmic-text = "0.19"
-
-# Where each glyph sits in the one texture they are all kept in.
-etagere = "0.3"
-
-# Structs into GPU buffers, which is the one thing every wgpu program needs
-# and nothing in std does.
-bytemuck = { version = "1", features = ["derive"] }
-
-# Waiting for wgpu's setup, which is the only `async` in the window's
-# binary: asking for an adapter and a device is two awaits on the way up and
-# nothing afterwards, so a runtime for it would be a runtime for two calls.
-pollster = "1"
-
 # What the tests use and the program does not.
 # A blocking HTTP client, for the tests that talk to the server Obelus runs
 # for an agent. Obelus itself fetches with `reqwest` on its own runtime;
@@ -427,9 +377,8 @@ ureq = "3.4.1"
 # thing under test. Both are dev-dependencies of `obelus-lsp` alone, and
 # each only on the platform whose question it answers.
 libc = "0.2.189"
-# Also the window's, for the one thing only Windows has a call for: how
-# fast a caret blinks. Features are additive, so the list is what every
-# member that names this crate needs between them.
+# Features are additive, so the list is what every member that names this
+# crate needs between them.
 windows-sys = { version = "0.61.2", features = [
     "Win32_Foundation",
     "Win32_Security",
@@ -438,83 +387,27 @@ windows-sys = { version = "0.61.2", features = [
     # And a job, which is how a command an agent asked for is stopped with
     # everything it started: see `obelus-agent`'s `running.rs`.
     "Win32_System_JobObjects",
-    # And a console: `obg` takes the one it was started from, if there is
-    # one, and what it starts is given none -- see `obelus-gui`'s `main.rs`
-    # and `obelus-program`.
+    # And a console: what Obelus starts is given none -- see
+    # `obelus-program`.
     "Win32_System_Console",
     "Win32_System_Threading",
-    "Win32_UI_WindowsAndMessaging",
     # And the clipboard, which on Windows is a system service rather than a
     # program to run: see `obelus-clipboard`'s `native.rs`.
     "Win32_System_DataExchange",
     "Win32_System_Memory",
     "Win32_System_Ole",
     "Win32_UI_Shell",
-    # And the window's title bar, drawn in the page's colour: see
-    # `obelus-gui`'s `title.rs`.
-    "Win32_Graphics_Dwm",
-    # And which faces Windows links to the one code is drawn in, for the
-    # characters it has not got: see `obelus-gui`'s `cascade.rs`.
-    "Win32_System_Registry",
 ] }
 
-# The icon, into the executable's own resources. A build-dependency, and
-# only where the build is happening: what it drives is the resource
-# compiler in the Windows SDK, which is the only thing that can put a
-# resource in a PE, and there is nowhere else for Explorer or a taskbar to
-# read a program's icon from.
-winresource = "0.1.31"
-
-# Which language the reader reads, which on Windows decides which face Han is
-# drawn in: see `obelus-gui`'s `cascade.rs`. The crate cosmic-text asks the
-# same question with, so the two cannot answer it differently.
-sys-locale = "0.3.2"
-
-# macOS's pasteboard, for the same reason, and the window's title bar: how
-# tall the strip is that the system draws its title in, and what a double
-# click on it does -- see `obelus-gui`'s `title.rs`. Only on that platform.
+# macOS's pasteboard, which is a system service the way Windows' clipboard
+# is: see `obelus-clipboard`'s `native.rs`. Only on that platform.
 objc2 = "0.6"
-objc2-app-kit = { version = "0.3", features = [
-    "NSEvent",
-    "NSPasteboard",
-    "NSResponder",
-    "NSView",
-    "NSWindow",
-] }
+objc2-app-kit = { version = "0.3", features = ["NSPasteboard"] }
 objc2-foundation = { version = "0.3", features = [
     "NSArray",
     "NSData",
     "NSString",
     "NSURL",
-    "NSUserDefaults",
-] }
-# And the fonts: which files the machine has, what it draws code in, and what
-# it falls back to after that, which only CoreText can say -- see
-# `obelus-gui`'s `faces.rs`, `monospace.rs` and `cascade.rs`. And the glyphs
-# of the faces only CoreText can draw, drawn by it: see `coretext.rs`.
-objc2-core-foundation = { version = "0.3", default-features = false, features = [
-    "std",
-    "CFArray",
-    "CFCGTypes",
-    "CFLocale",
-    "CFString",
-    "CFURL",
-] }
-objc2-core-graphics = { version = "0.3", default-features = false, features = [
-    "std",
-    "CGBitmapContext",
-    "CGColorSpace",
-    "CGContext",
-    "CGFont",
-    "CGImage",
-] }
-objc2-core-text = { version = "0.3", default-features = false, features = [
-    "std",
-    "CTFont",
-    "CTFontDescriptor",
-    "CTFontManager",
-    "CTFontTraits",
-    "objc2-core-graphics",
 ] }
 
 # Where a chat's tokens are kept: the system's own keyring, through the core

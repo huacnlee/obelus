@@ -1,7 +1,7 @@
 # Obelus
 
 A code editor that fits how I work, **with the agent built in** — in a
-window of its own or in a terminal.
+terminal.
 
 It is not trying to be a powerful editor: no multiple cursors, no macros.
 In the AI era most lines you read are lines you did not write, so much of
@@ -20,84 +20,65 @@ how to use it, and why it is shaped this way. Also in
 
 ## Getting it
 
-There is one script per shell, and which you want is which shell you are in.
-On Linux and macOS:
+Linux, macOS and Windows, on x86_64 and ARM64.
 
-```
+**macOS / Linux**
+
+```sh
 curl -fsSL https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.sh | sh
 ```
 
-On Windows, in PowerShell:
+**Windows PowerShell**
 
 ```powershell
 irm https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.ps1 | iex
 ```
 
-Either one takes the latest release, checks what it downloaded against the
-release's own `SHA256SUMS`, and puts **`obg`** on your PATH — Obelus in a
-window of its own.
+**mise**
 
-**`ob`, the same editor in a terminal**, is the other binary and is asked
-for by name. The two are gvim's relation to vim rather than two programs:
-the same grid, the same views and the same keys. What the window has is the
-presses a terminal flattens into one byte — `ctrl+i` apart from `Tab`,
-`ctrl+[` apart from `Escape` — and the marks compiled in rather than guessed
-at from whichever font the terminal was given. What the terminal has is that
-it is already open, and that it works over ssh. Everything after `-s --`
-goes to the script:
-
-```
-curl -fsSL .../contrib/install.sh | sh -s -- --bin ob      # the terminal
-curl -fsSL .../contrib/install.sh | sh -s -- --bin both    # both of them
+```sh
+mise use -g github:obelus-editor/obelus
 ```
 
-A pipe into `iex` has nowhere to put an argument, so on Windows the script
-is fetched first:
+The two scripts take the latest release, check what they downloaded against
+the release's own `SHA256SUMS`, and put **`ob`** on your PATH. Everything
+after `-s --` goes to the shell script — `--dir` says where to put it, and
+`--help` lists the rest:
 
-```powershell
-irm https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.ps1 -OutFile install.ps1
-.\install.ps1 -Binary ob       # or -Binary both
+```sh
+curl -fsSL .../contrib/install.sh | sh -s -- --dir /usr/local/bin
 ```
 
-`--dir` says where to put it, and `--help` lists the rest.
+On Linux the script also adds a desktop entry, which opens `ob` in a
+terminal, and an icon under `~/.local/share`, which every launcher reads:
+omarchy's `Apps` menu among them. `--no-desktop` leaves them out. On Windows
+the script adds its directory to your PATH. Installing over an older
+release that put `obg`, the window, there takes `obg` and its launcher
+entry away, and says so.
 
-On Windows the script puts Obelus in the Start menu as well as on your
-PATH — the icon is in the binary, so the shortcut is the whole of it, and
-`-NoShortcut` leaves the menu alone. On Linux the same is a desktop entry
-for each of `obg` and `ob` that was installed — `ob`'s opens in a terminal
-— and an icon, under `~/.local/share`, which every launcher reads:
-omarchy's `Apps` menu among them. `--no-desktop` leaves them out. `-Uninstall`
-takes back the binaries and the Start menu entry, and the directory and its
-PATH entry where nothing else is left in it: it is the half that matters
-there, because a PATH and a Start menu are what a reader cannot simply
-delete. `--uninstall`, with the same `--dir` it was installed with, is the
-same half of the shell script — `ob` and `obg` out of `--dir`, the desktop
-entries and their icon, and, on omarchy, the theme template and the link to
-what omarchy renders — and it leaves the PATH, which it never changed. Neither script touches your settings. And on musl
-there is no `obg` to install at all — the window finds Vulkan, Wayland and X11 by `dlopen`, which a static
-binary cannot do — so the script says so and installs `ob`.
+`--uninstall` (`-Uninstall` on Windows), with the same `--dir` it was
+installed with, takes back what the script put there: `ob` — and `obg`, the
+window an older release installed — the desktop entries and their icon,
+and, on omarchy, the theme template and the link to what omarchy renders. On
+Windows it also takes back `obg`'s Start menu entry, and the directory and
+its PATH entry where nothing else is left in it. Neither script touches your
+settings.
 
-[The releases](https://github.com/obelus-editor/obelus/releases) carry an archive
-for every platform as well as a `.deb`, an `.rpm`, an AppImage, a macOS
-`.app` and a Windows `.msi`.
+mise installs only the executable: no desktop entry and no icon. Upgrade it
+with `mise upgrade`.
 
-Or from source, which needs nothing but a stable Rust:
+[The releases](https://github.com/obelus-editor/obelus/releases) carry an
+archive for every platform as well as a `.deb` and an `.rpm`.
 
 ```
-cargo install --path crates/obelus-gui    # installs as `obg`, in a window
-cargo install --path crates/obelus-cli    # and as `ob`, in the terminal
+ob                  # the welcome screen, on this directory
+ob src/main.rs      # read a file — its repository is the project
+ob ../another-repo  # a directory: that is the project
 ```
 
-```
-obg                  # the welcome screen, on this directory
-obg src/main.rs      # read a file — its repository is the project
-obg ../another-repo  # a directory: that is the project
-ob src/main.rs       # the same file, in the terminal instead
-```
-
-A language server is optional, and without one reading still works. A Nerd
-Font matters only in the terminal — `obg` carries the marks in the binary,
-so it never asks.
+A language server is optional, and without one reading still works. So is a
+Nerd Font: Obelus draws plain characters in place of its marks unless the
+`icons` setting is on.
 
 ## Building
 

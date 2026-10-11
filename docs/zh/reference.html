@@ -254,7 +254,6 @@
       </div>
 
       <h3>能设的项</h3>
-      <p class="quiet small">有几项只对窗口版或只对终端版有效。设置页只列出对你当前这一版有效的，免得你改了却看不到任何变化；<em>文件</em>里则全都留着，因为同一台机器上的另一版也读这个文件。</p>
       <div class="table-wrap">
       <table>
         <thead><tr>
@@ -264,13 +263,10 @@
         </tr></thead>
         <tbody>
           <tr><td><code>theme</code></td><td><code>"dark"</code></td><td>Obelus 用哪套颜色画</td></tr>
-          <tr><td><code>icons</code></td><td><code>false</code></td><td><em>只对终端版。</em>显不显示 Nerd Font 图标——没装补丁字体的话会显示成方框。窗口版自带图标，不看这一项</td></tr>
+          <tr><td><code>icons</code></td><td><code>false</code></td><td>显不显示 Nerd Font 图标——没装补丁字体的话会显示成方框</td></tr>
           <tr><td><code>wrap</code></td><td><code>false</code></td><td>太长的行要不要折到下一行显示。默认关，一行就是一行</td></tr>
           <tr><td><code>blame_margin</code></td><td><code>true</code></td><td>边栏上显示每一行最后是谁改的</td></tr>
           <tr><td><code>tab_width</code></td><td><code>4</code></td><td>一个 tab 画多宽。<code>2</code>、<code>4</code> 或 <code>8</code></td></tr>
-          <tr><td><code>fonts</code></td><td><code>[]</code></td><td><em>只对窗口版。</em>用哪些字体，按你写的顺序，前一个没有某个字时才用后一个。留空就用系统默认的等宽字体</td></tr>
-          <tr><td><code>animation</code></td><td><code>true</code></td><td><em>只对窗口版。</em>光标和列表是滑过去还是直接跳过去。关掉就直接跳</td></tr>
-          <tr><td><code>font_size</code></td><td><code>14</code></td><td><em>只对窗口版。</em>字号，单位 point。终端版用的是终端自己的字号</td></tr>
           <tr><td><code>hover_delay</code></td><td><code>400</code></td><td>鼠标在一个词上停多少毫秒，才显示它是什么；<code>0</code> 表示只在按键时显示</td></tr>
           <tr><td><code>read_only</code></td><td><code>false</code></td><td>你自己的按键不能改文件：在文件里打字、粘贴、剪切、撤销和改行的命令都不起作用。agent 的修改照样写进去，保存照样能存；给 agent 发消息、搜索框、笔记这些输入框不算文件，照常能打字</td></tr>
           <tr><td><code>format_on_save</code></td><td><code>false</code></td><td>保存前让语言服务器格式化一遍。默认关：没人要求就格式化，会把一个只是打开来看的文件改掉，而你要到看 diff 时才发现</td></tr>

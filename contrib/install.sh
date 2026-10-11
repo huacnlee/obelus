@@ -2,7 +2,7 @@
 # Fetches a released Obelus and puts it somewhere on your PATH.
 #
 #   curl -fsSL https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.sh | sh
-#   curl -fsSL .../install.sh | sh -s -- --bin ob --dir /usr/local/bin
+#   curl -fsSL .../install.sh | sh -s -- --dir /usr/local/bin
 #   curl -fsSL .../install.sh | sh -s -- --uninstall
 #
 # POSIX sh, because the one machine this has to work on is somebody else's.
@@ -16,14 +16,6 @@
 set -eu
 
 repository=obelus-editor/obelus
-# The window, because that is the Obelus to meet first: the presses a
-# terminal cannot report arrive as themselves and the marks are in the
-# binary rather than guessed at from somebody else's font. The terminal one
-# is the same reader and is asked for by name.
-binaries=obg
-# What `--bin` said, which matters in one place: a machine that cannot have
-# the window at all -- see `musl` below.
-asked=
 tag=
 directory=${OBELUS_INSTALL_DIR:-$HOME/.local/bin}
 # Whether to hand omarchy Obelus's theme template, where this is running on
@@ -32,7 +24,7 @@ directory=${OBELUS_INSTALL_DIR:-$HOME/.local/bin}
 # outside `--dir`.
 omarchy=yes
 # Whether to put what was installed in the desktop's launcher, which on
-# Linux is a desktop entry each and an icon. Done unasked for the reason
+# Linux is a desktop entry and an icon. Done unasked for the reason
 # Windows gets a Start menu entry: a launcher is where a reader starts
 # things, and a binary only a shell can find is half an install of one --
 # for `ob` too, which a desktop opens in a terminal of its own choosing.
@@ -54,8 +46,8 @@ themes=$HOME/.config/obelus/themes
 link=$themes/omarchy.toml
 rendered=$HOME/.local/state/omarchy/current/theme/obelus.toml
 
-# The files the desktop half writes, named here for the same reason: an
-# entry per binary, and the icon both of them draw. Under the reader's own
+# The files the desktop half writes, named here for the same reason: the
+# entry, and the icon it draws. Under the reader's own
 # data directory, which every launcher reads -- the GNOME and KDE ones, and
 # omarchy's `Apps`, which is the desktop entries and nothing else, so this
 # is how Obelus gets into that menu too.
@@ -64,11 +56,14 @@ applications=$data/applications
 icon=$data/icons/hicolor/scalable/apps/obelus.svg
 
 say() { printf '%s\n' "$*"; }
+# What was taken away without being asked for, which goes to stderr: it is
+# the one thing an install does that a reader did not request.
+note() { printf '%s\n' "$*" >&2; }
 die() { printf 'obelus: %s\n' "$*" >&2; exit 1; }
 
-# Which entry is which binary's. The window's keeps the name the packages
-# give it, so that an install from here and one from a `.deb` are the same
-# entry rather than two.
+# Which entry is which binary's. `obg`, the window Obelus once had, is
+# still named so that `--uninstall` can take away what an older install put
+# there.
 entry_of() {
     case $1 in
         obg) printf '%s/obelus.desktop' "$applications" ;;
@@ -80,15 +75,13 @@ entry_of() {
 # name, because a launcher does not read the PATH a shell profile sets, and
 # `--dir` need not be on it at all. Asked by the install and by
 # `--uninstall` alike, which is how the second knows an entry is this
-# install's: one that starts some other `obg` is somebody else's.
+# install's: one that starts some other `ob` is somebody else's.
 exec_line() { printf 'Exec="%s/%s" %%F' "$directory" "$1"; }
 
 usage() {
     cat <<'USAGE'
 Usage: install.sh [options]
 
-  --bin obg|ob|both   Which to install. `obg` is the window and `ob` is
-                      the terminal. The default is `obg`.
   --version vX.Y.Z    A release to install. The default is the latest.
   --dir PATH          Where to put it. The default is ~/.local/bin, or
                       $OBELUS_INSTALL_DIR where that is set.
@@ -98,8 +91,9 @@ Usage: install.sh [options]
   --no-desktop        Do not put what is installed in the desktop's
                       launcher, which is otherwise done on Linux. With
                       --uninstall, leave it there.
-  --uninstall         Take it away again: `ob` and `obg` out of --dir,
-                      their entries in the launcher, and the omarchy theme
+  --uninstall         Take it away again: `ob` out of --dir (and `obg`,
+                      which older releases installed), their entries in
+                      the launcher, and the omarchy theme
                       template and its link. Nothing else -- your settings
                       are yours.
   --help              This.
@@ -108,7 +102,6 @@ USAGE
 
 while [ $# -gt 0 ]; do
     case $1 in
-        --bin) asked=${2:-}; binaries=$asked; shift 2 ;;
         --version) tag=${2:-}; shift 2 ;;
         --dir) directory=${2:-}; shift 2 ;;
         --no-omarchy) omarchy=no; shift ;;
@@ -123,6 +116,9 @@ done
 # the machine is the whole of what this is about. So it happens before the
 # curl, the wget and the sha256 this would otherwise insist on -- a machine
 # that has lost one of those can still be a machine with an Obelus to remove.
+#
+# `obg` is the window older releases installed, and is taken away with the
+# rest so that a reader who had one is not left holding it.
 #
 # What it may take back is what it put there, which is the rule the Windows
 # script's half follows too. Not the settings: those are the reader's own,
@@ -240,12 +236,6 @@ if [ "$removing" = yes ]; then
     exit 0
 fi
 
-case $binaries in
-    ob|obg) ;;
-    both) binaries='ob obg' ;;
-    *) die "--bin takes ob, obg or both, and was given $binaries" ;;
-esac
-
 # Whether a download can be watched. A bar is drawn with carriage returns,
 # which is a picture on a terminal and a thousand lines of one in a log, a
 # pipe or somebody's CI -- so it is asked of stderr, where the bar goes,
@@ -262,7 +252,7 @@ fi
 # Two of them, because the two kinds of download are not alike: SHA256SUMS
 # and a theme template are a moment and say nothing, and a binary is tens of
 # megabytes over somebody else's line -- long enough that a script saying
-# only `fetching obg-...tar.xz` is a script the reader cannot tell from one
+# only `fetching ob-...tar.xz` is a script the reader cannot tell from one
 # that has hung. So `fetch_watched` is the one the archives go through, and
 # it is the same fetch with its quiet taken off.
 if command -v curl > /dev/null 2>&1; then
@@ -324,25 +314,6 @@ case $system in
             libc=gnu
         fi
         target=$architecture-unknown-linux-$libc
-        # The window finds Vulkan, Wayland and X11 by `dlopen`, which a
-        # static musl binary cannot do, so there is no musl `obg` to fetch.
-        #
-        # Asked for by name that is an error, because the reader said which
-        # one they wanted. Arrived at as the default it is not: they said
-        # nothing, and what this machine can have is the terminal one. A
-        # default that refused to install anything would be the script
-        # holding out for a binary that does not exist.
-        if [ "$libc" = musl ]; then
-            case " $binaries " in
-                *' obg '*)
-                    if [ "$asked" = obg ]; then
-                        die 'obg is not built for musl, because a static binary cannot dlopen the drivers it needs'
-                    fi
-                    say 'obg is not built for musl -- a static binary cannot dlopen the drivers a window needs -- so this is ob, the same reader in a terminal.'
-                    binaries=ob
-                    ;;
-            esac
-        fi
         ;;
     Darwin)
         # One binary for both architectures, so nothing is asked about this
@@ -384,27 +355,73 @@ fetch "https://github.com/$repository/releases/download/$tag/SHA256SUMS" "$sums"
 
 mkdir -p "$directory" || die "$directory cannot be made"
 
-for binary in $binaries; do
-    name=$binary-${tag#v}-$target
-    archive=$work/$name.tar.xz
+binary=ob
+name=$binary-${tag#v}-$target
+archive=$work/$name.tar.xz
 
-    say "  fetching $name.tar.xz"
-    fetch_watched "https://github.com/$repository/releases/download/$tag/$name.tar.xz" "$archive" \
-        || die "$tag has no $name.tar.xz"
+say "  fetching $name.tar.xz"
+fetch_watched "https://github.com/$repository/releases/download/$tag/$name.tar.xz" "$archive" \
+    || die "$tag has no $name.tar.xz"
 
-    # `awk` and not `grep`, so that the name is compared and not matched:
-    # a version has dots in it, and a dot in a pattern is any character.
-    wanted=$(awk -v want="$name.tar.xz" '$2 == want || $2 == "*" want { print $1 }' "$sums")
-    [ -n "$wanted" ] || die "SHA256SUMS says nothing about $name.tar.xz"
-    got=$(sum "$archive")
-    [ "$got" = "$wanted" ] || die "$name.tar.xz is not what the release says it is: $got, where SHA256SUMS says $wanted"
+# `awk` and not `grep`, so that the name is compared and not matched:
+# a version has dots in it, and a dot in a pattern is any character.
+wanted=$(awk -v want="$name.tar.xz" '$2 == want || $2 == "*" want { print $1 }' "$sums")
+[ -n "$wanted" ] || die "SHA256SUMS says nothing about $name.tar.xz"
+got=$(sum "$archive")
+[ "$got" = "$wanted" ] || die "$name.tar.xz is not what the release says it is: $got, where SHA256SUMS says $wanted"
 
-    tar -xJf "$archive" -C "$work" || die 'unpacking failed -- this needs a tar that reads xz'
-    install -m 755 "$work/$name/$binary" "$directory/$binary" 2>/dev/null \
-        || { cp "$work/$name/$binary" "$directory/$binary" && chmod 755 "$directory/$binary"; } \
-        || die "$directory/$binary could not be written"
-    say "  installed $directory/$binary"
-done
+tar -xJf "$archive" -C "$work" || die 'unpacking failed -- this needs a tar that reads xz'
+install -m 755 "$work/$name/$binary" "$directory/$binary" 2>/dev/null \
+    || { cp "$work/$name/$binary" "$directory/$binary" && chmod 755 "$directory/$binary"; } \
+    || die "$directory/$binary could not be written"
+say "  installed $directory/$binary"
+
+# `obg`, the window older releases installed by default, is gone from the
+# releases, so an install over one takes it away rather than leaving a
+# binary nothing will ever update -- and its launcher entry with it, which
+# would otherwise sit in the menu beside the new one starting a program that
+# is not there. Done after `ob` is in, so that a download that fails leaves
+# the reader with the Obelus they had.
+#
+# The entry only where it is this install's -- the rule `--uninstall`
+# follows -- or where the `obg` it starts is not there any more, which is
+# an entry nobody can use. The icon only where nothing is left to draw it:
+# `ob`'s entry asks for the same one.
+leave_obg_behind() {
+    went=no
+    if [ -f "$directory/obg" ]; then
+        if rm -f "$directory/obg"; then
+            note "obelus: removed $directory/obg -- Obelus is \`ob\` now, in a terminal"
+        else
+            note "obelus: $directory/obg could not be removed"
+        fi
+    fi
+
+    [ "$system" = Linux ] || return 0
+    old=$(entry_of obg)
+    [ -f "$old" ] || return 0
+    starts=$(sed -n 's/^Exec="\{0,1\}\([^"]*\)"\{0,1\} .*$/\1/p' "$old" | head -n 1)
+    if grep -qxF "$(exec_line obg)" "$old" || { case $starts in /*) [ ! -e "$starts" ] ;; *) false ;; esac; }; then
+        if rm -f "$old"; then
+            note "obelus: removed $old, the launcher entry for obg"
+            went=yes
+        else
+            note "obelus: $old could not be removed"
+        fi
+    else
+        note "obelus: left $old alone: it starts $starts"
+    fi
+
+    if [ "$went" = yes ]; then
+        if [ "$desktop" = no ] && [ ! -f "$(entry_of ob)" ] && [ -f "$icon" ] && rm -f "$icon"; then
+            note "obelus: removed $icon"
+        fi
+        if command -v update-desktop-database > /dev/null 2>&1; then
+            update-desktop-database "$applications" > /dev/null 2>&1 || true
+        fi
+    fi
+}
+leave_obg_behind
 
 # One of the release's text files, fetched into `$work` and checked like
 # everything else this downloads: a text file rather than a binary, and the
@@ -425,11 +442,9 @@ fetch_checked() {
         || { say "  $1 is not what the release says it is: $have, where SHA256SUMS says $want"; return 1; }
 }
 
-# What was installed, in the desktop's launcher: an entry for each, and the
-# icon they and the window all ask for by name (the window by
-# `StartupWMClass`, which is what matches the two). `ob`'s entry asks the
-# launcher for a terminal rather than naming one. Linux's half alone -- a
-# Mac has the `.app` for this.
+# What was installed, in the desktop's launcher: an entry, and the icon it
+# asks for by name. The entry asks the launcher for a terminal rather than
+# naming one. Linux's half alone.
 the_desktop_entries() {
     say '
 So that it can be started from the desktop'"'"'s launcher:'
@@ -452,18 +467,16 @@ So that it can be started from the desktop'"'"'s launcher:'
     cp "$work/obelus.svg" "$icon" || { say "  $icon could not be written"; return; }
     say "  $icon"
 
-    for binary in $binaries; do
-        entry=$(entry_of "$binary")
-        name=${entry##*/}
-        fetch_checked "$name" contrib/desktop/ || continue
-        awk -v exec_line="$(exec_line "$binary")" '/^Exec=/ { print exec_line; next } { print }' \
-            "$work/$name" > "$entry" \
-            || { say "  $entry could not be written"; continue; }
-        say "  $entry"
-    done
+    entry=$(entry_of "$binary")
+    name=${entry##*/}
+    fetch_checked "$name" contrib/desktop/ || return
+    awk -v exec_line="$(exec_line "$binary")" '/^Exec=/ { print exec_line; next } { print }' \
+        "$work/$name" > "$entry" \
+        || { say "  $entry could not be written"; return; }
+    say "  $entry"
 
-    # The entry says which files it opens, and what answers that question is
-    # a cache beside it -- rebuilt where the program that does it is here.
+    # What answers which files an entry opens is a cache beside it --
+    # rebuilt where the program that does it is here.
     if command -v update-desktop-database > /dev/null 2>&1; then
         update-desktop-database "$applications" > /dev/null 2>&1 || true
     fi
@@ -520,17 +533,17 @@ omarchy is here, so Obelus can be themed with the rest of the desktop:'
     fi
 
     # Said rather than done, like the PATH below: which theme a reader is on
-    # is a line of their settings, and this one has no business choosing it.
-    if grep -q '^[[:space:]]*theme[[:space:]]*=[[:space:]]*"omarchy"' \
+    # is a line of their settings, and this one has no business choosing it
+    # -- nor suggesting an `echo >>`, which beside an existing `theme =`
+    # line is a duplicate key and a file that stops reading.
+    # Said last, after everything else this prints, because it is the one
+    # step left for the reader to take and in the middle it scrolls away.
+    if ! grep -q '^[[:space:]]*theme[[:space:]]*=[[:space:]]*"omarchy"' \
         "$HOME/.config/obelus/config.toml" 2>/dev/null; then
-        return
+        theme_wanted=yes
     fi
-    say '
-Then, in ~/.config/obelus/config.toml, so that every theme you set from then
-on themes Obelus as well:
-
-    theme = "omarchy"'
 }
+theme_wanted=no
 
 # `~/.config/omarchy` alone is a directory a reader may have kept after
 # moving off, so what is asked for is the two commands this actually uses.
@@ -549,3 +562,12 @@ $directory is not on your PATH. Add it:
 
     export PATH=\"$directory:\$PATH\"" ;;
 esac
+
+if [ "$theme_wanted" = yes ]; then
+    say '
+------------------------------------------------------------------------
+One more step, or Obelus keeps its own dark theme whatever omarchy is set to:
+choose omarchy in Obelus with choose-theme (or on the settings page),
+or set  theme = "omarchy"  in ~/.config/obelus/config.toml.
+------------------------------------------------------------------------'
+fi

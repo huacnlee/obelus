@@ -1,8 +1,8 @@
 [Desktop Entry]
 Type=Application
-# Its own name, because a reader with both installed finds two rows when
-# they type `obelus`, and the two have to say which is which.
-Name=Obelus (Terminal)
+Name=Obelus
+# `Development` and not `TextEditor`: the category is only where a launcher
+# files it, and that is among the tools for code.
 Categories=Development;ConsoleOnly;
 GenericName=Code Editor
 Comment=A code editor in a terminal, with the agent built in.
@@ -13,6 +13,4 @@ Icon=obelus
 # omarchy, in the one omarchy is set up with -- rather than in one named
 # here.
 Terminal=true
-# No `MimeType`, which `obelus.desktop` has. A file opened from a file
-# manager has nowhere to have been but a window, and two entries claiming
-# the same types leave the desktop to pick between them for the reader.
+MimeType=text/plain;inode/directory;

@@ -76,12 +76,11 @@ pub fn is_server(target: &str) -> bool {
 /// nothing reports: the log is not empty, it is just missing the half of
 /// Obelus that was left out of it.
 ///
-/// `ob` and `obg` are the binaries rather than libraries: the lines a main
-/// writes -- what started, and that it left -- carry the target of the crate
-/// the binary is compiled as.
+/// `ob` is the binary rather than a library: the lines its main writes --
+/// what started, and that it left -- carry the target of the crate the
+/// binary is compiled as.
 pub const OURS: &[&str] = &[
     "ob",
-    "obg",
     "obelus_agent",
     "obelus_app",
     "obelus_buffer",
@@ -91,7 +90,6 @@ pub const OURS: &[&str] = &[
     "obelus_component",
     "obelus_config",
     "obelus_editing",
-    "obelus_font",
     "obelus_git",
     "obelus_github",
     "obelus_icons",

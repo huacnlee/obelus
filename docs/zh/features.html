@@ -192,7 +192,7 @@
             <li><a href="#settings-page">设置页</a></li>
             <li><a href="#keys">改键</a></li>
             <li><a href="#themes">主题</a></li>
-            <li><a href="#window">窗口版还是终端版</a></li>
+            <li><a href="#icons">图标</a></li>
             <li><a href="#logs">更新与日志</a></li>
           </ul>
         </div>
@@ -426,7 +426,7 @@
       </ul>
 
       <h3 id="pictures">图片</h3>
-      <p>把图片粘进输入框，把图片文件拖到窗口上，或者在终端版里粘一个图片路径。它跟着你的消息一起发出去，太大的先缩小。不收图片的 agent，在你加图片时就会说。</p>
+      <p>把图片粘进输入框，或者粘一个图片文件的路径——大多数终端里，把文件拖进来就是粘它的路径。它跟着你的消息一起发出去，太大的先缩小。不收图片的 agent，在你加图片时就会说。</p>
 
       <h3 id="sign-in">登录</h3>
       <p>需要你登录的 agent，会用一张卡片问你怎么登录；要靠一个程序登录的，那个程序在 Obelus 自己的终端里跑，你在里面选账号或者粘一个码。然后对话从停下的地方接着走。</p>
@@ -459,7 +459,7 @@
 
       <div class="feature">
         <div class="text">
-      <p>仓库的每个 worktree，各带它的分支，每棵底下一行一个开在它上面的 Obelus，写着它在读什么。窗口版里，在树上按 <kbd>Enter</kbd> 在那里开一个新窗口，在窗口那一行上按就把那个窗口叫到前面，<kbd>Ctrl+Enter</kbd> 把当前窗口挪到那棵树上。终端版里，<kbd>Enter</kbd> 把这个 Obelus 挪过去。挪之前都会先问没保存的文件。</p>
+      <p>仓库的每个 worktree，各带它的分支，每棵底下一行一个开在它上面的 Obelus，写着它在读什么。在树上按 <kbd>Enter</kbd> 把这个 Obelus 挪过去，挪之前会先问没保存的文件。</p>
         </div>
         <figure class="shot">
           <a class="dark" href="../screens/worktree-list-dark.webp"><img src="../screens/worktree-list-dark.webp" width="1300" height="420" loading="lazy" alt="Worktrees 标签页：tally 在 main 上，tally/.worktree/stable-tie-order 在它自己的分支上，两棵都有窗口开着。"></a>
@@ -504,7 +504,7 @@
       <p>没有模式。每个键什么时候按都是同一个意思，像 VS Code 和 Emacs，不像 vim 和 helix：方向键移动，加 <kbd>Shift</kbd> 就是选择，<kbd>Ctrl+z</kbd> 撤销，打字就是打字。撤销按你在做的事退——一串打字、一串删除——而不是一个字一个字地退。其余的只够改一两行用：括号和引号成对打出，按语法扩大选区（<kbd>Alt+w</kbd>），挪行（<kbd>Alt+↑</kbd> <kbd>Alt+↓</kbd>），注释掉（<kbd>Alt+c</kbd>），改写（<kbd>Insert</kbd>）。没有多光标，没有宏：大改动是 agent 的活。</p>
 
       <h3 id="clipboard">剪贴板</h3>
-      <p><kbd>Ctrl+c</kbd>、<kbd>Ctrl+x</kbd>、<kbd>Ctrl+v</kbd> 走系统剪贴板，什么都没选时复制整行。<kbd>Ctrl+Insert</kbd> 和 <kbd>Shift+Insert</kbd> 也行。复制的东西在 Obelus 退出后还在，终端版通过 ssh 也能复制到你自己的机器上。</p>
+      <p><kbd>Ctrl+c</kbd>、<kbd>Ctrl+x</kbd>、<kbd>Ctrl+v</kbd> 走系统剪贴板，什么都没选时复制整行。<kbd>Ctrl+Insert</kbd> 和 <kbd>Shift+Insert</kbd> 也行。复制的东西在 Obelus 退出后还在，通过 ssh 也能复制到你自己的机器上。</p>
 
       <h3 id="read-only">只读</h3>
       <p>如果改动全交给 agent，就把你自己的键从文件上拿掉：打字、粘贴、撤销和挪行这类命令在文件里都不起作用；agent 的改动照样进来，保存照样能用，写消息、搜索、记笔记的输入框也照样能打字。</p>
@@ -530,9 +530,9 @@
       <p>内置 <code>dark</code> 和 <code>light</code>，<code>~/.config/obelus/themes/</code> 里的每个 <code>.toml</code> 文件也是一个主题，每种颜色都可以不写。在列表里上下移动就逐个试穿；<kbd>Esc</kbd> 换回你原来的。</p>
       <p class="how"><span>命令</span><code>choose-theme</code><span>设置</span><code>theme</code></p>
 
-      <h3 id="window">窗口版还是终端版</h3>
-      <p><code>obg</code> 是窗口，<code>ob</code> 跑在终端里，就像 gvim 和 vim：界面一样，按键一样。窗口版分得清终端分不清的键（<kbd>Ctrl+i</kbd> 和 <kbd>Tab</kbd>、<kbd>Ctrl+m</kbd> 和 <kbd>Enter</kbd>），自带图标，光标和列表是滑过去的，输入法拼字时直接显示在页面上。它的字体和字号是设置；在终端里，用的是终端自己的，图标要装 Nerd Font。</p>
-      <p class="how"><span>设置</span><code>fonts</code> <code>font_size</code> <code>animation</code> <code>icons</code></p>
+      <h3 id="icons">图标</h3>
+      <p>Obelus 用的是终端自己的字体和字号。图标要 Nerd Font，所以默认是关的，没装的终端里也不会出现方框。</p>
+      <p class="how"><span>设置</span><code>icons</code></p>
 
       <h3 id="logs">更新与日志</h3>
       <p>Obelus 每天问一次 GitHub 有没有新版本，有的话只在欢迎页上说；关掉它就什么都不发。它自己的日志和语言服务器的日志都能当文件打开，预览会把日志排成几列。</p>

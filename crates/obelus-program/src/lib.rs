@@ -28,16 +28,8 @@
 //!
 //! And a third that is only Windows's: a program started there gets a console
 //! window of its own unless it is told not to, wherever the program starting
-//! it has none to share -- which is `obg`, a window and not a console program.
-//! [`without_a_window`] is the telling, and every program Obelus starts with
-//! its pipes held asks it.
-//!
-//! And one that is everywhere but Windows: what is on the path at all
-//! depends on who started Obelus, and a desktop is not a shell (`login`,
-//! which is not a module on Windows).
-
-#[cfg(unix)]
-pub mod login;
+//! it has none to share. [`without_a_window`] is the telling, and every
+//! program Obelus starts with its pipes held asks it.
 
 use std::{
     path::{Path, PathBuf},
@@ -49,7 +41,7 @@ use std::{
 ///
 /// Every program Obelus starts talks to it through pipes and has nothing to
 /// show a reader in a window -- a language server, `npm`, a command an agent
-/// asked for. Started from `obg`, which has no console to lend them, each
+/// asked for. Started from a process with no console to lend them, each
 /// would put up one of its own and leave it on the screen for as long as it
 /// ran. Not `DETACHED_PROCESS`, which gives it no console at all: whatever it
 /// starts in turn would then put up a window of its own instead.
@@ -168,9 +160,9 @@ mod tests {
         let _ = std::fs::remove_dir_all(&home);
     }
 
-    /// A program started here has no console window, which is what `obg`
-    /// starting a language server would otherwise put on the reader's
-    /// screen for as long as the server ran.
+    /// A program started here has no console window, which is what a
+    /// language server started without one would otherwise put on the
+    /// reader's screen for as long as the server ran.
     ///
     /// The program is this test binary again, running the test below it,
     /// which says whether it was given a window. Started the ordinary way

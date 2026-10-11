@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Obelus — 照我自己的习惯做的编辑器，agent 就在里面</title>
-<meta name="description" content="Obelus 是一个代码编辑器，agent 就在里面，有窗口版也有终端版。你把要做的事交给 agent，它在单独的 worktree 里改，你随时能过去看；试过、审过，再开 PR 合进去。">
+<meta name="description" content="Obelus 是一个代码编辑器，agent 就在里面，跑在你的终端里。你把要做的事交给 agent，它在单独的 worktree 里改，你随时能过去看；试过、审过，再开 PR 合进去。">
 <link rel="icon" href="../obelus.svg">
 <link rel="alternate" hreflang="en" href="../">
 <!-- The page is set in the two families omarchy's web rules name: the mono
@@ -56,7 +56,7 @@
       <div class="mark">÷</div>
       <h1>Obelus</h1>
       <p class="lede">照我自己的习惯做的编辑器，<strong>agent 就在里面。</strong></p>
-      <p class="sub">Obelus 是一个代码编辑器，有窗口版，也有终端版。它不追求功能多，只照我自己的干活方式来：你把要做的事交给 agent，它到一个单独的 worktree 里去改；你随时能过去看它改到哪了；改完你试一试，让它审一遍，再开 PR 合进去。从头到尾不用离开编辑器，也不用自己敲 <code>git</code>。</p>
+      <p class="sub">Obelus 是一个跑在终端里的代码编辑器。它不追求功能多，只照我自己的干活方式来：你把要做的事交给 agent，它到一个单独的 worktree 里去改；你随时能过去看它改到哪了；改完你试一试，让它审一遍，再开 PR 合进去。从头到尾不用离开编辑器，也不用自己敲 <code>git</code>。</p>
 
       <div class="buttons">
         <a class="button primary" href="#start"><span>安装</span></a>
@@ -119,30 +119,10 @@
     <section id="start">
       <h2><span class="num">01</span><span>安装</span></h2>
 
-      <p>挑你的系统，下载安装包，双击装上就行。想用一行命令装，或者也要终端版，往下看。</p>
-
-      <h3>下载安装包</h3>
-      <div class="table-wrap">
-      <table>
-        <thead><tr><th><span>系统</span></th><th><span>下载</span></th></tr></thead>
-        <tbody>
-          <tr><td>macOS（Intel 和 Apple 芯片通用）</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/Obelus-@VERSION@-universal2-apple-darwin.app.zip">Obelus.app</a></td></tr>
-          <tr><td>Windows x64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/Obelus-@VERSION@-x86_64-pc-windows-msvc.msi">安装包（.msi）</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obg-@VERSION@-x86_64-pc-windows-msvc.zip">压缩包（.zip）</a></td></tr>
-          <tr><td>Windows ARM64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/Obelus-@VERSION@-aarch64-pc-windows-msvc.msi">安装包（.msi）</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obg-@VERSION@-aarch64-pc-windows-msvc.zip">压缩包（.zip）</a></td></tr>
-          <tr><td>Linux x86_64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-gui_@VERSION@-1_amd64.deb">.deb</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-gui-@VERSION@-1.x86_64.rpm">.rpm</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obg-@VERSION@-x86_64.AppImage">AppImage</a></td></tr>
-          <tr><td>Linux arm64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-gui_@VERSION@-1_arm64.deb">.deb</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-gui-@VERSION@-1.aarch64.rpm">.rpm</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obg-@VERSION@-aarch64.AppImage">AppImage</a></td></tr>
-        </tbody>
-      </table>
-      </div>
-
-      <ul>
-        <li>这些都是窗口版 <code>obg</code>。终端版 <code>ob</code> 用下面的脚本装，或者在 <a href="https://github.com/obelus-editor/obelus/releases/latest">Releases 页</a>下载压缩包。所有文件的 SHA256 也在那里。</li>
-        <li>macOS：Obelus 没有经过 Apple 公证，第一次打开会提示无法验证开发者。到「系统设置 → 隐私与安全性」里点「仍要打开」；或者在终端里运行 <code>xattr -dr com.apple.quarantine /Applications/Obelus.app</code>。</li>
-        <li>Windows：安装包没有签名，SmartScreen 可能会拦一下，点「更多信息 → 仍要运行」。MSI 装在你自己的用户目录下，不用管理员权限，会加开始菜单入口和 PATH，在「设置 → 应用」里能卸载。</li>
-      </ul>
+      <p>Obelus 就一个程序，<code>ob</code>，跑在你的终端里。最快的装法是下面那行脚本；想自己挑压缩包或安装包的，再往下看。</p>
 
       <h3>用一行命令安装</h3>
-      <p>脚本会下载最新版本，用发布页里的 <code>SHA256SUMS</code> 校验，再把窗口版 <code>obg</code> 放到 PATH 找得到的地方。</p>
+      <p>脚本会下载最新版本，用发布页里的 <code>SHA256SUMS</code> 校验，再把 <code>ob</code> 放到 PATH 找得到的地方。</p>
 
       <h4>Linux 和 macOS</h4>
       <pre><code>curl -fsSL https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.sh | sh</code></pre>
@@ -150,19 +130,33 @@
       <h4>Windows，在 PowerShell 里</h4>
       <pre><code>irm https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.ps1 | iex</code></pre>
 
-      <h4>连终端版一起装</h4>
-      <p>终端版 <code>ob</code> 是另一个程序，要说一声才装。Windows 上管道没法给脚本传参数，所以先把脚本下载下来再跑。</p>
+      <ul>
+        <li>Linux 和 macOS 上，<code>ob</code> 装到 <code>~/.local/bin</code>；<code>--dir</code> 指定装到别处，<code>--version</code> 装指定的版本而不是最新的，<code>--help</code> 看其余选项。要带参数，把行尾的 <code>sh</code> 换成 <code>sh -s -- --dir /usr/local/bin</code> 这样。</li>
+        <li>Linux 上脚本还会在 <code>~/.local/share</code> 下建一个启动项和图标，点开就在终端里打开 Obelus，各种启动器都能找到它，omarchy 的 <code>Apps</code> 菜单也是（<code>--no-desktop</code> 不建；<code>--no-omarchy</code> 不装 Obelus 的 omarchy 主题模板）。目录不在 PATH 上的话，脚本会告诉你该加哪一行。</li>
+        <li>Windows 上，<code>ob.exe</code> 装到 <code>%LOCALAPPDATA%\Obelus\bin</code>，脚本会把这个目录加进 PATH。</li>
+        <li>卸载：Windows 用 <code>-Uninstall</code>；Linux 和 macOS 用 <code>--uninstall</code>，装的时候用了 <code>--dir</code>，卸的时候也要带上。两边都不动你的设置。</li>
+      </ul>
 
-      <pre><code>curl -fsSL https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.sh | sh -s -- --bin both</code></pre>
+      <h3>用 mise 安装</h3>
+      <pre><code>mise use -g github:obelus-editor/obelus</code></pre>
+      <p>只装可执行文件，不建启动项。<code>mise upgrade</code> 升到新版本。</p>
 
-      <pre><code>irm https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.ps1 -OutFile install.ps1
-.\install.ps1 -Binary both</code></pre>
+      <h3>下载</h3>
+      <div class="table-wrap">
+      <table>
+        <thead><tr><th><span>系统</span></th><th><span>下载</span></th></tr></thead>
+        <tbody>
+          <tr><td>macOS（Intel 和 Apple 芯片通用）</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-universal2-apple-darwin.tar.xz">压缩包（.tar.xz）</a></td></tr>
+          <tr><td>Windows x64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-x86_64-pc-windows-msvc.zip">压缩包（.zip）</a></td></tr>
+          <tr><td>Windows ARM64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-aarch64-pc-windows-msvc.zip">压缩包（.zip）</a></td></tr>
+          <tr><td>Linux x86_64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus_@VERSION@-1_amd64.deb">.deb</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-@VERSION@-1.x86_64.rpm">.rpm</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-x86_64-unknown-linux-gnu.tar.xz">glibc（.tar.xz）</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-x86_64-unknown-linux-musl.tar.xz">musl（.tar.xz）</a></td></tr>
+          <tr><td>Linux arm64</td><td><a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus_@VERSION@-1_arm64.deb">.deb</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/obelus-@VERSION@-1.aarch64.rpm">.rpm</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-aarch64-unknown-linux-gnu.tar.xz">glibc（.tar.xz）</a> · <a href="https://github.com/obelus-editor/obelus/releases/download/v@VERSION@/ob-@VERSION@-aarch64-unknown-linux-musl.tar.xz">musl（.tar.xz）</a></td></tr>
+        </tbody>
+      </table>
+      </div>
 
       <ul>
-        <li><code>--bin ob</code> 只装终端版，<code>--dir</code> 指定装到哪，<code>--help</code> 看其余选项。</li>
-        <li>Windows 上脚本会把目录加进 PATH，在开始菜单建一个入口（<code>-NoShortcut</code> 不建）。Linux 上会在 <code>~/.local/share</code> 下建启动项和图标（<code>--no-desktop</code> 不建），各种启动器都能找到它，omarchy 的 <code>Apps</code> 菜单也是。目录不在 PATH 上的话，脚本会告诉你该加哪一行。</li>
-        <li>卸载：Windows 用 <code>-Uninstall</code>；Linux 和 macOS 用 <code>--uninstall</code>，装的时候用了 <code>--dir</code>，卸的时候也要带上。两边都不动你的设置。</li>
-        <li>musl 系统上没有窗口版：窗口要在运行时加载 Vulkan、Wayland 和 X11，静态链接的程序做不到。脚本会说明，然后改装 <code>ob</code>。</li>
+        <li>压缩包里只有 <code>ob</code> 一个文件，放到 PATH 上任何地方就行。所有文件的 SHA256 在 <a href="https://github.com/obelus-editor/obelus/releases/latest">Releases 页</a>的 <code>SHA256SUMS</code> 里。</li>
       </ul>
 
       <h3>从源码</h3>
@@ -170,28 +164,19 @@
 
       <pre><code>git clone https://github.com/obelus-editor/obelus
 cd obelus
-
-# 窗口版，装到 ~/.cargo/bin，命令叫 obg
-cargo install --path crates/obelus-gui
-
-# 终端版，命令叫 ob
-cargo install --path crates/obelus-cli
-
-# 或者只构建：target/release/obg 和 target/release/ob
-cargo build --release</code></pre>
+cargo build --release   # target/release/ob</code></pre>
 
       <h3>最好也装上</h3>
       <ul>
         <li>你所用语言的<strong>语言服务器</strong>（Rust 是 <code>rust-analyzer</code>）。没装也能看代码，只是没有跳转定义、报错提示和大纲。</li>
         <li>一个支持 <strong>ACP</strong> 的 agent。没有的话 Obelus 能帮你装，见<a href="#agent">接上你已经在用的 agent</a>。</li>
-        <li>终端版想显示图标的话，装一套 <strong>Nerd Font</strong>。图标默认是关的，没装也不会出现方框；窗口版自带，不用装。</li>
+        <li>想显示图标的话，给终端装一套 <strong>Nerd Font</strong>。图标默认是关的，没装也不会出现方框。</li>
       </ul>
 
       <h3>跑起来</h3>
-      <pre><code>obg                  # 不带参数：在当前目录打开欢迎页
-obg src/main.rs      # 打开一个文件，它所在的仓库就是项目
-obg ../another-repo  # 打开一个目录，它就是项目
-ob src/main.rs       # 同一个文件，在终端里打开</code></pre>
+      <pre><code>ob                  # 不带参数：在当前目录打开欢迎页
+ob src/main.rs      # 打开一个文件，它所在的仓库就是项目
+ob ../another-repo  # 打开一个目录，它就是项目</code></pre>
 
       <h3>头五分钟</h3>
       <ol>
@@ -284,7 +269,7 @@ ob src/main.rs       # 同一个文件，在终端里打开</code></pre>
           <a class="light" href="../screens/worktree-list-light.webp"><img src="../screens/worktree-list-light.webp" width="1300" height="420" loading="lazy" alt="Worktrees 标签页：tally 在 main 上，tally/.worktree/stable-tie-order 在它自己的分支上，两棵都有窗口开着。"></a>
         </figure>
       </div>
-      <p class="quiet small">终端版 <code>ob</code> 里，换过去就是在树上按 <kbd>Enter</kbd>，也只有这一个键：<code>ob</code> 没法替你开新终端，也没法把别的终端窗口调到前面。窗口版 <code>obg</code> 里换过去是 <kbd>Ctrl+Enter</kbd>，因为 <kbd>Enter</kbd> 是去另一个窗口：在树上按是在那里新开一个，在某个窗口那一行上按是把它调到前面。</p>
+      <p class="quiet small">换过去就是在树上按 <kbd>Enter</kbd>，也只有这一个键：Obelus 没法替你开新终端，也没法把别的终端窗口调到前面。</p>
       <ul>
         <li>同一个仓库的所有 worktree 共用<em>一份</em>笔记，这个窗口记的，那个窗口马上能看到。</li>
         <li>一段对话同时只能在一个窗口里打开，不会两边各说各的。</li>
@@ -352,12 +337,11 @@ ob src/main.rs       # 同一个文件，在终端里打开</code></pre>
         </div>
 
         <div class="card">
-          <h4>窗口版和终端版</h4>
+          <h4>在你的终端里</h4>
           <ul>
-            <li><code>obg</code> 是窗口版，<code>ob</code> 是终端版，就像 gvim 和 vim：界面一样，按键也一样</li>
-            <li>窗口版能分清终端分不清的键，比如 <kbd>Ctrl+i</kbd> 和 <kbd>Tab</kbd>、<kbd>Ctrl+m</kbd> 和 <kbd>Enter</kbd>、<kbd>Ctrl+[</kbd> 和 <kbd>Esc</kbd>；<kbd>Ctrl+Shift+X</kbd> 这类组合，大多数终端根本不发</li>
-            <li>窗口版自带图标字体，不用另装 Nerd Font，也不会出现方框</li>
-            <li>窗口版里光标和列表是滑过去的，输入法拼字时也直接显示在页面上</li>
+            <li>Obelus 跑在你已经在用的终端里；想把两段代码并排看，用终端自己的标签页和分屏</li>
+            <li>点击、滚轮、拖滚动条，和按键一样好用</li>
+            <li>图标要 Nerd Font，默认是关的，所以不会出现方框</li>
           </ul>
         </div>
 

@@ -6,8 +6,7 @@
 # first:
 #
 #   irm .../install.ps1 -OutFile install.ps1
-#   .\install.ps1 -Binary ob
-#   .\install.ps1 -NoShortcut
+#   .\install.ps1 -Version v0.12.0
 #   .\install.ps1 -Uninstall
 #
 # It verifies what it downloaded against the release's own SHA256SUMS. A
@@ -16,14 +15,6 @@
 
 [CmdletBinding()]
 param(
-    # Which to install. `obg` is the window and `ob` is the terminal.
-    #
-    # The window by default, because that is the Obelus to meet first: the
-    # presses a terminal cannot report arrive as themselves, and the marks
-    # are in the binary rather than guessed at from somebody else's font.
-    [ValidateSet('obg', 'ob', 'both')]
-    [string] $Binary = 'obg',
-
     # A release to install. The default is the latest.
     [string] $Version,
 
@@ -32,18 +23,11 @@ param(
 
     # Take it away again.
     #
-    # The other half of a script that writes somebody's PATH and their
-    # Start menu: those two are the things a reader cannot simply delete,
-    # so the script that made them is what unmakes them. Nothing is
-    # fetched -- what is on the machine is the whole of what this is about.
-    [switch] $Uninstall,
-
-    # Leave the Start menu alone.
-    #
-    # For a machine nobody sits in front of -- a build agent, an image
-    # being prepared -- where the binary is wanted and a menu entry for it
-    # is a file somebody else has to notice and remove.
-    [switch] $NoShortcut
+    # The other half of a script that writes somebody's PATH: that is the
+    # thing a reader cannot simply delete, so the script that made it is
+    # what unmakes it. Nothing is fetched -- what is on the machine is the
+    # whole of what this is about.
+    [switch] $Uninstall
 )
 
 $ErrorActionPreference = 'Stop'
@@ -51,12 +35,16 @@ $ProgressPreference = 'SilentlyContinue'   # or every download draws a bar over 
 
 $repository = 'obelus-editor/obelus'
 
-# Where the Start menu entry goes, which both halves of this need to know.
+# Where the Start menu entry for `obg` went, the window older releases
+# installed. Nothing writes it now; an install and `-Uninstall` both take it
+# away.
 $link = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Obelus.lnk'
 
 if ($Uninstall) {
     $removed = 0
 
+    # `obg` too: the window older releases installed, taken away with the
+    # rest so that a reader who had one is not left holding it.
     foreach ($each in @('obg', 'ob')) {
         $exe = Join-Path $Directory "$each.exe"
         if (Test-Path -LiteralPath $exe) {
@@ -146,7 +134,7 @@ function Write-Bar {
 # What fetches the archives, and there are two fetches here for the same
 # reason install.sh has two: SHA256SUMS is a moment and says nothing, and a
 # binary is tens of megabytes over somebody else's line -- long enough that a
-# script saying only `fetching obg-...zip` is a script the reader cannot tell
+# script saying only `fetching ob-...zip` is a script the reader cannot tell
 # from one that has hung.
 #
 # `Invoke-WebRequest` stays the quiet one, and `$ProgressPreference` above
@@ -232,8 +220,6 @@ if (-not $Version) {
     if (-not $Version) { throw 'there is no published release yet' }
 }
 
-$binaries = if ($Binary -eq 'both') { @('ob', 'obg') } else { @($Binary) }
-
 Write-Host "Obelus $Version for $target"
 
 $work = Join-Path ([System.IO.Path]::GetTempPath()) ("obelus-" + [System.Guid]::NewGuid().ToString('N'))
@@ -253,52 +239,48 @@ try {
 
     New-Item -ItemType Directory -Force -Path $Directory | Out-Null
 
-    foreach ($each in $binaries) {
-        $name = "$each-$($Version.TrimStart('v'))-$target"
-        $archive = Join-Path $work "$name.zip"
+    $name = "ob-$($Version.TrimStart('v'))-$target"
+    $archive = Join-Path $work "$name.zip"
 
-        Write-Host "  fetching $name.zip"
-        Save-Watched "https://github.com/$repository/releases/download/$Version/$name.zip" $archive $watched
+    Write-Host "  fetching $name.zip"
+    Save-Watched "https://github.com/$repository/releases/download/$Version/$name.zip" $archive $watched
 
-        $wanted = $said["$name.zip"]
-        if (-not $wanted) { throw "SHA256SUMS says nothing about $name.zip" }
-        $got = (Get-FileHash -Algorithm SHA256 -Path $archive).Hash.ToLower()
-        if ($got -ne $wanted.ToLower()) {
-            throw "$name.zip is not what the release says it is: $got, where SHA256SUMS says $wanted"
-        }
-
-        Expand-Archive -Path $archive -DestinationPath $work -Force
-        Copy-Item -Path (Join-Path $work "$name\$each.exe") -Destination (Join-Path $Directory "$each.exe") -Force
-        Write-Host "  installed $Directory\$each.exe"
+    $wanted = $said["$name.zip"]
+    if (-not $wanted) { throw "SHA256SUMS says nothing about $name.zip" }
+    $got = (Get-FileHash -Algorithm SHA256 -Path $archive).Hash.ToLower()
+    if ($got -ne $wanted.ToLower()) {
+        throw "$name.zip is not what the release says it is: $got, where SHA256SUMS says $wanted"
     }
 
-    # A Start menu entry for the window, which is the whole of what a
-    # launcher is. The `.deb`, the `.rpm` and the AppImage carry a desktop
-    # entry and an icon for exactly this; Windows has no package of
-    # Obelus's to carry one, and this script is the way in -- so the
-    # shortcut is the script's.
-    #
-    # The window alone. `ob` is a program for a terminal that is already
-    # open, and a Start menu entry for it is a console window on a
-    # directory nobody chose.
-    if (-not $NoShortcut -and $binaries -contains 'obg') {
-        New-Item -ItemType Directory -Force -Path (Split-Path -Parent $link) | Out-Null
+    Expand-Archive -Path $archive -DestinationPath $work -Force
+    Copy-Item -Path (Join-Path $work "$name\ob.exe") -Destination (Join-Path $Directory 'ob.exe') -Force
+    Write-Host "  installed $Directory\ob.exe"
 
-        # WScript.Shell, which is on a stock Windows and is the only way to
-        # write a `.lnk` without a module nobody has. The icon comes with
-        # the binary -- `obelus-gui` sets it in its own `build.rs` -- so
-        # there is no second file to install and none to leave behind.
-        $shell = New-Object -ComObject WScript.Shell
-        $shortcut = $shell.CreateShortcut($link)
-        $shortcut.TargetPath = Join-Path $Directory 'obg.exe'
-        # Started from a menu there is no directory to have been in, and
-        # Obelus opens on the one it was started in. Home is the answer a
-        # reader can make sense of; the temp directory a shell hands out is
-        # not.
-        $shortcut.WorkingDirectory = $env:USERPROFILE
-        $shortcut.Description = 'A code editor, with the agent built in.'
-        $shortcut.Save()
-        Write-Host "  a Start menu entry: $link"
+    # `obg`, the window older releases installed by default, is gone from
+    # the releases, so an install over one takes it away rather than leaving
+    # a program nothing will ever update -- and its Start menu entry with
+    # it, which would otherwise start a program that is not there. After
+    # `ob` is in, so that a download that fails leaves the reader with the
+    # Obelus they had. The entry only where it is this install's, or where
+    # what it starts has gone; said on stderr, because it is the one thing
+    # here the reader did not ask for.
+    $old = Join-Path $Directory 'obg.exe'
+    if (Test-Path -LiteralPath $old) {
+        try {
+            Remove-Item -LiteralPath $old -Force
+            [Console]::Error.WriteLine("obelus: removed $old -- Obelus is ob now, in a terminal")
+        } catch {
+            [Console]::Error.WriteLine("obelus: $old could not be removed: $_")
+        }
+    }
+    if (Test-Path -LiteralPath $link) {
+        $points = (New-Object -ComObject WScript.Shell).CreateShortcut($link).TargetPath
+        if ($points -eq $old -or ($points -and -not (Test-Path -LiteralPath $points))) {
+            Remove-Item -LiteralPath $link -Force
+            [Console]::Error.WriteLine("obelus: removed $link, the Start menu entry for obg")
+        } else {
+            [Console]::Error.WriteLine("obelus: left $link alone: it points at $points")
+        }
     }
 
     # The user's own PATH, not the machine's: this installs into their

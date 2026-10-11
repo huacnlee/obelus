@@ -1,7 +1,6 @@
 [package]
 name = "obelus-cli"
-# Its own, the way `obelus-gui`'s is: the workspace says what Obelus is,
-# and this is the half of it that lives in a terminal.
+# Its own: the workspace says what Obelus is, and this is the program.
 description = "A code editor in a terminal, with the agent built in."
 version.workspace = true
 edition.workspace = true
@@ -46,6 +45,21 @@ Syntax highlighting for twenty-five languages, folding, soft wrap, git in the \
 margin, a language server and an agent, on the page you are reading. In the \
 AI era every line you read is a line you did not write, so browsing is the \
 product and editing is incidental."""
+# Two spellings, and they are not a mistake. `target/release` is written
+# the plain way because that exact prefix is the one cargo-deb rewrites for
+# the target and the profile it was given -- `../../target/release` is not
+# it, and packaged whatever an old `cargo build --release` had left lying
+# there. Every other path is resolved against this crate's own directory,
+# which is what the `../../` is.
+#
+# The desktop entry and the icon are here because a program with no
+# `.desktop` file beside it is one a launcher cannot start; the entry asks
+# the launcher for a terminal to start it in.
+assets = [
+    ["target/release/ob", "usr/bin/", "755"],
+    ["../../contrib/desktop/obelus-terminal.desktop", "usr/share/applications/", "644"],
+    ["../../contrib/desktop/obelus.svg", "usr/share/icons/hicolor/scalable/apps/", "644"],
+]
 
 [package.metadata.generate-rpm]
 name = "obelus"
@@ -53,6 +67,8 @@ name = "obelus"
 # and a `--profile`, so this is written the plain way on purpose.
 assets = [
     { source = "target/release/ob", dest = "/usr/bin/ob", mode = "755" },
+    { source = "contrib/desktop/obelus-terminal.desktop", dest = "/usr/share/applications/obelus-terminal.desktop", mode = "644" },
+    { source = "contrib/desktop/obelus.svg", dest = "/usr/share/icons/hicolor/scalable/apps/obelus.svg", mode = "644" },
     { source = "LICENSE", dest = "/usr/share/doc/obelus/LICENSE", mode = "644", doc = true },
     { source = "README.md", dest = "/usr/share/doc/obelus/README.md", mode = "644", doc = true },
 ]

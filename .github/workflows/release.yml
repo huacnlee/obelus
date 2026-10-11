@@ -1,14 +1,9 @@
-# What a tag produces: an archive per binary per platform, a `.deb`, a
-# `.rpm`, an AppImage, a macOS bundle, a Windows installer, and a GitHub
-# release with all of it on it.
+# What a tag produces: an archive of `ob` per platform, a `.deb`, a `.rpm`,
+# and a GitHub release with all of it on it.
 #
-# Two binaries, and they are shipped apart rather than together. `obg` is
-# the window and `ob` is the terminal -- gvim's relation to vim -- and a
-# reader who wants one has no use for the other's forty megabytes. Which is
-# also why the static builds carry only `ob`: a musl binary cannot `dlopen`,
-# and the window finds Vulkan, Wayland and X11 exactly that way. That is the
-# one place the order matters: `contrib/install.sh` installs the window by
-# default, and on musl it says why it cannot and installs the terminal one.
+# The archives are what `contrib/install.sh`, `contrib/install.ps1` and
+# mise's `github:` backend fetch, so their names -- `ob-<version>-<target>`
+# -- are read by all three and are not this file's alone to change.
 name: Release
 
 on:
@@ -64,41 +59,24 @@ jobs:
         include:
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-gnu
-            bins: ob obg
-            packages: -p obelus-cli -p obelus-gui
-            # The two that a distribution has a format of its own for, and
-            # the one that runs where no distribution was asked.
+            # The two that a distribution has a format of its own for.
             distro: true
-            appimage: x86_64
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-gnu
-            bins: ob obg
-            packages: -p obelus-cli -p obelus-gui
             distro: true
-            appimage: aarch64
-          # Static, and `ob` alone: see the note at the top.
+          # Static, for a system whose libc is not glibc.
           - os: ubuntu-24.04
             target: x86_64-unknown-linux-musl
-            bins: ob
-            packages: -p obelus-cli
             musl: true
           - os: ubuntu-24.04-arm
             target: aarch64-unknown-linux-musl
-            bins: ob
-            packages: -p obelus-cli
             musl: true
           - os: windows-2025
             target: x86_64-pc-windows-msvc
-            bins: ob obg
-            packages: -p obelus-cli -p obelus-gui
             exe: .exe
-            msi: x64
           - os: windows-11-arm
             target: aarch64-pc-windows-msvc
-            bins: ob obg
-            packages: -p obelus-cli -p obelus-gui
             exe: .exe
-            msi: arm64
     steps:
       - uses: actions/checkout@v7
 
@@ -115,29 +93,27 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - run: cargo build --profile dist --locked --target ${{ matrix.target }} ${{ matrix.packages }}
+      - run: cargo build --profile dist --locked --target ${{ matrix.target }} -p obelus-cli
 
-      # One directory per binary, named the way the archive is, so that
-      # unpacking one in a downloads folder puts nothing loose in it.
-      - name: Lay the archives out
+      # One directory, named the way the archive is, so that unpacking it in
+      # a downloads folder puts nothing loose in it.
+      - name: Lay the archive out
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p staging archives
-          for bin in ${{ matrix.bins }}; do
-            name="$bin-${{ needs.plan.outputs.version }}-${{ matrix.target }}"
-            mkdir -p "staging/$name"
-            cp "target/${{ matrix.target }}/dist/$bin${{ matrix.exe }}" "staging/$name/"
-            cp README.md LICENSE "staging/$name/"
-            echo "$name" >> staging/names
-          done
+          name="ob-${{ needs.plan.outputs.version }}-${{ matrix.target }}"
+          mkdir -p "staging/$name"
+          cp "target/${{ matrix.target }}/dist/ob${{ matrix.exe }}" "staging/$name/"
+          cp README.md LICENSE "staging/$name/"
+          echo "$name" >> staging/names
 
       # xz rather than gzip. Nothing is stripped -- a release build has no
       # debug info to begin with, so the symbol table is the whole of what a
       # panic in somebody's log has to read -- which leaves these binaries
       # at forty to sixty megabytes, and that is where the difference
       # between the two is worth a reader's minute.
-      - name: Pack them (tar)
+      - name: Pack it (tar)
         if: runner.os != 'Windows'
         shell: bash
         run: |
@@ -150,7 +126,7 @@ jobs:
       # own step rather than a branch inside the one above: bsdtar and the
       # tar Git for Windows installs disagree about how to make a zip, and
       # PowerShell is the one thing on that runner that is not a choice.
-      - name: Pack them (zip)
+      - name: Pack it (zip)
         if: runner.os == 'Windows'
         shell: pwsh
         run: |
@@ -179,120 +155,10 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for package in obelus-cli obelus-gui; do
-            cargo deb --no-build --target ${{ matrix.target }} --profile dist \
-              -p "$package" --output archives/
-            cargo generate-rpm --target ${{ matrix.target }} --profile dist \
-              -p "crates/$package" --output archives/
-          done
-
-      # A window somebody can double-click, for a desktop with no Obelus in
-      # its own package manager. `obg` alone: an AppImage of a terminal
-      # program is a file nothing would ever open.
-      - name: An AppImage of the window
-        if: matrix.appimage
-        shell: bash
-        env:
-          # appimagetool mounts itself, and a runner has no FUSE.
-          APPIMAGE_EXTRACT_AND_RUN: 1
-          ARCH: ${{ matrix.appimage }}
-        run: |
-          set -euo pipefail
-          mkdir -p AppDir/usr/bin \
-                   AppDir/usr/share/applications \
-                   AppDir/usr/share/icons/hicolor/scalable/apps
-          cp "target/${{ matrix.target }}/dist/obg" AppDir/usr/bin/
-          cp contrib/desktop/obelus.desktop AppDir/usr/share/applications/
-          cp contrib/desktop/obelus.svg AppDir/usr/share/icons/hicolor/scalable/apps/
-          # The three things appimagetool looks for at the top of an AppDir.
-          ln -s usr/share/applications/obelus.desktop AppDir/obelus.desktop
-          ln -s usr/share/icons/hicolor/scalable/apps/obelus.svg AppDir/obelus.svg
-          ln -s usr/share/icons/hicolor/scalable/apps/obelus.svg AppDir/.DirIcon
-          cat > AppDir/AppRun <<'RUN'
-          #!/bin/sh
-          exec "$(dirname "$(readlink -f "$0")")/usr/bin/obg" "$@"
-          RUN
-          chmod +x AppDir/AppRun
-          curl -fsSLo appimagetool \
-            "https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-${ARCH}.AppImage"
-          chmod +x appimagetool
-          ./appimagetool AppDir "archives/obg-${{ needs.plan.outputs.version }}-${ARCH}.AppImage"
-
-      # The window as an installer, for a Windows reader who would rather
-      # double-click something than paste a line into PowerShell. What it
-      # does is argued in `contrib/windows/obelus.wxs`.
-      #
-      # WiX 5 and not the newest: from 6 on, using it is tied to a fee
-      # agreement the build would have to accept on the project's behalf.
-      # Windows Installer takes three numbers and nothing after them, so a
-      # prerelease's suffix is left off the version it is told -- the file's
-      # name keeps the whole of it.
-      #
-      # Built somewhere of its own and only the `.msi` taken, because WiX
-      # writes a `.wixpdb` beside it, and everything in `archives/` goes up.
-      - name: An installer of the window
-        if: matrix.msi
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          dotnet tool install --global wix --version 5.0.2
-          if ($LASTEXITCODE -ne 0) { throw 'WiX did not install' }
-          $version = '${{ needs.plan.outputs.version }}'
-          $numeric = ($version -split '-')[0]
-          wix build contrib/windows/obelus.wxs `
-            -arch ${{ matrix.msi }} `
-            -d "Version=$numeric" `
-            -d "Binary=target/${{ matrix.target }}/dist/obg.exe" `
-            -d "Icon=contrib/desktop/obelus.ico" `
-            -o "msi/Obelus-$version-${{ matrix.target }}.msi"
-          if ($LASTEXITCODE -ne 0) { throw 'WiX did not build the installer' }
-          Copy-Item "msi/Obelus-$version-${{ matrix.target }}.msi" archives/
-
-      # Installed, looked at, and taken away again, on the runner, because
-      # nothing else on any machine of ours can run an `.msi` -- and an
-      # installer nobody has run is one a reader runs first. Each check is
-      # one thing a reader would notice missing: the program, the menu
-      # entry and where it starts, `obg` on the PATH, and all of it gone
-      # after an uninstall.
-      #
-      # Broken deliberately once, by starting the menu entry in the install
-      # directory: both jobs stopped here, saying where it started instead.
-      - name: The installer, run
-        if: matrix.msi
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          $msi = (Resolve-Path "archives/Obelus-*.msi").Path
-          $dir = Join-Path $env:LOCALAPPDATA 'Programs\Obelus'
-          $exe = Join-Path $dir 'obg.exe'
-          $link = Join-Path $env:APPDATA 'Microsoft\Windows\Start Menu\Programs\Obelus.lnk'
-          function Run-Msi($arguments, $log) {
-            $run = Start-Process msiexec.exe -ArgumentList $arguments -Wait -PassThru
-            if ($run.ExitCode -ne 0) {
-              Get-Content $log -Tail 80
-              throw "msiexec $arguments exited $($run.ExitCode)"
-            }
-          }
-          function On-Path {
-            $path = [Environment]::GetEnvironmentVariable('Path', 'User')
-            @($path -split ';' | Where-Object { $_.TrimEnd('\') -eq $dir }).Count -gt 0
-          }
-
-          Run-Msi "/i `"$msi`" /qn /l*v install.log" install.log
-          if (-not (Test-Path -LiteralPath $exe)) { throw "nothing at $exe" }
-          if (-not (Test-Path -LiteralPath $link)) { throw "no Start menu entry at $link" }
-          $shortcut = (New-Object -ComObject WScript.Shell).CreateShortcut($link)
-          if ($shortcut.TargetPath -ne $exe) { throw "the menu entry starts $($shortcut.TargetPath)" }
-          if ($shortcut.WorkingDirectory.TrimEnd('\') -ne $env:USERPROFILE.TrimEnd('\')) {
-            throw "the menu entry starts in $($shortcut.WorkingDirectory), not $env:USERPROFILE"
-          }
-          if (-not (On-Path)) { throw "$dir is not on the PATH" }
-
-          Run-Msi "/x `"$msi`" /qn /l*v uninstall.log" uninstall.log
-          if (Test-Path -LiteralPath $exe) { throw "$exe is still there" }
-          if (Test-Path -LiteralPath $link) { throw "$link is still there" }
-          if (On-Path) { throw "$dir is still on the PATH" }
-          Write-Host "Installed and uninstalled $msi"
+          cargo deb --no-build --target ${{ matrix.target }} --profile dist \
+            -p obelus-cli --output archives/
+          cargo generate-rpm --target ${{ matrix.target }} --profile dist \
+            -p crates/obelus-cli --output archives/
 
       - uses: actions/upload-artifact@v7
         with:
@@ -324,15 +190,13 @@ jobs:
         with:
           key: ${{ matrix.target }}
 
-      - run: cargo build --profile dist --locked --target ${{ matrix.target }} -p obelus-cli -p obelus-gui
+      - run: cargo build --profile dist --locked --target ${{ matrix.target }} -p obelus-cli
 
       # `macos-` is what keeps these out of the release: see `publish`.
       - uses: actions/upload-artifact@v7
         with:
           name: macos-${{ matrix.target }}
-          path: |
-            target/${{ matrix.target }}/dist/ob
-            target/${{ matrix.target }}/dist/obg
+          path: target/${{ matrix.target }}/dist/ob
           if-no-files-found: error
           retention-days: 1
 
@@ -355,56 +219,27 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p staging archives
-          for bin in ob obg; do
-            name="$bin-${{ needs.plan.outputs.version }}-universal2-apple-darwin"
-            mkdir -p "staging/$name"
-            lipo -create -output "staging/$name/$bin" \
-              "halves/macos-aarch64-apple-darwin/$bin" \
-              "halves/macos-x86_64-apple-darwin/$bin"
-            # An artifact is a zip and keeps no file modes, so what came
-            # down is not executable, and nor is what `lipo` made of it.
-            chmod +x "staging/$name/$bin"
+          name="ob-${{ needs.plan.outputs.version }}-universal2-apple-darwin"
+          mkdir -p "staging/$name"
+          lipo -create -output "staging/$name/ob" \
+            "halves/macos-aarch64-apple-darwin/ob" \
+            "halves/macos-x86_64-apple-darwin/ob"
+          # An artifact is a zip and keeps no file modes, so what came
+          # down is not executable, and nor is what `lipo` made of it.
+          chmod +x "staging/$name/ob"
 
-            # An arm64 binary macOS will not run at all is one with no
-            # signature, and rustc's linker signs the arm64 build itself --
-            # which joining the two throws away. `-` is the ad-hoc identity:
-            # no certificate, nothing notarised, and the one thing needed
-            # for the thing to start. A reader who downloads this in a
-            # browser still meets Gatekeeper, because a browser marks what
-            # it saved as quarantined; `curl` and `brew` do not.
-            codesign --force --sign - "staging/$name/$bin"
-            codesign --verify --verbose "staging/$name/$bin"
+          # An arm64 binary macOS will not run at all is one with no
+          # signature, and rustc's linker signs the arm64 build itself --
+          # which joining the two throws away. `-` is the ad-hoc identity:
+          # no certificate, nothing notarised, and the one thing needed
+          # for the thing to start. A reader who downloads this in a
+          # browser still meets Gatekeeper, because a browser marks what
+          # it saved as quarantined; `curl` and `mise` do not.
+          codesign --force --sign - "staging/$name/ob"
+          codesign --verify --verbose "staging/$name/ob"
 
-            cp README.md LICENSE "staging/$name/"
-            tar -C staging -cJf "archives/$name.tar.xz" "$name"
-          done
-
-      # And the window as a bundle, which is the only shape macOS draws an
-      # icon for: a bare executable in the Dock is a blank sheet with no
-      # name under it. The tarball above stays, because that is what a
-      # formula installs and what something on a PATH wants.
-      - name: A bundle of the window
-        shell: bash
-        run: |
-          set -euo pipefail
-          version=${{ needs.plan.outputs.version }}
-          app=Obelus.app
-          mkdir -p "$app/Contents/MacOS" "$app/Contents/Resources"
-          cp "staging/obg-$version-universal2-apple-darwin/obg" "$app/Contents/MacOS/obg"
-          cp contrib/desktop/obelus.icns "$app/Contents/Resources/obelus.icns"
-          sed "s/@VERSION@/$version/g" contrib/desktop/Info.plist > "$app/Contents/Info.plist"
-
-          # The bundle is sealed over the executable that was signed above,
-          # so this is the one signature Gatekeeper reads. Ad-hoc again,
-          # and again the whole of what it buys is that the thing starts.
-          codesign --force --sign - "$app"
-          codesign --verify --deep --strict --verbose=2 "$app"
-
-          # `ditto` and not `zip`: it is the one that writes a bundle the
-          # way the system does, and a bundle rebuilt by anything else
-          # arrives with its signature broken.
-          ditto -c -k --keepParent "$app" \
-            "archives/Obelus-$version-universal2-apple-darwin.app.zip"
+          cp README.md LICENSE "staging/$name/"
+          tar -C staging -cJf "archives/$name.tar.xz" "$name"
 
       - uses: actions/upload-artifact@v7
         with:
@@ -433,12 +268,12 @@ jobs:
           merge-multiple: true
 
       # The assets that are not built: omarchy's template, and the desktop
-      # entries and icon that put `obg` and `ob` in a Linux launcher -- all
-      # fetched by `contrib/install.sh`. Here rather than read from the
+      # entry and icon that put `ob` in a Linux launcher -- all fetched by
+      # `contrib/install.sh`. Here rather than read from the
       # repository at install time so that they are covered by the sums
       # below -- everything that script downloads is checked against what
       # the release says it is, and a text file is no exception.
-      - run: cp contrib/omarchy/obelus.toml.tpl contrib/desktop/obelus.desktop contrib/desktop/obelus-terminal.desktop contrib/desktop/obelus.svg assets/
+      - run: cp contrib/omarchy/obelus.toml.tpl contrib/desktop/obelus-terminal.desktop contrib/desktop/obelus.svg assets/
 
       # One file for all of them, because that is what an installer reads:
       # a formula, a manifest and `contrib/install.sh` each want the sum of
@@ -452,7 +287,7 @@ jobs:
           # itself, so a platform dropped from the matrix is one fewer line
           # here and not a failure.
           shopt -s nullglob
-          sha256sum -- *.tar.xz *.zip *.deb *.rpm *.AppImage *.msi *.tpl *.desktop *.svg > SHA256SUMS
+          sha256sum -- *.tar.xz *.zip *.deb *.rpm *.tpl *.desktop *.svg > SHA256SUMS
           cat SHA256SUMS
 
       # A draft. The tag is the decision to build; publishing is the
