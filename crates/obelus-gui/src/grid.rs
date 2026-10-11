@@ -394,15 +394,74 @@ impl Behind {
         let area = self.area;
         let inside = x >= area.x && x < area.right() && y >= area.y && y < area.bottom();
         let ring = x == area.x || x + 1 == area.right() || y == area.y || y + 1 == area.bottom();
-        inside
-            && ring
-            && page
-                .look(x, y)
-                .text
-                .chars()
-                .next()
-                .is_some_and(|glyph| ('\u{2500}'..='\u{257f}').contains(&glyph))
+        inside && ring && a_line(page.look(x, y).text)
     }
+
+    /// The cells of the ring with a letter under them, which a window puts
+    /// back outside the line -- see `Painter::frame`.
+    ///
+    /// A letter and not a line. What is under the ring may be a rule, or
+    /// the frame of another box, and a window draws those as lines of its
+    /// own and never from the font: put back here, the glyph was a stub of
+    /// a second line beside the first, at the font's height and thickness.
+    pub(crate) fn lettered_ring(&self, page: &Page) -> Vec<(u16, u16, Look<'_>)> {
+        let area = self.area;
+        if area.width == 0 || area.height == 0 {
+            return Vec::new();
+        }
+        let (right, bottom) = (area.right() - 1, area.bottom() - 1);
+        // The top and the bottom rows whole, and the two sides between
+        // them: a box's ring, once each. A box one row tall is all top.
+        let across = [area.y, bottom]
+            .into_iter()
+            .take(if bottom > area.y { 2 } else { 1 })
+            .flat_map(|y| (area.x..=right).map(move |x| (x, y)));
+        let down = (area.y + 1..bottom).flat_map(|y| {
+            [area.x, right]
+                .into_iter()
+                .take(if right > area.x { 2 } else { 1 })
+                .map(move |x| (x, y))
+        });
+        across
+            .chain(down)
+            .filter(|&(x, y)| self.ring_holds(page, x, y))
+            .filter_map(|(x, y)| {
+                self.look(x, y)
+                    .filter(|under| !under.text.trim().is_empty() && !a_line(under.text))
+                    .map(|under| (x, y, under))
+            })
+            .collect()
+    }
+
+    /// The cells past the box's right-hand edge that a full-width letter
+    /// put back on that edge runs into.
+    ///
+    /// They are the character's own, and the page holds them blank in its
+    /// colours -- see `Page::covered` -- so `backgrounds` would paint them
+    /// after `frame` had drawn the letter, over its right half. Left to
+    /// `frame` instead, which paints their ground before the letter the
+    /// way it does the ring's. Only while they are still blank: one with
+    /// anything in it is somebody else's by now.
+    pub(crate) fn spilt(&self, page: &Page) -> Vec<(u16, u16)> {
+        let past = self.area.right();
+        self.lettered_ring(page)
+            .into_iter()
+            .flat_map(|(x, y, under)| {
+                (past.max(x + 1)..x.saturating_add(under.columns()))
+                    .filter(move |&x| x < page.columns())
+                    .map(move |x| (x, y))
+            })
+            .filter(|&(x, y)| page.look(x, y).text.trim().is_empty())
+            .collect()
+    }
+}
+
+/// Whether a cell holds one of the box-drawing lines, which is what a
+/// frame and a rule are spelled in.
+fn a_line(text: &str) -> bool {
+    text.chars()
+        .next()
+        .is_some_and(|glyph| ('\u{2500}'..='\u{257f}').contains(&glyph))
 }
 
 /// Where a switch is in the frame being drawn, and how it stands.
@@ -1972,6 +2031,102 @@ mod tests {
         assert!(frame.ring_holds(&page, 1, 0), "a line of the ring");
         assert!(!frame.ring_holds(&page, 0, 1), "written over");
         assert!(!frame.ring_holds(&page, 1, 1), "inside the box");
+    }
+
+    /// What a box was put over keeps its letters under the ring, and only
+    /// its letters and only under the ring.
+    ///
+    /// Which cells, and nothing about how they are drawn: that `frame`
+    /// draws them, and before its line, is the painter's, and nothing here
+    /// can see it.
+    ///
+    /// Deliberate breaks: answer an empty list from `Behind::lettered_ring`,
+    /// which is what `frame` did before -- the ground put back and no
+    /// letter, a blank half cell all round a hover. Drop `ring_holds` from
+    /// it, and under the cell a list drew over goes the letter that was
+    /// there before the list. Drop `a_line`, and the rule under the
+    /// ring is drawn from the font beside the frame's own line. Leave the
+    /// sides out of the walk round the ring, and the code beside a hover
+    /// loses its letter on every row but the first and the last.
+    #[test]
+    fn a_frame_puts_back_the_letters_under_its_ring() {
+        let page = written(&[
+            "\u{256d}\u{2500}\u{2500}\u{256e}",
+            "x a\u{2502}",
+            "\u{2502} b\u{2502}",
+            "\u{2570}\u{2500}\u{2500}\u{256f}",
+        ]);
+        let frame = Behind {
+            cells: "fn main\u{2500}q  r    "
+                .chars()
+                .map(|character| {
+                    let mut cell = Cell::default();
+                    cell.set_symbol(&character.to_string());
+                    cell
+                })
+                .collect(),
+            ..a_box(4, 4)
+        };
+        let mut cells: Vec<(u16, u16, &str)> = frame
+            .lettered_ring(&page)
+            .into_iter()
+            .map(|(x, y, under)| (x, y, under.text))
+            .collect();
+        cells.sort_by_key(|&(x, y, _)| (y, x));
+        assert_eq!(
+            cells,
+            [
+                (0, 0, "f"),
+                (1, 0, "n"),
+                (3, 0, "m"),
+                (0, 2, "q"),
+                (3, 2, "r")
+            ],
+            "the space in `fn m`, the cell written over, the rule under the \
+             right-hand side, the inside of the box and the row of spaces are \
+             not"
+        );
+    }
+
+    /// A full-width letter put back on a box's right-hand edge keeps the
+    /// cell it runs into past the edge, while that cell is still blank.
+    ///
+    /// Deliberate breaks: answer an empty list from `Behind::spilt`, and
+    /// `backgrounds` paints that cell after the letter is drawn -- what was
+    /// left of the character was the sliver between the line and the edge
+    /// of its cell. Drop `past.max`, and one down the left-hand edge claims
+    /// the blank cell inside the box beside it, a square of ground on the
+    /// glass. Drop the blank check, and the cell a list drew a letter in
+    /// loses its ground.
+    #[test]
+    fn a_wide_letter_on_a_box_s_edge_keeps_the_cell_past_it() {
+        let page = written(&[
+            "\u{256d}\u{2500}\u{2500}\u{256e} ",
+            "\u{2502}  \u{2502} ",
+            "\u{2570}\u{2500}\u{2500}\u{256f}x",
+        ]);
+        // What ratatui leaves after a full-width character is a blank
+        // cell, which is what the box's own picture holds there too.
+        let frame = Behind {
+            cells: [
+                "\u{4e2d}", "", "\u{6587}", "", "\u{5b57}", "", "", "\u{5b57}", "", "", "",
+                "\u{5b57}",
+            ]
+            .into_iter()
+            .map(|symbol| {
+                let mut cell = Cell::default();
+                cell.set_symbol(if symbol.is_empty() { " " } else { symbol });
+                cell
+            })
+            .collect(),
+            ..a_box(4, 3)
+        };
+        assert_eq!(
+            frame.spilt(&page),
+            [(4, 1)],
+            "the runs into the ring along the top, into the box from the \
+             left and into a cell with a letter in it are not"
+        );
     }
 
     /// A frame with a corner drawn over is not drawn at all.
