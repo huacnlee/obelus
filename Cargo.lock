@@ -4661,6 +4661,8 @@ dependencies = [
  "obelus-command",
  "obelus-editing",
  "obelus-icons",
+ "serde",
+ "serde_json",
  "tracing",
 ]
 

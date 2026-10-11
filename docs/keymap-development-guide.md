@@ -46,6 +46,8 @@ open-file = "Ctrl+o"
 
 预设值：`classic`、`mnemonic`、`vscode`、`textmate`。`mnemonic` 是既有可选项，保留兼容，不擅自删除。
 
+四个预设写在 `crates/obelus-keymap/keymaps/*.json`（扩展名是 `.json`，按 JSONC 解析：可写 `//` 注释，允许末尾逗号），由 `include_str!` 编进二进制，首次用到时解析并缓存（`src/shipped.rs`）。`classic.json` 是完整的表；其余用 `extends` 继承它，`move` 把命令原有的键全部换成新键（保留原上下文），`bindings` 逐条追加。命令名与键的写法和设置文件的 `[keys]` 一致，键不区分大小写（`ctrl+t` 与 `Ctrl+T` 相同，Shift 要写成 `shift+`），文件里统一用全小写。改预设只改 JSON，不动 Rust；用户不能另加预设文件，自定义仍走 `[keys]`。
+
 - 旧配置没有 `keys_from` 时保持原先的 `classic` 行为。
 - 切换预设保留 `[keys]` 自定义覆盖；应让界面说明覆盖仍有效。
 - macOS 窗口的新预设使用 Cmd；其他系统与终端使用 Ctrl。

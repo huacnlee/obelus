@@ -387,7 +387,8 @@ command is gone and `App::blame` reads the setting.
 **Escape always gives up on the nearest thing**, and everything else is
 reached from the palette: a chord for every command is how a key table stops
 being memorable. Which key is which is argued where it is bound, in
-`Keymap::new`.
+`obelus-keymap/keymaps/` -- each layout a JSON file with comments, compiled
+in, and the reasons beside the keys.
 
 **What is showing owns the keys.** A list and the settings page are dialogs:
 each takes the keys bound *in* its context and nothing else, so a global key
@@ -631,7 +632,8 @@ crates/
                       the desktop's name for paste and not Obelus's; a dialog
                       gets a context, not a fall-through; keys are rebound on
                       the keys page; modifiers are judged exactly, in one
-                      place (lib)
+                      place (lib); a layout is data, and the reasons stay
+                      beside the keys (shipped)
   obelus-buffer/    one open file: text, syntax, cursor, viewport
                     · an edit knows where it happened; do not read over an
                       edit; two modes, and two is enough (lib); a folded line

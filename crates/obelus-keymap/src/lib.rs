@@ -26,12 +26,12 @@
 //!   negotiable, and it is the one default a reader cannot move;
 //! * anything with two modifiers, which is the desktop's (`ctrl+alt`) or a
 //!   chord a terminal reports as one of its halves. Shift on a letter is not a
-//!   second modifier: it is the capital, and `ctrl+P` -- `ctrl+shift+p` -- may
-//!   be bound, because two editors' layouts are built on such chords. It works
-//!   on a terminal speaking the keyboard protocol; on the rest it arrives as
+//!   second modifier: it is the capital, and `ctrl+shift+p` may be bound,
+//!   because two editors' layouts are built on such chords. It works on a
+//!   terminal speaking the keyboard protocol; on the rest it arrives as
 //!   `ctrl+p`, which is why those layouts give each of them an alt chord as
-//!   well (`Keymap::laid_out`). `alt+P` is fine everywhere, because alt is
-//!   the escape prefix and really does carry the shifted letter;
+//!   well (`Keymap::laid_out`). `alt+shift+p` is fine everywhere, because alt
+//!   is the escape prefix and really does carry the shifted letter;
 //! * a function key with anything held, for the same reason.
 //!
 //! `ctrl+b` belongs to tmux, so Obelus does not ship it -- a reader outside
@@ -81,6 +81,8 @@ use obelus_command::Command;
 /// table and the caret draw the line in the same place because they ask the
 /// same function.
 pub use obelus_editing::{BINDABLE_MODIFIERS, modifiers_of};
+
+mod shipped;
 
 /// Whether control is drawn as command.
 ///
@@ -145,12 +147,11 @@ impl KeyChord {
     /// still something the file can say. An older file in the other case still
     /// reads: `parse` never minded, and that is what makes the change safe.
     ///
-    /// A letter is left exactly as it is, and that is not tidiness. **A
-    /// shifted letter is the capital** -- it is how a chord with shift on a
-    /// letter is normalised -- so `Ctrl+A` is `ctrl+shift+a` and nothing
-    /// else. Capitalising one here would name a different key on the
-    /// screen, and name it again in the file when the reader copied what
-    /// they saw.
+    /// A letter is written small, and shift is written as `Shift+`. A
+    /// shifted letter is *held* as the capital -- it is how a chord with
+    /// shift on a letter is normalised -- but what is written is read
+    /// without regard to case, so `Ctrl+A` and `ctrl+a` are one key and
+    /// `Ctrl+Shift+a` is the other.
     #[must_use]
     pub fn label_in(self, glyphs: bool) -> String {
         self.label_as(glyphs, false)
@@ -170,13 +171,23 @@ impl KeyChord {
             true => ("Cmd", obelus_icons::key::COMMAND),
             false => ("Ctrl", obelus_icons::key::CONTROL),
         };
+        // A shifted letter is held as the capital (`KeyChord::new`), and is
+        // written as shift and the small letter: what is written is read
+        // without regard to case, so `Ctrl+P` could not say it.
+        let (code, modifiers) = match self.code {
+            KeyCode::Char(character) if character.is_ascii_uppercase() => (
+                KeyCode::Char(character.to_ascii_lowercase()),
+                self.modifiers | KeyModifiers::SHIFT,
+            ),
+            code => (code, self.modifiers),
+        };
         let mut label = String::new();
         for (modifier, name, glyph) in [
             (KeyModifiers::CONTROL, control.0, control.1),
             (KeyModifiers::ALT, "Alt", obelus_icons::key::ALT),
             (KeyModifiers::SHIFT, "Shift", obelus_icons::key::SHIFT),
         ] {
-            if self.modifiers.contains(modifier) {
+            if modifiers.contains(modifier) {
                 if glyphs {
                     label.push(glyph);
                     label.push(' ');
@@ -187,7 +198,7 @@ impl KeyChord {
             }
         }
 
-        let named = match self.code {
+        let named = match code {
             KeyCode::Char(' ') => Some("Space"),
             KeyCode::Enter => Some("Enter"),
             KeyCode::Esc => Some("Esc"),
@@ -200,7 +211,7 @@ impl KeyChord {
             KeyCode::Tab => Some("Tab"),
             _ => None,
         };
-        match (named, self.code) {
+        match (named, code) {
             (Some(name), _) => label.push_str(name),
             // `F(1)` is the compiler's word for it rather than anybody's.
             (None, KeyCode::F(number)) => label.push_str(&format!("F{number}")),
@@ -300,17 +311,17 @@ impl KeyChord {
                 .and_then(|number| number.parse().ok())
             {
                 Some(number) => KeyCode::F(number),
-                // The character as it was written, not as it was matched
-                // on: a shifted letter *is* the capital -- that is how a
-                // chord with shift on a letter is normalised -- so reading
-                // the lowercased form back would turn `A` into `a`.
+                // A letter in either case is the letter: shift is said with
+                // `shift+`, the way `label_in` writes it, so `Ctrl+T` and
+                // `ctrl+t` are one key. Anything else is the character as it
+                // was written -- `?` is not `/`.
                 None => {
                     let mut characters = rest.chars();
                     let character = characters.next()?;
                     if characters.next().is_some() {
                         return None;
                     }
-                    KeyCode::Char(character)
+                    KeyCode::Char(character.to_ascii_lowercase())
                 }
             },
         };
@@ -403,6 +414,19 @@ impl Context {
     pub const fn has_global_keys(self) -> bool {
         matches!(self, Self::Normal | Self::Chat)
     }
+
+    /// The context a layout's file names, in the word it is written in there.
+    fn named(name: &str) -> Option<Self> {
+        Some(match name.to_ascii_lowercase().as_str() {
+            "always" => Self::Always,
+            "normal" => Self::Normal,
+            "documents" => Self::Documents,
+            "chat" => Self::Chat,
+            "terminal" => Self::Terminal,
+            "dialog" => Self::Dialog,
+            _ => return None,
+        })
+    }
 }
 
 /// One key bound to one command in one context.
@@ -471,57 +495,6 @@ impl Layout {
     }
 }
 
-/// Where [`Layout::Mnemonic`] puts what the function keys hold.
-///
-/// Control where a letter of the word was free -- `o` open, `e` the editor
-/// list JetBrains has there, `g` git, `n` the conversation a new one starts
-/// in, `f` find -- and alt for the rest, because control has no more letters
-/// that every terminal sends as themselves. `alt+.` for a definition is
-/// Emacs's, and `ctrl+u` the pull requests, on the one control letter left.
-/// In a terminal these are the shell's: unlike
-/// a function key, every one of them already means something there.
-///
-/// Not `alt+i` and `alt+o` for the symbols and the outline, which were the
-/// first letters to hand: a view that names one of these swaps to it from
-/// another, and the list of files keeps `alt+i` for its ignored files and
-/// the notes `alt+o` for going where a note points -- so from there they
-/// would have been a switch rather than a way out. `y` and `u` are the
-/// next letters of the two words that nothing has.
-const MNEMONIC: [(Command, KeyChord); 12] = [
-    (Command::FileOpen, mnemonic('o', KeyModifiers::CONTROL)),
-    (Command::DocumentList, mnemonic('e', KeyModifiers::CONTROL)),
-    (Command::FileChanged, mnemonic('g', KeyModifiers::CONTROL)),
-    (
-        Command::ConversationSelect,
-        mnemonic('n', KeyModifiers::CONTROL),
-    ),
-    (Command::SearchFile, mnemonic('f', KeyModifiers::CONTROL)),
-    (Command::SearchProject, mnemonic('/', KeyModifiers::ALT)),
-    (Command::SymbolOutline, mnemonic('u', KeyModifiers::ALT)),
-    (Command::SearchSymbols, mnemonic('y', KeyModifiers::ALT)),
-    (Command::HistoryFile, mnemonic('l', KeyModifiers::ALT)),
-    (Command::HistoryProject, mnemonic('g', KeyModifiers::ALT)),
-    (Command::SymbolDefinition, mnemonic('.', KeyModifiers::ALT)),
-    // On control, because it opens something to look at -- and `u`, the
-    // next letter of "pull" that nothing has: every control letter but it
-    // is taken, by a command, by tmux, or by the wire.
-    (
-        Command::PullRequestReview,
-        mnemonic('u', KeyModifiers::CONTROL),
-    ),
-];
-
-/// A chord of [`MNEMONIC`]'s, built where a `const` can be, and of the
-/// editors' layouts. A capital here is the shifted letter, which is what
-/// `KeyChord::new` folds shift into -- so it would leave every one of them as
-/// it is anyway.
-const fn mnemonic(character: char, modifiers: KeyModifiers) -> KeyChord {
-    KeyChord {
-        code: KeyCode::Char(character),
-        modifiers,
-    }
-}
-
 impl Keymap {
     /// The bindings Obelus ships with.
     ///
@@ -542,7 +515,8 @@ impl Keymap {
     /// `F9`-`F12` is the bank a view earns a key from, and git's: a file's
     /// history, a project's and a line's, which are one question at three
     /// widths -- and `F12`, the jump to a definition, which is the one jump
-    /// this whole program is for. Each is argued where it is bound.
+    /// this whole program is for. Each is argued where it is bound, in
+    /// `keymaps/classic.json`.
     ///
     /// **Control does something to the file in front of you**, on the
     /// letter of the word: `p` the palette, `w` close, `r` re-read, `d`
@@ -571,694 +545,21 @@ impl Keymap {
     /// and not again.
     #[must_use]
     pub fn new() -> Self {
-        Self {
-            bindings: vec![
-                // F1-F4: what to read. The three ways into a file, and the
-                // agent, which is the fourth thing a reader turns to.
-                //
-                // Reached from inside a view as well as from a file: a key
-                // that opens a view goes straight to it from another one --
-                // see `App::switch_view`. Which is why the card of every key
-                // is not `f1` any more, and has a key of its own:
-                // [`keys_card`].
-                Binding {
-                    command: Command::FileOpen,
-                    context: Context::Normal,
-                    chord: function(1),
-                },
-                Binding {
-                    command: Command::DocumentList,
-                    context: Context::Normal,
-                    chord: function(2),
-                },
-                Binding {
-                    command: Command::FileChanged,
-                    context: Context::Normal,
-                    chord: function(3),
-                },
-                // Which conversation, asked the same way from a file and
-                // from inside one, with a new one as the first answer.
-                // It opened the conversation outside one and the list
-                // inside, which made the list two presses away from
-                // anywhere but a conversation and a fresh conversation the
-                // only thing the key ever gave a reader in a file. A
-                // conversation falls back to the file's table, so this one
-                // binding is both.
-                Binding {
-                    command: Command::ConversationSelect,
-                    context: Context::Normal,
-                    chord: function(4),
-                },
-                // F5-F8: finding, as a square. Across: the text, then the
-                // names a server knows. Down: this file, then every file.
-                // One view holds all four, because the reader's question is
-                // the same and only its radius changed -- which is why the
-                // tabs carry the query between them.
-                Binding {
-                    command: Command::SearchFile,
-                    context: Context::Normal,
-                    chord: function(5),
-                },
-                Binding {
-                    command: Command::SearchProject,
-                    context: Context::Normal,
-                    chord: function(6),
-                },
-                Binding {
-                    command: Command::SymbolOutline,
-                    context: Context::Normal,
-                    chord: function(7),
-                },
-                Binding {
-                    command: Command::SearchSymbols,
-                    context: Context::Normal,
-                    chord: function(8),
-                },
-                // The third bank is git's. A file's history and a
-                // project's are one view at two radii, the way the finding
-                // keys are one question at four: the key lands on the tab
-                // it names and the other is a left or a right away.
-                Binding {
-                    command: Command::HistoryFile,
-                    context: Context::Normal,
-                    chord: function(9),
-                },
-                Binding {
-                    command: Command::HistoryProject,
-                    context: Context::Normal,
-                    chord: function(10),
-                },
-                // `f11`, which is not one of those two: it is the one jump
-                // this whole program is for. "Join the semantic graph to the
-                // git timeline -- jump to a definition from inside a diff" is
-                // the first paragraph Obelus was written under, and the jump
-                // had no key at all while every editor a reader arrives from
-                // puts it on `f12`. It was there, until `f12` went to the
-                // pull requests; it is here because the key that held it,
-                // the commit behind one line, was a command nobody used and
-                // went.
-                //
-                // The one exception to "the symbol questions live in the
-                // menu" -- see the note over them in `command`. Its
-                // neighbours in every other editor cannot follow it here:
-                // `shift+f12` and `ctrl+f12` are refused by `why_not`,
-                // because a function key with something held is two keys on
-                // the next terminal. A reader who learns this one and
-                // reaches for those finds the menu, which is where they
-                // were all along.
-                Binding {
-                    command: Command::SymbolDefinition,
-                    context: Context::Normal,
-                    chord: function(11),
-                },
-                // And `f12` for the repository's pull requests and issues:
-                // somewhere to look, like everything on a function key, and
-                // the history's neighbour -- what is on its way into the
-                // history beside what is in it.
-                Binding {
-                    command: Command::PullRequestReview,
-                    context: Context::Normal,
-                    chord: function(12),
-                },
-                // `alt+t` for todo, on the letter of the word like the rest
-                // of the alt family, and asking the question alt asks: a
-                // note is about the line under the cursor.
-                Binding {
-                    command: Command::TodoAdd,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('t'), KeyModifiers::ALT),
-                },
-                // And `ctrl+t` for the notes themselves, from a file or from
-                // a conversation -- which falls back to this table, and
-                // from one about a note the list opens standing on it. It
-                // was `alt+t` there and nothing in a file, so one key named
-                // two commands and the palette offered `todo` on a key that
-                // did something else wherever the palette had been opened.
-                Binding {
-                    command: Command::TodoOpen,
-                    context: Context::Normal,
-                    chord: control('t'),
-                },
-                // Control, on the letter of the word. `ctrl+p` for the
-                // palette; `ctrl+w` is "close this" in every browser and
-                // most editors, and in a terminal it is also the shell's
-                // "delete the last word" -- which a terminal of Obelus's
-                // own gives up for it, below.
-                Binding {
-                    command: Command::CommandPalette,
-                    context: Context::Normal,
-                    chord: control('p'),
-                },
-                Binding {
-                    command: Command::DocumentClose,
-                    context: Context::Normal,
-                    chord: control('w'),
-                },
-                // And the same key in the list of what is open, where it
-                // closes the one on the row. One key that means "close
-                // this" everywhere beats a second key that works in one
-                // place -- and the list is a dialog, so it has to be bound
-                // in it to reach it.
-                Binding {
-                    command: Command::DocumentClose,
-                    context: Context::Documents,
-                    chord: control('w'),
-                },
-                // What a terminal keeps for Obelus while its program runs,
-                // and nothing else: the palette, which is how everything
-                // else is reached from in there; paste, under the name a
-                // desktop sends a terminal for it; and closing it, on the
-                // key that closes everything else in Obelus. `ctrl+w` is a
-                // shell's word rubbed out as well, and it was given up for
-                // `ctrl+shift+w` once -- which made the one document whose
-                // close was a different key, and the one command Obelus
-                // named with shift. A word goes as well with `alt+backspace`.
-                // And leaving: `ctrl+q` is
-                // a shell's only as the flow control nobody has used since
-                // terminals were printers, and a key that leaves Obelus
-                // everywhere but in one kind of document is a key a reader
-                // cannot trust.
-                Binding {
-                    command: Command::CommandPalette,
-                    context: Context::Terminal,
-                    chord: control('p'),
-                },
-                Binding {
-                    command: Command::Quit,
-                    context: Context::Terminal,
-                    chord: control('q'),
-                },
-                Binding {
-                    command: Command::Paste,
-                    context: Context::Terminal,
-                    chord: KeyChord::new(KeyCode::Insert, KeyModifiers::SHIFT),
-                },
-                // And under the name it has everywhere else in Obelus, which
-                // is also the one a desktop sends a *window* for its paste:
-                // without it, the desktop's own paste in `obg` put a `^V` in
-                // front of the shell. Taken from the program for good --
-                // vim's block selection and a shell's literal next character
-                // -- which is what Windows Terminal and VS Code's terminal
-                // decided too.
-                Binding {
-                    command: Command::Paste,
-                    context: Context::Terminal,
-                    chord: control('v'),
-                },
-                // And copy under the same name. `ctrl+c` copies too, where
-                // something is held -- which is a question about the
-                // terminal rather than a binding, so it is asked there
-                // (`App::terminal_key`).
-                Binding {
-                    command: Command::SelectionCopy,
-                    context: Context::Terminal,
-                    chord: KeyChord::new(KeyCode::Insert, KeyModifiers::CONTROL),
-                },
-                Binding {
-                    command: Command::DocumentClose,
-                    context: Context::Terminal,
-                    chord: control('w'),
-                },
-                Binding {
-                    command: Command::FileSave,
-                    context: Context::Normal,
-                    chord: control('s'),
-                },
-                Binding {
-                    command: Command::FileReload,
-                    context: Context::Normal,
-                    chord: control('r'),
-                },
-                // `ctrl+d` for display: the file the way its format reads.
-                // It sat in the third bank of function keys until that bank
-                // was given to git, and on `ctrl+t` until the notes needed
-                // it, and it belongs to control anyway: control does
-                // something to the file in front of the reader, and a
-                // reading of the file is that rather than a thing opened to
-                // look at. Not `p`, which is the palette, and not `v`, which
-                // is the paste it was being kept for.
-                Binding {
-                    command: Command::PreviewToggle,
-                    context: Context::Normal,
-                    chord: control('d'),
-                },
-                // `ctrl+l` for a line. Free in a full-screen program: the
-                // shell's `ctrl+l` clears a screen Obelus is drawing.
-                Binding {
-                    command: Command::GoLine,
-                    context: Context::Normal,
-                    chord: control('l'),
-                },
-                // Raw mode makes `ctrl+c` an input event rather than SIGINT,
-                // and it is the copy chord every terminal can report. A
-                // desktop's `super+c` can map to this later, but cannot be a
-                // portable default because many terminals never receive it.
-                Binding {
-                    command: Command::SelectionCopy,
-                    context: Context::Normal,
-                    chord: control('c'),
-                },
-                // `ctrl+a` for all of it, as in every program with a
-                // selection. It is also screen's prefix and tmux's other
-                // one: a reader inside either of those has to rebind it,
-                // and the keys page is where.
-                // The four a reader arrives already knowing. `ctrl+v` was
-                // being kept for this one; `ctrl+y` is redo because
-                // `ctrl+shift+z` cannot be said here -- a control byte
-                // cannot carry the case of a letter, and the chord only
-                // reaches a terminal speaking the kitty protocol.
-                Binding {
-                    command: Command::SelectionCut,
-                    context: Context::Normal,
-                    chord: control('x'),
-                },
-                Binding {
-                    command: Command::Paste,
-                    context: Context::Normal,
-                    chord: control('v'),
-                },
-                // And again inside a dialog. These three are not about the
-                // file, they are about whatever has a caret in it -- and a
-                // list, the settings and a conversation all have a box a
-                // reader types into. Bound rather than left to fall
-                // through, because a dialog answers no global key at all.
-                Binding {
-                    command: Command::SelectionCopy,
-                    context: Context::Dialog,
-                    chord: control('c'),
-                },
-                Binding {
-                    command: Command::SelectionCut,
-                    context: Context::Dialog,
-                    chord: control('x'),
-                },
-                Binding {
-                    command: Command::Paste,
-                    context: Context::Dialog,
-                    chord: control('v'),
-                },
-                // And taking all of what is in the box, which is how a
-                // selection to copy or cut is made in one key.
-                Binding {
-                    command: Command::SelectionAll,
-                    context: Context::Dialog,
-                    chord: control('a'),
-                },
-                // And the same two under the names a desktop uses for
-                // them. Argued in `why_not`, which has to let them
-                // through: they are the chords omarchy's `super+c` and
-                // `super+v` turn into where the thing they are sent to
-                // looks like a terminal.
-                Binding {
-                    command: Command::SelectionCopy,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Insert, KeyModifiers::CONTROL),
-                },
-                Binding {
-                    command: Command::Paste,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Insert, KeyModifiers::SHIFT),
-                },
-                Binding {
-                    command: Command::SelectionCopy,
-                    context: Context::Dialog,
-                    chord: KeyChord::new(KeyCode::Insert, KeyModifiers::CONTROL),
-                },
-                Binding {
-                    command: Command::Paste,
-                    context: Context::Dialog,
-                    chord: KeyChord::new(KeyCode::Insert, KeyModifiers::SHIFT),
-                },
-                Binding {
-                    command: Command::Undo,
-                    context: Context::Normal,
-                    chord: control('z'),
-                },
-                Binding {
-                    command: Command::Redo,
-                    context: Context::Normal,
-                    chord: control('y'),
-                },
-                Binding {
-                    command: Command::SelectionAll,
-                    context: Context::Normal,
-                    chord: control('a'),
-                },
-                Binding {
-                    command: Command::Quit,
-                    context: Context::Always,
-                    chord: control('q'),
-                },
-                // And in a dialog, where almost nothing is bound, because
-                // the reason almost nothing is -- a global key reaching a
-                // dialog would open a second thing over it -- is the one
-                // reason this key cannot have: leaving opens nothing. It
-                // was already written down as the behaviour (`handle_key`
-                // says a layer lets `ctrl+q` fall through it) and was not
-                // the behaviour: a dialog's context never reaches what is
-                // bound everywhere, so the chord was not a command there at
-                // all and the key did nothing. `Context::Documents` falls
-                // back to this one, and a conversation to the file's, so
-                // this is the whole of what was missing.
-                Binding {
-                    command: Command::Quit,
-                    context: Context::Dialog,
-                    chord: control('q'),
-                },
-                // Alt: about the cursor. Enter on top of that is "open what
-                // I am on", so the menu of everything a server can say
-                // about the name under the caret is where the two meet.
-                //
-                // Not borrowed from an IDE, whatever the chord looks like:
-                // JetBrains' `alt+enter` is its intentions and quick fixes,
-                // which here is `alt+a` -- the server offering to *change*
-                // the file, not Obelus offering to go and look at it. A
-                // comment claiming the muscle memory would be claiming it
-                // for the wrong half.
-                //
-                // Alt is also the escape prefix, so it arrives from every
-                // terminal -- unlike `ctrl+enter`, which needs the keyboard
-                // protocol.
-                Binding {
-                    command: Command::SymbolMenu,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Enter, KeyModifiers::ALT),
-                },
-                // `alt+d` for the diff of this line: a question about the
-                // line under the cursor, asked with the first letter of the
-                // answer. Who wrote it is not here -- that is a setting,
-                // because it is on until the reader says otherwise.
-                Binding {
-                    command: Command::GitHunk,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('d'), KeyModifiers::ALT),
-                },
-                // `alt+f` for fold, on the letter of the word like the
-                // rest of this family. What it folds is whatever the
-                // cursor is inside, which is the question alt asks.
-                Binding {
-                    command: Command::Fold,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('f'), KeyModifiers::ALT),
-                },
-                // `alt+m` for match, which is what this is called
-                // everywhere. Not `%`: Obelus binds no bare keys, because
-                // the day it takes typed text is the day every one of them
-                // becomes a character.
-                Binding {
-                    command: Command::GoBracket,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('m'), KeyModifiers::ALT),
-                },
-                // `alt+n` and `alt+p` for the next and previous change,
-                // joining `alt+d` for the diff of this one: three keys about
-                // the same thing, on the letters of what they do.
-                //
-                // The arrows would read better and are spent better below:
-                // `alt+arrow` moving a line is the chord every editor with a
-                // mouse has taught, and stepping between changes has letters
-                // to fall back on where moving a line has none -- the rules
-                // refuse two modifiers, and an arrow may only be bound under
-                // `alt`.
-                Binding {
-                    command: Command::GitPrevious,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('p'), KeyModifiers::ALT),
-                },
-                Binding {
-                    command: Command::GitNext,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('n'), KeyModifiers::ALT),
-                },
-                // `alt+[` and `alt+]` for the previous and next problem.
-                //
-                // A second pair of previous-and-next keys, in a different
-                // idiom from the first, which is worth saying out loud. The
-                // letters are spoken for -- `alt+p` is the previous change
-                // and `alt+n` the next one -- and the bracket pair is what
-                // every editor with two of these reaches for second: Vim's
-                // unimpaired bindings, VS Code's `alt+[`/`alt+]` on the
-                // Mac. The alternative was giving the brackets to the
-                // changes and the letters to the problems, which moves a
-                // key readers already have for no gain.
-                //
-                // Not `f8` and `shift+f8`, which is where VS Code puts
-                // these: a function key here is bare or it is two keys on
-                // the next terminal, so only half of that pair can be had,
-                // and half a pair is worse than neither.
-                Binding {
-                    command: Command::SymbolTroublePrevious,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('['), KeyModifiers::ALT),
-                },
-                Binding {
-                    command: Command::SymbolTroubleNext,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char(']'), KeyModifiers::ALT),
-                },
-                // Not `ctrl+alt+arrow`, which GNOME and KDE take for
-                // switching workspaces: a key the desktop eats before the
-                // terminal sees it looks like a broken program.
-                Binding {
-                    command: Command::LineUp,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Up, KeyModifiers::ALT),
-                },
-                Binding {
-                    command: Command::LineDown,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Down, KeyModifiers::ALT),
-                },
-                // `alt+a` for the actions offered here, on the letter like
-                // the rest of this family.
-                //
-                // This is the one an IDE reader reaches for with a chord --
-                // JetBrains' `alt+enter`, VS Code's `ctrl+.` -- and it is on
-                // a letter anyway, because neither of those can be had here.
-                // `alt+enter` is spent above on a menu Obelus invented; and
-                // `ctrl+.` is not a key a terminal has a byte for, so it
-                // arrives only from the terminals speaking the keyboard
-                // protocol and is silence in the rest. The same reason
-                // `ctrl+shift+z` is not redo.
-                Binding {
-                    command: Command::CodeActions,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('a'), KeyModifiers::ALT),
-                },
-                // `alt+r` for rename, on the letter of the word like the
-                // rest of this family -- and the one key here that changes
-                // files the reader cannot see, which is why it asks first.
-                Binding {
-                    command: Command::SymbolRename,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('r'), KeyModifiers::ALT),
-                },
-                // `alt+h` for what this is -- hover, which is what every
-                // editor calls it and what the protocol calls it, on the
-                // letter of the word like the rest of this family.
-                Binding {
-                    command: Command::SymbolHover,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('h'), KeyModifiers::ALT),
-                },
-                // `alt+s` for signature: what the call the cursor is
-                // inside takes, on the letter of the word like the rest of
-                // this family. The way in for a reader who is *reading* a
-                // call rather than writing one -- every other way asks
-                // because a character was typed, and moving the caret into
-                // a call that is already written types nothing.
-                Binding {
-                    command: Command::SymbolSignature,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('s'), KeyModifiers::ALT),
-                },
-                // `alt+k` for keymap, and the one alt key not about the
-                // caret: it is the way back for a reader whose layout has
-                // moved every other key, so it is on a chord no layout
-                // moves -- control and the function keys are what they
-                // rearrange, and alt arrives on every terminal.
-                Binding {
-                    command: Command::KeymapSelect,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('k'), KeyModifiers::ALT),
-                },
-                // `alt+e` for error: what the server says is wrong with
-                // this file, on the letter like the rest of this family.
-                Binding {
-                    command: Command::SymbolTroubles,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('e'), KeyModifiers::ALT),
-                },
-                // `alt+w` for widen, joining the family that asks about
-                // whatever the caret is in: the first step is the word it
-                // is in, and the rest are what the grammar says holds it.
-                Binding {
-                    command: Command::SelectionWiden,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('w'), KeyModifiers::ALT),
-                },
-                // `alt+c` for comment, on the letter like the rest of this
-                // family -- and `ctrl+/`, which is what everyone else uses,
-                // for the terminals that can say it. Most send `ctrl+_` or a
-                // bare control byte for that chord and Obelus never hears
-                // it; the letter is the one that works everywhere.
-                Binding {
-                    command: Command::CommentToggle,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('c'), KeyModifiers::ALT),
-                },
-                Binding {
-                    command: Command::CommentToggle,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Char('/'), KeyModifiers::CONTROL),
-                },
-                // The one key that names itself, and the one binding
-                // outside the three families. `Insert` is what this does on
-                // every keyboard that has the key, it is bare because it is
-                // not a letter and cannot be typing, and a chord for it
-                // would be a chord nobody would look for.
-                Binding {
-                    command: Command::ReplaceToggle,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Insert, KeyModifiers::NONE),
-                },
-                // The browser's keys, for the browser's idea: a history of
-                // places, walked in both directions. vim's `ctrl+o` and
-                // `ctrl+i` cannot both be used -- `ctrl+i` *is* tab.
-                Binding {
-                    command: Command::GoBack,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Left, KeyModifiers::ALT),
-                },
-                Binding {
-                    command: Command::GoForward,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Right, KeyModifiers::ALT),
-                },
-                // Escape, which means "never mind" everywhere. It reaches
-                // the key table only when no picker and no prompt is open,
-                // because each of those takes it first -- so this is escape
-                // pressed at the file itself, and the only thing there to
-                // give up on is a selection.
-                Binding {
-                    command: Command::SelectionClear,
-                    context: Context::Normal,
-                    chord: KeyChord::new(KeyCode::Esc, KeyModifiers::NONE),
-                },
-            ],
-        }
+        Self::laid_out(Layout::Classic)
     }
 
-    /// The bindings a layout starts from.
+    /// The bindings a layout starts from, as its file in `keymaps/` says.
     ///
-    /// [`Layout::Mnemonic`] is [`Self::new`] with the twelve function keys
-    /// moved onto letters and nothing else touched, so everything argued
-    /// over the shipped table holds for both -- control, alt and the
-    /// palette are the same keys in each.
-    ///
-    /// The two editors' layouts are on control, like everything else in
-    /// the table, and have no chord of their own for Command: `obg` on a
-    /// Mac reports Command as control and draws control as `Cmd`
-    /// ([`draw_control_as_command`]), so the same table is Command there
-    /// and control everywhere else. A terminal on a Mac keeps Command for
-    /// itself -- `cmd+c`, `cmd+v`, `cmd+w`, `cmd+q` -- and on Linux and
-    /// Windows super is the desktop's, so it is never read as control.
-    ///
-    /// What moves is the twelve keys the function keys hold, and the
-    /// palette, which is where both editors have the key a reader opens
-    /// files with. Shift does name a command here, which nothing of
-    /// Obelus's own does: these are other editors' chords, borrowed whole
-    /// (`ctrl+shift+p`), and a control byte cannot carry the case of a
-    /// letter -- so each of them has an alt chord as well, which every
-    /// terminal can send. Without the keyboard protocol `ctrl+shift+p`
-    /// arrives as `ctrl+p`, which is the files rather than the palette:
-    /// the nearer of the two wrong answers, and the alt chord is the right
-    /// one. Where neither editor has a key for something -- the history,
-    /// the agent -- it goes where [`Layout::Mnemonic`] put it, if that is
-    /// free here.
+    /// The tables are data and live there, each binding with the reason for
+    /// it beside it: [`Layout::Mnemonic`] is [`Self::new`] with the twelve
+    /// function keys moved onto letters, and the two editors' layouts move
+    /// the same twelve and the palette onto those editors' keys -- on
+    /// control, which is Command in `obg` on a Mac
+    /// ([`draw_control_as_command`]), with an alt chord beside each one with
+    /// shift in it for a terminal that cannot send it.
     #[must_use]
     pub fn laid_out(layout: Layout) -> Self {
-        let mut keymap = Self::new();
-        let text_mate = match layout {
-            Layout::Classic => return keymap,
-            Layout::Mnemonic => {
-                for (command, chord) in MNEMONIC {
-                    keymap.rebind(command, Some(chord));
-                }
-                return keymap;
-            }
-            Layout::VsCode => false,
-            Layout::TextMate => true,
-        };
-        // Control, which is Command in `obg` on a Mac -- see above.
-        let primary = KeyModifiers::CONTROL;
-        let alt = KeyModifiers::ALT;
-        let on = mnemonic;
-        // The first chord of each is the one shown; the rest are the ones a
-        // terminal without the keyboard protocol can send.
-        let moved: [(Command, &[KeyChord]); 14] = [
-            (
-                Command::FileOpen,
-                &[on(if text_mate { 't' } else { 'p' }, primary)],
-            ),
-            (Command::CommandPalette, &[on('P', primary), on('P', alt)]),
-            (Command::DocumentList, &[on('e', primary)]),
-            (Command::FileChanged, &[on('G', primary), on('g', alt)]),
-            (Command::ConversationSelect, &[on('N', alt)]),
-            (Command::SearchFile, &[on('f', primary)]),
-            (Command::SearchProject, &[on('F', primary), on('/', alt)]),
-            (
-                Command::SymbolOutline,
-                &[on(if text_mate { 'T' } else { 'O' }, primary), on('u', alt)],
-            ),
-            // VS Code's go-to-symbol-in-workspace. TextMate has `cmd+t` for
-            // the files, so the symbols go where the mnemonic layout has
-            // them.
-            (
-                Command::SearchSymbols,
-                &[match text_mate {
-                    true => on('y', alt),
-                    false => on('t', primary),
-                }],
-            ),
-            (Command::HistoryFile, &[on('l', alt)]),
-            (Command::HistoryProject, &[on('L', alt)]),
-            (Command::SymbolDefinition, &[on('.', alt)]),
-            (Command::PullRequestReview, &[on('u', primary)]),
-            // Off `ctrl+t`, which both editors spend on something else, and
-            // beside `alt+t`, which writes a note rather than reading them.
-            (Command::TodoOpen, &[on('T', alt)]),
-        ];
-        // Where each was bound, asked of the table before any of them moves:
-        // one moving onto another's old key would otherwise take that
-        // context away from it -- the files on `ctrl+p` took the palette out
-        // of the file it is in, and left it the terminal's.
-        let contexts: Vec<Vec<Context>> = moved
-            .iter()
-            .map(|(command, _)| {
-                let mut contexts = Vec::new();
-                for binding in &keymap.bindings {
-                    if binding.command == *command && !contexts.contains(&binding.context) {
-                        contexts.push(binding.context);
-                    }
-                }
-                contexts
-            })
-            .collect();
-        keymap
-            .bindings
-            .retain(|binding| !moved.iter().any(|(command, _)| *command == binding.command));
-        for ((command, chords), contexts) in moved.iter().zip(&contexts) {
-            for context in contexts {
-                for chord in *chords {
-                    keymap.put(*command, *context, *chord);
-                }
-            }
-        }
-        // Redo keeps `ctrl+y`, which every terminal can send, and gains the
-        // chord both editors have it on.
-        keymap.put(Command::Redo, Context::Normal, on('Z', primary));
-        keymap
+        Self::from_bindings(shipped::table(layout).to_vec())
     }
 
     /// Binds a chord in one context, taking it off whatever had it there.

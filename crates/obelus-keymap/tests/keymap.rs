@@ -171,20 +171,22 @@ fn a_modifier_obelus_does_not_know_disqualifies_the_key() {
 /// because `Ctrl+End` drawn as two pictures was a chord nobody could read.
 ///
 /// A key that is a word is written the way keys are written everywhere;
-/// a letter is left alone, because a shifted letter *is* the capital.
+/// a letter is written small, with `Shift+` where it was held, because
+/// what is written is read without regard to case.
 ///
 /// Broken deliberately by putting the `End` and `F10` glyphs back: the key
-/// is a picture again and the two `label_in(true)` below are not words.
+/// is a picture again and the two `label_in(true)` below are not words. And
+/// by writing the capital rather than `Shift+` and the small letter, which
+/// failed on `Ctrl+Shift+f`.
 #[test]
 fn a_chord_is_written_with_glyphs_or_spelled_out() {
     let control_f = control('f');
     assert_eq!(control_f.label_in(false), "Ctrl+f");
-    // The letter is the reader's, not Obelus's to tidy: the capital is
-    // how a chord with shift on a letter is written, so `Ctrl+F` would be
-    // a different key on the screen and a different key in the file.
+    // The capital is how shift on a letter is held, not how it is
+    // written: `Ctrl+F` reads back as `Ctrl+f`, so the shift is said.
     assert_eq!(
         KeyChord::new(KeyCode::Char('F'), KeyModifiers::CONTROL).label_in(false),
-        "Ctrl+F"
+        "Ctrl+Shift+f"
     );
     assert_eq!(
         control_f.label_in(true),
@@ -273,6 +275,7 @@ fn a_chord_survives_being_written_down() {
         KeyChord::new(KeyCode::Char('a'), KeyModifiers::ALT),
         KeyChord::new(KeyCode::Enter, KeyModifiers::ALT),
         KeyChord::new(KeyCode::Char('A'), KeyModifiers::SHIFT),
+        KeyChord::new(KeyCode::Char('t'), KeyModifiers::ALT | KeyModifiers::SHIFT),
         KeyChord::new(KeyCode::PageDown, KeyModifiers::NONE),
         KeyChord::new(KeyCode::F(7), KeyModifiers::CONTROL),
         KeyChord::new(KeyCode::Up, KeyModifiers::NONE),
@@ -285,12 +288,23 @@ fn a_chord_survives_being_written_down() {
             "{written:?} did not read back as itself"
         );
     }
-    // And what a reader is likely to type by hand.
-    assert_eq!(
-        KeyChord::parse("Ctrl+P"),
-        Some(KeyChord::new(KeyCode::Char('P'), KeyModifiers::CONTROL)),
-        "a chord has to be readable however it is capitalised"
+    // And what a reader is likely to type by hand. Case is not a key:
+    // shift is said with `shift+`, which is how it is written.
+    for text in ["Ctrl+P", "CTRL+p", "ctrl+p"] {
+        assert_eq!(
+            KeyChord::parse(text),
+            Some(KeyChord::new(KeyCode::Char('p'), KeyModifiers::CONTROL)),
+            "{text}: a chord has to be readable however it is capitalised"
+        );
+    }
+    let shifted = KeyChord::new(
+        KeyCode::Char('p'),
+        KeyModifiers::CONTROL | KeyModifiers::SHIFT,
     );
+    assert_eq!(shifted.label_in(false), "Ctrl+Shift+p");
+    for text in ["ctrl+shift+p", "Ctrl+Shift+P", "SHIFT+CTRL+p"] {
+        assert_eq!(KeyChord::parse(text), Some(shifted), "{text}");
+    }
     assert_eq!(
         KeyChord::parse("alt+left"),
         Some(KeyChord::new(KeyCode::Left, KeyModifiers::ALT))
@@ -593,8 +607,7 @@ fn no_layout_loses_a_command_or_doubles_a_key() {
                 keymap
                     .bindings()
                     .iter()
-                    .any(|kept| kept.command == binding.command
-                        && kept.context == binding.context),
+                    .any(|kept| kept.command == binding.command && kept.context == binding.context),
                 "{layout:?} lost {} in {:?}",
                 binding.command.name(),
                 binding.context
@@ -770,7 +783,11 @@ fn one_more_modifier_is_another_key_in_every_layout() {
             if (modifiers - KeyModifiers::SHIFT).is_empty() {
                 continue;
             }
-            for extra in [KeyModifiers::CONTROL, KeyModifiers::ALT, KeyModifiers::SUPER] {
+            for extra in [
+                KeyModifiers::CONTROL,
+                KeyModifiers::ALT,
+                KeyModifiers::SUPER,
+            ] {
                 if modifiers.contains(extra) {
                     continue;
                 }
@@ -829,17 +846,17 @@ fn a_readers_keys_survive_a_change_of_layout() {
 /// or beside it.
 ///
 /// Broken deliberately by reading `cmd+` as `SUPER` in `KeyChord::parse`
-/// (the palette's `Cmd+P` read as another key), and by masking `SUPER` off
-/// in `KeyChord::from_event` (`super+ctrl+q` left).
+/// (the palette's `Cmd+Shift+p` read as another key), and by masking `SUPER`
+/// off in `KeyChord::from_event` (`super+ctrl+q` left).
 #[test]
 fn command_is_control_in_the_editors_layouts_and_super_never_is() {
     let palette = KeyChord::new(
         KeyCode::Char('p'),
         KeyModifiers::CONTROL | KeyModifiers::SHIFT,
     );
-    assert_eq!(palette.label_as(false, true), "Cmd+P");
-    assert_eq!(KeyChord::parse("Cmd+P"), Some(palette));
+    assert_eq!(palette.label_as(false, true), "Cmd+Shift+p");
     assert_eq!(KeyChord::parse("Cmd+Shift+p"), Some(palette));
+    assert_eq!(KeyChord::parse("cmd+shift+P"), Some(palette));
     for layout in [Layout::VsCode, Layout::TextMate] {
         let keymap = Keymap::laid_out(layout);
         assert_eq!(keymap.chord_for(Command::CommandPalette), Some(palette));
