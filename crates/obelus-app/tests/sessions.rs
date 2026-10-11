@@ -380,13 +380,13 @@ fn interrupting_one_conversation_does_not_swallow_the_others_answer() {
     );
 }
 
-/// What Obelus has to keep, and what it does not.
+/// What the table keeps, and what it does not.
 ///
-/// The agent keeps every word: `session/load` replays it, so Obelus keeps
-/// none. What Obelus keeps is the one thing the agent cannot know, which is
-/// which of its conversations is about which of this tree's notes -- and
-/// the name the agent gave that conversation, because that is what a list
-/// of open documents calls it and a replay is not obliged to send it again.
+/// The page is kept beside it, a file of its own per conversation. What the
+/// table keeps is the one thing the agent cannot know, which is which of
+/// its conversations is about which of this tree's notes -- and the name
+/// the agent gave that conversation, because that is what a list of open
+/// documents calls it and a replay is not obliged to send it again.
 #[test]
 fn what_is_remembered_is_the_name_and_nothing_that_was_said() {
     use obelus_agent::{acp::sessions, chats::ChatId};
@@ -462,4 +462,94 @@ fn what_is_remembered_is_the_name_and_nothing_that_was_said() {
             .is_none(),
         "a conversation outlived the note it was about"
     );
+}
+
+/// A conversation's page goes when its row does, whichever way the row went.
+///
+/// Pages are kept beside the table, and the rows go in four places -- a
+/// note deleted, a tree removed, a conversation forgotten, one the agent no
+/// longer has. So the pages are cleared against the table each time it is
+/// written, rather than by each of those remembering to.
+///
+/// Broken deliberately by taking `forget_pages_nobody_names` out of
+/// `sessions::change`: the page of the conversation whose note went was
+/// still there.
+#[test]
+fn a_page_goes_when_its_conversation_does() {
+    use obelus_agent::{acp::sessions, chats::ChatId};
+    use obelus_todo::NoteId;
+
+    let scratch = support::Scratch::new("sessions-pages");
+    let root = scratch.path();
+    let kept = NoteId::read("ABCDEFGH").expect("a name");
+    let gone = NoteId::read("JKMNPQRS").expect("a name");
+    let row = |session: &str| sessions::Kept {
+        session: session.to_string(),
+        title: None,
+        told: None,
+        introduced: false,
+        last: None,
+    };
+    sessions::change(root, 0, Some(&[kept.clone(), gone.clone()]), |table| {
+        table.put(&ChatId::Note(kept.clone()), "fake", root, row("s-kept"));
+        table.put(&ChatId::Note(gone.clone()), "fake", root, row("s-gone"));
+    });
+    sessions::keep_page(root, "s-kept", "{}");
+    sessions::keep_page(root, "s-gone", "{}");
+    assert!(
+        sessions::kept_page(root, "s-gone").is_some(),
+        "nothing was kept, so this proves nothing"
+    );
+
+    // The second note has gone from the file, and its conversation goes
+    // from the table on the next write.
+    sessions::change(root, 0, Some(std::slice::from_ref(&kept)), |_| {});
+
+    assert!(
+        sessions::kept_page(root, "s-gone").is_none(),
+        "a page outlived the conversation it was the page of"
+    );
+    assert!(
+        sessions::kept_page(root, "s-kept").is_some(),
+        "the page of a conversation still remembered went with the other"
+    );
+}
+
+/// A page half-written by an Obelus that went in the middle is cleared
+/// once it is old enough that nobody is still writing it -- and one being
+/// written now is left alone.
+///
+/// Broken deliberately by leaving every `.writing.` name alone, as the
+/// sweep first did: the abandoned one stayed for ever.
+#[test]
+fn a_page_left_half_written_is_cleared() {
+    use obelus_agent::acp::sessions;
+
+    let scratch = support::Scratch::new("sessions-half-written");
+    let root = scratch.path();
+    sessions::change(root, 0, Some(&[]), |_| {});
+    let page = sessions::page(root, "s-1").expect("somewhere to keep it");
+    let directory = page.parent().expect("a directory");
+    std::fs::create_dir_all(directory).expect("the directory");
+    let abandoned = directory.join("s-1.json.writing.1");
+    let underway = directory.join("s-2.json.writing.2");
+    std::fs::write(&abandoned, "{").expect("the abandoned one");
+    std::fs::write(&underway, "{").expect("the one underway");
+    std::fs::File::options()
+        .write(true)
+        .open(&abandoned)
+        .and_then(|file| {
+            file.set_modified(
+                std::time::SystemTime::now() - std::time::Duration::from_secs(2 * 60 * 60),
+            )
+        })
+        .expect("making it old");
+
+    sessions::change(root, 0, Some(&[]), |_| {});
+
+    assert!(
+        !abandoned.exists(),
+        "a page left half-written two hours ago is still there"
+    );
+    assert!(underway.exists(), "a page being written now was taken away");
 }

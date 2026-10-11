@@ -154,6 +154,36 @@ pub struct Conversation {
     /// from "no session yet" because two conversations opening at once would
     /// otherwise be told apart by nothing, and could take each other's.
     pub asked_for: Option<acp::SessionId>,
+    /// Whether the page was put back from Obelus's own record of it when
+    /// the session was asked for.
+    ///
+    /// Then what the agent replays while it takes the conversation up is
+    /// the same conversation a second time, in its own words, and is not
+    /// drawn (`App::is_a_replay_nobody_wants`). Asked again each time a
+    /// session is: a conversation taken up after the agent died under it
+    /// has its page already, whether or not one was ever kept.
+    pub own_page: bool,
+    /// Which session the page on screen is the page of, which is the name
+    /// it is kept under.
+    ///
+    /// Not [`Self::session`], which says who is listening now. The two part
+    /// company when the agent dies -- the session goes and the page, with
+    /// the agent's last turn on it, is still that session's -- and when
+    /// another agent takes over, when the page is still the first agent's
+    /// until the second's is asked for. Kept under whatever is listening,
+    /// that page was written over another conversation's.
+    pub page_of: Option<acp::SessionId>,
+    /// Where on the page what was said to the session there is now begins.
+    ///
+    /// Zero for a conversation whose page is its session's from the top.
+    /// Moved to the end of the page wherever the page outlives its session
+    /// -- the agent forgot it, died, or is another agent now -- so that a
+    /// fresh session is not taken for one something was said in because
+    /// the page above it has words on it. It was: the fresh session was
+    /// written down at once, never let go, and taken up on the next start
+    /// by an agent that keeps no session nobody talked in -- which said so,
+    /// and Obelus opened another, every start.
+    pub said_from: usize,
     /// Whether it has asked for a fresh one and not been answered.
     ///
     /// The other half of [`Self::asked_for`], which says the same thing
@@ -232,8 +262,9 @@ pub struct Conversation {
     /// says: an agent told to work in a worktree of its own may not, and
     /// one that changes the reader's own checkout is the one most worth
     /// seeing. `None` until it has changed something, which is when there
-    /// starts to be a branch to speak of. A session taken up again replays
-    /// its calls, so this comes back with them and is written down nowhere.
+    /// starts to be a branch to speak of. A session taken up again brings
+    /// its calls back -- on the page Obelus kept, or in what the agent
+    /// replays -- so this comes back with them and is written down nowhere.
     ///
     /// The tree is kept beside the branch so that the branch can be asked
     /// again when the repository moves, the way the status row's is. What
@@ -336,6 +367,19 @@ pub struct Conversation {
 }
 
 impl Conversation {
+    /// Whether anything was said to the session there is now, which is
+    /// what makes it worth writing down and coming back to.
+    #[must_use]
+    pub fn said_in_this_session(&self) -> bool {
+        self.chat.anything_said_since(self.said_from)
+    }
+
+    /// Says that the page has outlived its session: from here on, only
+    /// what is said next is said to the one after it.
+    pub fn page_outlived_its_session(&mut self) {
+        self.said_from = self.chat.how_many_said();
+    }
+
     /// What claims it, which is also what names it wherever it is written
     /// down.
     ///
