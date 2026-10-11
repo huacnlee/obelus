@@ -45,25 +45,25 @@ struct Arguments {
 
 /// What `ob` can do without opening anything.
 ///
-/// A word that is also a path: `ob keys` is this, and a file called `keys`
-/// is `ob ./keys` or `ob -- keys`, which is how every program with
+/// A word that is also a path: `ob keymap` is this, and a file called `keymap`
+/// is `ob ./keymap` or `ob -- keymap`, which is how every program with
 /// subcommands tells the two apart.
 #[derive(Subcommand)]
 enum Management {
     /// Say which keys Obelus starts from, or choose them.
-    Keys {
+    Keymap {
         #[command(subcommand)]
-        choose: Option<Keys>,
+        choose: Option<Keymap>,
     },
 }
 
-/// What `keys` can be asked to do besides saying.
+/// What `keymap` can be asked to do besides saying.
 #[derive(Subcommand)]
-enum Keys {
+enum Keymap {
     /// Choose the keys every Obelus starts from, keeping your own.
     Set {
         /// The layout.
-        #[arg(value_parser = clap::builder::PossibleValuesParser::new(startup::keys::PRESETS.iter().copied()))]
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(startup::keymap::PRESETS.iter().copied()))]
         layout: String,
     },
 }
@@ -72,9 +72,11 @@ fn main() -> Result<ExitCode> {
     let arguments = Arguments::parse();
     // Before the log and everything else: it opens nothing, so it has
     // nothing to say there.
-    if let Some(Management::Keys { choose }) = &arguments.command {
-        let layout = choose.as_ref().map(|Keys::Set { layout }| layout.as_str());
-        startup::keys::run("ob", layout)?;
+    if let Some(Management::Keymap { choose }) = &arguments.command {
+        let layout = choose
+            .as_ref()
+            .map(|Keymap::Set { layout }| layout.as_str());
+        startup::keymap::run("ob", layout)?;
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -289,10 +291,10 @@ fn enable_mouse() -> bool {
 
 #[cfg(test)]
 mod tests {
-    /// `keys` is the subcommand, `keys set` takes only a layout's word,
-    /// and a file called `keys` can still be opened.
+    /// `keymap` is the subcommand, `keymap set` takes only a layout's word,
+    /// and a file called `keymap` can still be opened.
     ///
-    /// Broken deliberately by renaming the subcommand (`keys set vscode`
+    /// Broken deliberately by renaming the subcommand (`keymap set vscode`
     /// became three paths), and by taking the value parser off `layout`
     /// (`lazyvim` was taken, to be refused only once the file was read).
     #[test]
@@ -301,31 +303,31 @@ mod tests {
         let parse = |words: &[&str]| {
             super::Arguments::try_parse_from(std::iter::once("ob").chain(words.iter().copied()))
         };
-        let chosen = parse(&["keys", "set", "vscode"]).expect("choosing");
+        let chosen = parse(&["keymap", "set", "vscode"]).expect("choosing");
         assert!(chosen.paths.is_empty());
         assert!(matches!(
             chosen.command,
-            Some(super::Management::Keys {
-                choose: Some(super::Keys::Set { ref layout }),
+            Some(super::Management::Keymap {
+                choose: Some(super::Keymap::Set { ref layout }),
             }) if layout == "vscode"
         ));
-        for word in obelus_app::startup::keys::PRESETS {
-            assert!(parse(&["keys", "set", word]).is_ok(), "{word}");
+        for word in obelus_app::startup::keymap::PRESETS {
+            assert!(parse(&["keymap", "set", word]).is_ok(), "{word}");
         }
-        let asked = parse(&["keys"]).expect("asking");
+        let asked = parse(&["keymap"]).expect("asking");
         assert!(matches!(
             asked.command,
-            Some(super::Management::Keys { choose: None })
+            Some(super::Management::Keymap { choose: None })
         ));
-        assert!(parse(&["keys", "set", "lazyvim"]).is_err());
-        assert!(parse(&["keys", "set"]).is_err());
-        for path in ["./keys", "main.rs"] {
+        assert!(parse(&["keymap", "set", "lazyvim"]).is_err());
+        assert!(parse(&["keymap", "set"]).is_err());
+        for path in ["./keymap", "main.rs"] {
             let opening = parse(&[path]).expect("a path");
             assert!(opening.command.is_none());
             assert_eq!(opening.paths, [std::path::PathBuf::from(path)]);
         }
-        let escaped = parse(&["--", "keys"]).expect("a file called keys");
+        let escaped = parse(&["--", "keymap"]).expect("a file called keymap");
         assert!(escaped.command.is_none());
-        assert_eq!(escaped.paths, [std::path::PathBuf::from("keys")]);
+        assert_eq!(escaped.paths, [std::path::PathBuf::from("keymap")]);
     }
 }

@@ -78,24 +78,24 @@ struct Arguments {
 /// What `obg` can do without opening anything: what `ob` can, so either
 /// name answers the same question.
 ///
-/// A word that is also a path: `obg keys` is this, and a file called
-/// `keys` is `obg ./keys` or `obg -- keys`.
+/// A word that is also a path: `obg keymap` is this, and a file called
+/// `keymap` is `obg ./keymap` or `obg -- keymap`.
 #[derive(Subcommand)]
 enum Management {
     /// Say which keys Obelus starts from, or choose them.
-    Keys {
+    Keymap {
         #[command(subcommand)]
-        choose: Option<Keys>,
+        choose: Option<Keymap>,
     },
 }
 
-/// What `keys` can be asked to do besides saying.
+/// What `keymap` can be asked to do besides saying.
 #[derive(Subcommand)]
-enum Keys {
+enum Keymap {
     /// Choose the keys every Obelus starts from, keeping your own.
     Set {
         /// The layout.
-        #[arg(value_parser = clap::builder::PossibleValuesParser::new(startup::keys::PRESETS.iter().copied()))]
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(startup::keymap::PRESETS.iter().copied()))]
         layout: String,
     },
 }
@@ -107,9 +107,11 @@ fn main() -> Result<()> {
     let arguments = Arguments::parse();
     // Before the log and the window: it opens nothing, so it has nothing to
     // say in either, and what it says goes to the console taken above.
-    if let Some(Management::Keys { choose }) = &arguments.command {
-        let layout = choose.as_ref().map(|Keys::Set { layout }| layout.as_str());
-        return startup::keys::run("obg", layout);
+    if let Some(Management::Keymap { choose }) = &arguments.command {
+        let layout = choose
+            .as_ref()
+            .map(|Keymap::Set { layout }| layout.as_str());
+        return startup::keymap::run("obg", layout);
     }
     // Before anything else starts a thread, because changing the
     // environment while another thread reads it is undefined. And before
@@ -258,7 +260,7 @@ mod tests {
         assert!(shown("theme"));
     }
 
-    /// `obg keys` is what `ob keys` is, and a file called `keys` still
+    /// `obg keymap` is what `ob keymap` is, and a file called `keymap` still
     /// opens.
     ///
     /// Broken deliberately by taking the value parser off `layout`:
@@ -270,14 +272,14 @@ mod tests {
             super::Arguments::try_parse_from(std::iter::once("obg").chain(words.iter().copied()))
         };
         assert!(matches!(
-            parse(&["keys", "set", "textmate"]).expect("choosing").command,
-            Some(super::Management::Keys {
-                choose: Some(super::Keys::Set { ref layout }),
+            parse(&["keymap", "set", "textmate"]).expect("choosing").command,
+            Some(super::Management::Keymap {
+                choose: Some(super::Keymap::Set { ref layout }),
             }) if layout == "textmate"
         ));
-        assert!(parse(&["keys", "set", "lazyvim"]).is_err());
-        let escaped = parse(&["--", "keys"]).expect("a file called keys");
+        assert!(parse(&["keymap", "set", "lazyvim"]).is_err());
+        let escaped = parse(&["--", "keymap"]).expect("a file called keymap");
         assert!(escaped.command.is_none());
-        assert_eq!(escaped.paths, [std::path::PathBuf::from("keys")]);
+        assert_eq!(escaped.paths, [std::path::PathBuf::from("keymap")]);
     }
 }

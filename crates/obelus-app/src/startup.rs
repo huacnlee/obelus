@@ -19,7 +19,7 @@ use obelus_buffer::Buffer;
 
 use crate::app::{self, App};
 
-pub mod keys;
+pub mod keymap;
 
 /// Opens what the command line named, and builds the application round it.
 ///

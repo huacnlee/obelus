@@ -149,8 +149,8 @@ switches between them, and your own `[keys]` lines are kept on top of
 whichever you pick. From a shell:
 
 ```
-ob keys              # which layout, and the others
-ob keys set vscode   # choose one without opening anything
+ob keymap              # which layout, and the others
+ob keymap set vscode   # choose one without opening anything
 ```
 
 Every key, and each layout's, is in

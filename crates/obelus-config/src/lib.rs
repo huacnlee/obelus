@@ -2354,7 +2354,7 @@ pub fn project_path_for(root: &Path) -> PathBuf {
 
 /// Chooses the layout the reader's keys start from, in their own settings.
 ///
-/// For `ob keys set` and a first start's question, which have no settings
+/// For `ob keymap set` and a first start's question, which have no settings
 /// of their own to save: what is in the file *now* is read and the one line
 /// changed, so another window's changes since this one started are not
 /// written back over. Which narrows the window two writers have and does

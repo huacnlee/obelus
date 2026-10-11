@@ -1,4 +1,4 @@
-//! `ob keys` and `obg keys`: which keys Obelus starts from, asked and
+//! `ob keymap` and `obg keymap`: which keys Obelus starts from, asked and
 //! chosen without opening anything.
 //!
 //! Before either front end takes the screen, and said on stderr: stdout is
@@ -9,7 +9,7 @@ use std::{io::Write, path::Path};
 
 use anyhow::{Context as _, Result};
 
-/// The words `keys set` takes, which are the settings file's own.
+/// The words `keymap set` takes, which are the settings file's own.
 pub const PRESETS: &[&str] = obelus_config::KEY_LAYOUTS;
 
 /// Says which layout the reader's keys start from, or chooses one, in the
@@ -62,7 +62,7 @@ pub fn run_at(path: &Path, program: &str, word: Option<&str>, said: &mut impl Wr
             )?;
         }
         writeln!(said)?;
-        writeln!(said, "Choose one with {program} keys set <layout>")?;
+        writeln!(said, "Choose one with {program} keymap set <layout>")?;
     }
     Ok(())
 }
@@ -113,7 +113,7 @@ mod tests {
         assert!(said.contains("\n* vscode    VS Code: "), "{said}");
         assert!(said.contains("\n  obelus    Obelus: "), "{said}");
         assert!(said.contains("\n  textmate  TextMate: "), "{said}");
-        assert!(said.contains("obg keys set <layout>"), "{said}");
+        assert!(said.contains("obg keymap set <layout>"), "{said}");
         let _ = std::fs::remove_dir_all(&directory);
     }
 

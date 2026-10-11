@@ -26,8 +26,8 @@ Obelus 是贴合一个人工作习惯、内置 agent 的编辑器；不是追求
 | `crates/obelus-config/src/lib.rs` | 四种预设、首次启动判定、保存预设 helper、显式保存 `obelus` | 配置测试和故意破坏验证已执行 |
 | `crates/obelus-app/src/startup.rs` | 导出 `pub mod keys` | 未整体编译验证 |
 | `crates/obelus-app/src/startup/keys.rs` | 新文件，共享 CLI 查询和切换逻辑，输出 stderr | 未测试 |
-| `crates/obelus-cli/src/main.rs` | `ob keys` / `ob keys set <preset>` | 未编译、未测试 |
-| `crates/obelus-gui/src/main.rs` | 相同的 `obg keys` 子命令 | 未编译、未测试 |
+| `crates/obelus-cli/src/main.rs` | `ob keymap` / `ob keymap set <preset>` | 未编译、未测试 |
+| `crates/obelus-gui/src/main.rs` | 相同的 `obg keymap` 子命令 | 未编译、未测试 |
 | `crates/obelus-component/src/window.rs` | `Move::in_picker` 导航别名 | 未测试 |
 | `crates/obelus-component/src/picker/mod.rs` | 选择列表与只读列表调用上述别名 | 未测试 |
 
@@ -106,20 +106,20 @@ open-file = "Ctrl+o"
 
 ## CLI：补完与验证
 
-草稿使用 clap 原生子命令，两套前端共享 `startup::keys::run`：
+草稿使用 clap 原生子命令，两套前端共享 `startup::keymap::run`：
 
 ```bash
-ob keys
-ob keys set vscode
-ob keys set textmate
-ob keys set obelus
-obg keys set vscode
+ob keymap
+ob keymap set vscode
+ob keymap set textmate
+ob keymap set obelus
+obg keymap set vscode
 ```
 
 - 查询显示当前预设与可选项；切换只保存全局设置，不启动编辑器。
 - stdout 是绘制面，CLI 信息使用 stderr。
 - 检查 `#[arg(value_parser = obelus_config::KEY_LAYOUTS)]` 是否编译；必要时使用 `PossibleValuesParser::new`。
-- 为两个 binary 测试解析、帮助、非法预设、无窗口早退出，以及路径和子命令的歧义。需要打开名为 keys 的路径时验证 `./keys` 或 `--`。
+- 为两个 binary 测试解析、帮助、非法预设、无窗口早退出，以及路径和子命令的歧义。需要打开名为 keymap 的路径时验证 `./keymap` 或 `--`。
 - `write_keymap(path, preset)` 验证预设、读取最新配置、拒绝不可读文件、通过 `save_to` 原子替换。
 - watcher 应把一处切换传到其他窗口，沿用已有配置变更事件；不能轮询。
 
