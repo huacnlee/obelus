@@ -646,34 +646,47 @@ fn no_layout_loses_a_command_or_doubles_a_key() {
 /// second chord, in the same context, that any terminal can send: alt with
 /// anything, or control with a lowercase letter.
 ///
-/// Broken deliberately by dropping the outline's `alt+u`.
+/// Asked of the chord rather than of how it is written: this test once
+/// looked for `Ctrl+` and a capital in the label, and checked nothing at
+/// all once the label became `Ctrl+Shift+p`. So it also counts the chords
+/// it found, and the editors' layouts must have some.
+///
+/// Broken deliberately by dropping the outline's `alt+u` from vscode.json.
 #[test]
 fn every_shifted_chord_has_one_every_terminal_can_send() {
+    let letters = || ('a'..='z').map(KeyCode::Char);
+    let shifted_control = |chord: KeyChord| {
+        letters().any(|letter| {
+            chord == KeyChord::new(letter, KeyModifiers::CONTROL | KeyModifiers::SHIFT)
+        })
+    };
+    let plain_control = |chord: KeyChord| {
+        letters().any(|letter| chord == KeyChord::new(letter, KeyModifiers::CONTROL))
+    };
     for layout in Layout::ALL {
         let keymap = Keymap::laid_out(layout);
+        let mut found = 0;
         for binding in keymap.bindings() {
-            let label = binding.chord.label_in(false);
-            let shifted = label
-                .strip_prefix("Ctrl+")
-                .is_some_and(|key| key.chars().all(|character| character.is_ascii_uppercase()));
-            if !shifted {
+            if !shifted_control(binding.chord) {
                 continue;
             }
+            found += 1;
             let sendable = keymap.bindings().iter().any(|other| {
-                let other_label = other.chord.label_in(false);
-                let lowercase = other_label
-                    .strip_prefix("Ctrl+")
-                    .is_some_and(|key| key.chars().all(|character| character.is_ascii_lowercase()));
                 other.command == binding.command
                     && other.context == binding.context
-                    && (other_label.starts_with("Alt+") || lowercase)
+                    && (other.chord.label_in(false).starts_with("Alt+")
+                        || plain_control(other.chord))
             });
             assert!(
                 sendable,
-                "{} is only on {label} in {:?}, in {layout:?}",
+                "{} is only on {} in {:?}, in {layout:?}",
                 binding.command.name(),
+                binding.chord.label_in(false),
                 binding.context
             );
+        }
+        if matches!(layout, Layout::VsCode | Layout::TextMate) {
+            assert!(found > 0, "{layout:?} has no ctrl+shift chord to check");
         }
     }
 }
