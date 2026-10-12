@@ -773,8 +773,14 @@ impl App {
     ///
     /// The point of the table being data. A configuration file becomes a
     /// caller of this rather than a change to how lookup works.
+    ///
+    /// The one door it changes through, because the settings page keeps
+    /// the keys it lists and has to hear that they moved.
     pub fn set_keymap(&mut self, keymap: Keymap) {
         self.keymap = keymap;
+        if let Some(settings) = self.settings.as_mut() {
+            settings.hear_keymap(&self.keymap);
+        }
     }
 
     /// The colours currently in force.

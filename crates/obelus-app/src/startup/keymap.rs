@@ -158,8 +158,8 @@ mod tests {
         let config = obelus_config::from_toml(&std::fs::read_to_string(&file).expect("the file"));
         assert_eq!(config.keys_from, "vscode");
         assert_eq!(
-            config.keys.get("open-file").map(String::as_str),
-            Some("Ctrl+o")
+            config.keys.get("open-file").map(Vec::as_slice),
+            Some(["Ctrl+o".to_string()].as_slice())
         );
 
         let mut said = Vec::new();

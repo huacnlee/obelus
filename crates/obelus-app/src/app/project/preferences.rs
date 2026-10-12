@@ -246,7 +246,9 @@ impl App {
         // And what the active agent offers, asked of it now: the page draws
         // what was last heard until the answer arrives.
         self.ask_what_the_agent_offers();
-        self.settings = Some(Settings::new());
+        let mut settings = Settings::new();
+        settings.hear_keymap(&self.keymap);
+        self.settings = Some(settings);
     }
 
     /// Opens the project's own settings, which are a page of the same shape.
@@ -259,7 +261,9 @@ impl App {
         self.refresh_registry();
         // Nothing asked of the agent: what it starts on is the reader's
         // alone, and the project's page has no group for it.
-        self.settings = Some(Settings::for_project());
+        let mut settings = Settings::for_project();
+        settings.hear_keymap(&self.keymap);
+        self.settings = Some(settings);
     }
 
     /// Offers a key to the settings page, and says whether it took it.
@@ -330,9 +334,6 @@ impl App {
         // A delete pressed once on a theme only counts towards the next
         // press if nothing else was pressed between.
         let taking = self.themes.taking.take();
-        // Cloned for the same reason: the page needs the table to say which
-        // key each command is on, and it is the application that owns it.
-        let keymap = self.keymap.clone();
         // And what the active agent offers, for the same reason again: the
         // page lists its settings and knows nothing about where they came
         // from.
@@ -344,7 +345,6 @@ impl App {
         match settings.handle_key(
             key,
             &self.settled.config,
-            &keymap,
             Cards {
                 agents: &listed,
                 themes: &themes,
@@ -365,8 +365,8 @@ impl App {
                 self.unset_setting(key);
                 true
             }
-            SettingsOutcome::Bind(command, chord) => {
-                self.rebind(command, chord);
+            SettingsOutcome::Bind(command, chords) => {
+                self.rebind(command, chords);
                 true
             }
             SettingsOutcome::Choose(key, choices, word) => {
@@ -1314,8 +1314,8 @@ impl App {
         self.open(&path);
     }
 
-    /// Moves a command onto a key, or takes its key away, and writes the
-    /// file.
+    /// Puts a command on these keys and no others, or on none, and writes
+    /// the file.
     ///
     /// The same shape as changing a setting -- applied first, saved second
     /// -- and through the same table: what is written down is the command's
@@ -1325,14 +1325,16 @@ impl App {
     pub(in crate::app) fn rebind(
         &mut self,
         command: obelus_command::Command,
-        chord: Option<KeyChord>,
+        chords: Vec<KeyChord>,
     ) {
-        let written = chord.map(|chord| chord.label_in(false)).unwrap_or_default();
+        let written = chords.iter().map(|chord| chord.label_in(false)).collect();
         self.settled
             .config
             .keys
             .insert(command.name().to_string(), written);
-        self.keymap.rebind(command, chord);
+        let mut keymap = self.keymap.clone();
+        keymap.rebind(command, &chords);
+        self.set_keymap(keymap);
         let Some(path) = self.settled.path.clone() else {
             return;
         };
@@ -1385,7 +1387,7 @@ impl App {
         let layout =
             obelus_keymap::Layout::named(&self.settled.config.keys_from).unwrap_or_default();
         let (keymap, unbound) = obelus_keymap::Keymap::with(layout, &self.settled.config.keys);
-        self.keymap = keymap;
+        self.set_keymap(keymap);
         self.settled.unbound = unbound;
         // What a server works out is drawn or it is not, and the switch has
         // to reach the screen either way: turned off it takes what is

@@ -246,10 +246,10 @@ fn a_list_with_nothing_in_it_leaves_the_view_where_it_was() {
     let mut keymap = obelus_keymap::Keymap::new();
     keymap.rebind(
         Command::SymbolMenu,
-        Some(obelus_keymap::KeyChord::new(
+        &[obelus_keymap::KeyChord::new(
             KeyCode::Char('y'),
             crossterm::event::KeyModifiers::ALT,
-        )),
+        )],
     );
     app.set_keymap(keymap);
     for key in ['e', 'y', 'a'] {

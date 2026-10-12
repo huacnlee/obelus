@@ -98,12 +98,13 @@ pub enum SettingsOutcome {
     /// A setting that is typed wants its line: which setting, and what it
     /// says now, which is where the typing starts.
     Type(&'static str, String),
-    /// A command should be on this key from now on, or on none.
+    /// A command should be on these keys from now on, in this order, and
+    /// on no others -- on none, where the list is empty.
     ///
-    /// Only ever a key nothing else is on: what is taken is said on the row
+    /// Only ever keys nothing else is on: what is taken is said on the row
     /// and asked again, because the reader is looking at the row and it is
     /// that binding the answer is about.
-    Bind(Command, Option<KeyChord>),
+    Bind(Command, Vec<KeyChord>),
     /// One of the active agent's settings wants its values.
     ///
     /// Which setting, by the agent's id for it. What the values are is not
@@ -553,8 +554,16 @@ pub enum KeyRow {
     /// A setting about the whole table, above the commands it changes:
     /// which layout the reader's keys start from.
     Setting(&'static Setting),
-    /// A command, and the key it is on.
-    Command(Command),
+    /// One of a command's keys, by where it is in the command's list: a
+    /// row each, so every key a command is on can be stood on, replaced
+    /// and taken away. The first is the one that carries the command's
+    /// name, and a command on no key has that one row and no key in it.
+    Key {
+        /// The command.
+        command: Command,
+        /// Which of its keys, from nought.
+        slot: usize,
+    },
 }
 
 impl KeyRow {
@@ -563,7 +572,7 @@ impl KeyRow {
     pub fn name(self) -> &'static str {
         match self {
             Self::Setting(setting) => setting.name,
-            Self::Command(command) => command.name(),
+            Self::Key { command, .. } => command.name(),
         }
     }
 }
@@ -575,12 +584,21 @@ pub struct Settings {
     keys_showing: bool,
     /// What has been typed, which narrows the rows.
     query: Field,
-    /// Which command's key is being pressed, while one is.
+    /// Which command's key is being pressed, while one is, and on which of
+    /// its rows.
     ///
     /// The page is in no mode otherwise: a key means what it means here
-    /// until the reader says "this row's key is the next thing I press",
+    /// until the reader says "the next thing I press is this command's",
     /// and from then until they press it every key belongs to that row.
-    binding: Option<Command>,
+    binding: Option<(Command, usize)>,
+    /// The keys each command is on, as the table was when it was last
+    /// heard ([`Settings::hear_keymap`]).
+    ///
+    /// Kept rather than asked for, because how many rows the keys page has
+    /// is asked by everything that moves its focus or scrolls it, and
+    /// almost none of those have the table to hand. The application says
+    /// when the table changes, which is the one moment the answer can.
+    held: Vec<(Command, Vec<KeyChord>)>,
     /// The chord that would not do, and why it would not.
     ///
     /// On the row, because that is where the reader is looking and it is
@@ -622,6 +640,7 @@ impl Settings {
             keys_showing: false,
             query: Field::new(),
             binding: None,
+            held: Vec::new(),
             refused: None,
             whose: Whose::Reader,
             page: 0,
@@ -637,6 +656,7 @@ impl Settings {
             keys_showing: false,
             query: Field::new(),
             binding: None,
+            held: Vec::new(),
             refused: None,
             whose: Whose::Project,
             page: 0,
@@ -860,14 +880,34 @@ impl Settings {
     /// something to bind is looking for the ones that have none, and a page
     /// that hid them could not be used for that.
     #[must_use]
-    pub fn keys(&self, keymap: &Keymap) -> Vec<(KeyRow, Option<KeyChord>)> {
+    pub fn keys(&self) -> Vec<(KeyRow, Option<KeyChord>)> {
         self.key_rows()
             .into_iter()
             .map(|row| match row {
                 KeyRow::Setting(_) => (row, None),
-                KeyRow::Command(command) => (row, keymap.chord_for(command)),
+                KeyRow::Key { command, slot } => (row, self.held(command).get(slot).copied()),
             })
             .collect()
+    }
+
+    /// Hears the table of keys as it is now, which is what the keys page
+    /// lists: on opening, and whenever the application changes it.
+    pub fn hear_keymap(&mut self, keymap: &Keymap) {
+        self.held = obelus_command::ALL
+            .iter()
+            .map(|spec| (spec.command, keymap.chords_for(spec.command)))
+            .collect();
+        if self.on_keys() {
+            self.window.set_count(self.row_count(None));
+        }
+    }
+
+    /// The keys a command is on, as last heard.
+    fn held(&self, command: Command) -> &[KeyChord] {
+        self.held
+            .iter()
+            .find(|(held, _)| *held == command)
+            .map_or(&[], |(_, chords)| chords.as_slice())
     }
 
     /// The commands this page lists, without the keys they are on.
@@ -898,7 +938,13 @@ impl Settings {
                     || spec.name.to_lowercase().contains(&query)
                     || spec.title.to_lowercase().contains(&query)
             })
-            .map(|spec| KeyRow::Command(spec.command));
+            .flat_map(|spec| {
+                let rows = self.held(spec.command).len().max(1);
+                (0..rows).map(|slot| KeyRow::Key {
+                    command: spec.command,
+                    slot,
+                })
+            });
         settings.chain(commands).collect()
     }
 
@@ -942,7 +988,14 @@ impl Settings {
 
     /// Which command's key is being pressed, if one is.
     #[must_use]
-    pub const fn binding(&self) -> Option<Command> {
+    pub fn binding(&self) -> Option<Command> {
+        self.binding.map(|(command, _)| command)
+    }
+
+    /// And on which of its rows: the key the next press would sit beside,
+    /// or the one `delete` would take away.
+    #[must_use]
+    pub const fn binding_at(&self) -> Option<(Command, usize)> {
         self.binding
     }
 
@@ -1349,7 +1402,6 @@ impl Settings {
         &mut self,
         key: &KeyEvent,
         config: &Config,
-        keymap: &Keymap,
         cards: Cards<'_>,
         offering: Option<&Offering>,
         room: (u16, u16),
@@ -1361,19 +1413,26 @@ impl Settings {
         // out, because escape is the way out of everything -- and it gives
         // up on the nearest thing first, which is this row rather than the
         // page.
-        if let Some(command) = self.binding {
+        if let Some((command, slot)) = self.binding {
             if key.code == KeyCode::Esc && key.modifiers.is_empty() {
                 self.binding = None;
                 self.refused = None;
                 return SettingsOutcome::Consumed;
             }
-            // Taking the key away is a decision a reader can make, and
-            // there is nowhere else on the page to make it.
+            // Taking the key on this row away is a decision a reader can
+            // make, and there is nowhere else on the page to make it. A row
+            // with no key has nothing to take, and goes on waiting.
+            let held = self.held(command).to_vec();
             if matches!(key.code, KeyCode::Delete | KeyCode::Backspace) && key.modifiers.is_empty()
             {
+                if slot >= held.len() {
+                    return SettingsOutcome::Consumed;
+                }
+                let mut kept = held;
+                kept.remove(slot);
                 self.binding = None;
                 self.refused = None;
-                return SettingsOutcome::Bind(command, None);
+                return SettingsOutcome::Bind(command, kept);
             }
             let Some(chord) = KeyChord::from_event(key) else {
                 // A release, or a modifier Obelus cannot bind. Nothing to
@@ -1382,9 +1441,8 @@ impl Settings {
             };
             // A key that could never fire is not offered, whatever the
             // reader pressed: the editor's own keys never reach the table,
-            // the terminal sends another key for some chords, and some work
-            // on this machine and not the next. The row says which of those
-            // it is and goes on waiting.
+            // and every list and box takes some for itself. The row says
+            // which of those it is and goes on waiting.
             if let Some(why) = obelus_keymap::why_not(chord) {
                 self.refused = Some((chord, Refused::Never(why)));
                 return SettingsOutcome::Consumed;
@@ -1392,15 +1450,28 @@ impl Settings {
             // And a key already spoken for stays where it is. One key, one
             // meaning, is a rule a reader can hold in their head -- and the
             // row says which command has it.
-            match keymap.command_on(chord) {
+            let taken = self
+                .held
+                .iter()
+                .find(|(_, chords)| chords.contains(&chord))
+                .map(|(taken, _)| *taken);
+            match taken {
                 Some(taken) if taken != command => {
                     self.refused = Some((chord, Refused::Taken(taken)));
                     return SettingsOutcome::Consumed;
                 }
-                _ => {
+                // A key the command is already on is nothing to add.
+                Some(_) => {
                     self.binding = None;
                     self.refused = None;
-                    return SettingsOutcome::Bind(command, Some(chord));
+                    return SettingsOutcome::Consumed;
+                }
+                None => {
+                    let mut added = held;
+                    added.push(chord);
+                    self.binding = None;
+                    self.refused = None;
+                    return SettingsOutcome::Bind(command, added);
                 }
             }
         }
@@ -1436,7 +1507,7 @@ impl Settings {
         }
         let bare = modifiers == KeyModifiers::NONE;
         let rows = self.rows(offering);
-        let keys = self.keys(keymap);
+        let keys = self.keys();
         // How many things the focus can be on: the rows of the page, or the
         // agents that the query leaves.
         let themes = self.themes(cards.themes);
@@ -1562,11 +1633,12 @@ impl Settings {
                 }
             }
             // On the keys page, enter is the reader saying "the next key I
-            // press is this command's".
+            // press is this command's as well" -- and, on a key, that
+            // `delete` would take that one away.
             KeyCode::Enter if bare && self.on_keys() => match keys.get(self.window.focus()) {
                 Some((KeyRow::Setting(setting), _)) => Self::change(setting, config),
-                Some((KeyRow::Command(command), _)) => {
-                    self.binding = Some(*command);
+                Some((KeyRow::Key { command, slot }, _)) => {
+                    self.binding = Some((*command, *slot));
                     self.refused = None;
                     SettingsOutcome::Consumed
                 }
@@ -1825,7 +1897,7 @@ impl Settings {
                         },
                         description_width(room.0),
                     ),
-                    KeyRow::Command(_) => 1,
+                    KeyRow::Key { .. } => 1,
                 })
                 .collect(),
             false => self

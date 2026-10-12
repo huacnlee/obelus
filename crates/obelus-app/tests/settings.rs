@@ -2203,9 +2203,10 @@ fn a_key_that_is_taken_says_so_on_the_row() {
 /// waiting.
 ///
 /// Every one of these would leave the reader with a binding that does
-/// nothing: the arrows never reach the key table at all -- the editor takes
-/// them -- the terminal sends tab for `ctrl+i` whatever was pressed, and a
-/// bare letter is what typing will mean.
+/// nothing anywhere: the arrows never reach the key table at all -- the
+/// editor takes them -- tab is every list's own, and a bare letter is what
+/// typing will mean. What only some terminal cannot send, `ctrl+i` among
+/// them, is the reader's to know, and binds.
 #[test]
 fn a_key_that_could_never_fire_is_refused() {
     use crossterm::event::{KeyEvent, KeyModifiers};
@@ -2222,7 +2223,6 @@ fn a_key_that_could_never_fire_is_refused() {
     for (code, modifiers, why) in [
         (KeyCode::Up, KeyModifiers::NONE, "editor"),
         (KeyCode::PageDown, KeyModifiers::NONE, "editor"),
-        (KeyCode::Char('i'), KeyModifiers::CONTROL, "terminal"),
         (KeyCode::Char('z'), KeyModifiers::NONE, "Typing"),
         // The front of the reason, which is what a row this narrow has
         // room for once the key is spelled out rather than drawn.
@@ -2288,6 +2288,169 @@ fn delete_takes_a_key_away() {
     assert!(
         written.contains("close-document"),
         "the key taken away is not in the file:\n{written}"
+    );
+}
+
+/// Every key a command is on is a row of its own, ending against the
+/// column's right edge, and only the first carries the command's name --
+/// and the command after it starts on the row after that.
+///
+/// Among other commands, because a row with no name was once counted as no
+/// row at all, and the next command was drawn over the second key: with
+/// the one command on the page there was nothing to draw over it.
+///
+/// Broken deliberately three ways: by listing one row a command, as the
+/// page did (`Alt+Shift+p` was nowhere on it); by writing the key from the
+/// column's left edge again (the two keys did not end in a line); and by
+/// counting a nameless row as no rows (the next command covered it).
+#[test]
+fn every_key_of_a_command_is_a_row_of_its_own() {
+    use obelus_component::settings::KeyRow;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("several-rows");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "keys_from = \"vscode\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    // Every command has a hyphen, so the page is all of them.
+    support::type_text(&mut app, "-");
+    // Onto the command after `run-command`'s last row, so the window
+    // has both of its rows and the one that follows them.
+    let rows = app.settings().expect("the settings").key_rows();
+    let after = rows
+        .iter()
+        .rposition(|row| {
+            matches!(
+                row,
+                KeyRow::Key {
+                    command: Command::CommandPalette,
+                    ..
+                }
+            )
+        })
+        .expect("the command's rows")
+        + 1;
+    while app.settings().expect("the settings").focus() < after {
+        support::press(&mut app, KeyCode::Down);
+    }
+    let dump = support::render(&mut app, 80, 16);
+    let rows: Vec<&str> = support::text_block(&dump)
+        .lines()
+        .map(|row| row.split_once('|').map_or(row, |(_, cells)| cells))
+        .collect();
+    let first = rows
+        .iter()
+        .position(|row| row.contains("run-command"))
+        .unwrap_or_else(|| panic!("no row for the command:\n{dump}"));
+    let second = rows[first + 1];
+    assert!(rows[first].contains("Ctrl+Shift+p"), "{dump}");
+    assert!(second.contains("Alt+Shift+p"), "{dump}");
+    assert!(
+        !second.contains("run-command"),
+        "the name is said twice:\n{dump}"
+    );
+    let end = |row: &str, key: &str| row.find(key).map(|at| at + key.len());
+    assert_eq!(
+        end(rows[first], "Ctrl+Shift+p"),
+        end(second, "Alt+Shift+p"),
+        "the keys do not end in a line:\n{dump}"
+    );
+    // And the next command on the row after, its name in the first column.
+    assert!(
+        rows.get(first + 2)
+            .and_then(|row| row.chars().nth(1))
+            .is_some_and(|character| character.is_ascii_lowercase()),
+        "the next command is not on the row after:\n{dump}"
+    );
+}
+
+/// Enter on a key, then another key, puts the command on that one as well,
+/// after the ones it had; and the file says them all.
+///
+/// Broken deliberately by replacing the command's keys with the one pressed,
+/// as the page did: `ctrl+y` went.
+#[test]
+fn a_key_pressed_on_a_row_is_added() {
+    use obelus_command::Command;
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("add-a-key");
+    let file = settings_file(&scratch);
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    support::press(&mut app, KeyCode::Enter);
+    support::press_alt(&mut app, 'z');
+
+    let chord = |key: &str| KeyChord::parse(key).expect("a key");
+    assert_eq!(
+        app.keymap().chords_for(Command::Redo),
+        [chord("ctrl+y"), chord("alt+z")]
+    );
+    let written = std::fs::read_to_string(&file).expect("the file");
+    assert!(
+        written.contains("redo = [\"Ctrl+y\", \"Alt+z\"]"),
+        "the file does not say both keys:\n{written}"
+    );
+}
+
+/// Delete takes away the key on the row the reader is on, and only that
+/// one; on a command with no key there is nothing to take, and the row
+/// goes on waiting.
+///
+/// Broken deliberately twice: by taking every key away, as the page did
+/// (`Ctrl+Shift+p` went too); and by giving up on a row with no key (the
+/// row stopped waiting).
+#[test]
+fn delete_takes_away_the_key_on_its_row() {
+    use obelus_command::Command;
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("remove-a-key");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "keys_from = \"vscode\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "run-command");
+    // The layout's row first, then the command's two.
+    let rows = app.settings().expect("the settings").key_rows();
+    let second = rows
+        .iter()
+        .position(|row| {
+            matches!(
+                row,
+                obelus_component::settings::KeyRow::Key {
+                    command: Command::CommandPalette,
+                    slot: 1
+                }
+            )
+        })
+        .expect("the second key's row");
+    while app.settings().expect("the settings").focus() < second {
+        support::press(&mut app, KeyCode::Down);
+    }
+    support::press(&mut app, KeyCode::Enter);
+    support::press(&mut app, KeyCode::Delete);
+    assert_eq!(
+        app.keymap().chords_for(Command::CommandPalette),
+        [KeyChord::parse("ctrl+shift+p").expect("a key")]
+    );
+
+    // A command on no key: delete has nothing to take.
+    support::press(&mut app, KeyCode::Esc);
+    let _ = std::fs::write(&file, "keys_from = \"vscode\"\n");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "new-file");
+    support::press(&mut app, KeyCode::Enter);
+    support::press(&mut app, KeyCode::Delete);
+    assert!(
+        app.settings()
+            .is_some_and(|settings| settings.binding() == Some(Command::FileNew)),
+        "the row gave up waiting"
     );
 }
 
@@ -4504,7 +4667,7 @@ fn a_key_that_bound_nothing_is_a_warning_on_that_line() {
     std::fs::write(
         &file,
         "theme = \"dark\"\n\n[keys]\nopen-file = \"f1\"\nopen-fiel = \"f2\"\n\
-         save-file = \"ctrl+shiftier+s\"\nclose-document = \"ctrl+alt+e\"\n\
+         save-file = \"ctrl+shiftier+s\"\nclose-document = \"ctrl+enter\"\n\
          redo = \"ctrl+shift+u\"\n",
     )
     .expect("writing a settings file");

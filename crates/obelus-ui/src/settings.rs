@@ -133,7 +133,7 @@ impl<'a> SettingsView<'a> {
             themes: app.listed_themes(),
             themes_failure: app.themes_failure(),
             images: app.images(),
-            keys: app.settings()?.keys(app.keymap()),
+            keys: app.settings()?.keys(),
             offering: app.agent_offering(),
             pinned: app.pinned().to_vec(),
             named: app.readers_named().to_vec(),
@@ -240,13 +240,10 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
             }
         },
         _ if adding => ("Add", "Add a variable to what the agent is started with"),
-        _ => (
-            "Change",
-            match settings.key_rows().get(settings.focus()) {
-                Some(KeyRow::Command(_)) => "Put this command on another key",
-                Some(KeyRow::Setting(_)) | None => "Change it, or open what it can be",
-            },
-        ),
+        _ => match settings.key_rows().get(settings.focus()) {
+            Some(KeyRow::Key { .. }) => ("Add a key", "Put this command on one more key"),
+            Some(KeyRow::Setting(_)) | None => ("Change", "Change it, or open what it can be"),
+        },
     };
     // Pairing does nothing where the chat could not be reached, and a key
     // that does nothing is not offered at the foot.
@@ -263,6 +260,21 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
         Some(Shown::Remote { row: RemoteRow::Field(field), .. })
             if settings.reached().kept.contains_key(field.key)
     );
+    // A row waiting for its key takes every key, so the foot says the two
+    // that do something else there: taking this row's key away, where it
+    // has one, and giving up.
+    if let Some((command, slot)) = settings.binding_at() {
+        let has_one = settings.keys().iter().any(|(row, chord)| {
+            matches!(row, KeyRow::Key { command: on, slot: at } if *on == command && *at == slot)
+                && chord.is_some()
+        });
+        return vec![
+            Hint::common(bare(KeyCode::Delete), "Remove")
+                .saying("Take this key off the command")
+                .when(has_one),
+            Hint::common(bare(KeyCode::Esc), "Back").saying("Leave the key as it was"),
+        ];
+    }
     // Delete is the filter's while the filter has something for it, so
     // nothing below says what it does to a row until then.
     let rows_delete = !settings.delete_is_the_filters();
@@ -369,10 +381,12 @@ fn entry_rows(row: &Row) -> u16 {
 /// and what it does.
 ///
 /// A row with no name is its prose and nothing else: there is nothing to
-/// put on a first line.
+/// put on a first line -- unless it has a key, which is the line: a
+/// command's second key is a row with no name, and one counted as nothing
+/// is a row the next command is drawn over.
 fn own_rows(row: &Row) -> u16 {
     u16::try_from(row.body.len() + row.warning.len()).unwrap_or(0)
-        + u16::from(!row.label.is_empty())
+        + u16::from(!row.label.is_empty() || matches!(row.aside, Aside::Words(_)))
 }
 
 /// How many rows of the screen are above the first entry a page shows.
@@ -571,11 +585,19 @@ impl Widget for SettingsView<'_> {
                         },
                         obelus_component::settings::description_width(region.width),
                     ),
-                    KeyRow::Command(command) => Row {
+                    // A row a key, and the command named on the first of
+                    // them only: the rows under it are more of its keys.
+                    KeyRow::Key { command, slot } => Row {
                         opens: None,
-                        label: command.name().to_string(),
-                        matched: self.settings.matched_in(command.name()),
-                        detail: self.saying(*command),
+                        label: match slot {
+                            0 => command.name().to_string(),
+                            _ => String::new(),
+                        },
+                        matched: match slot {
+                            0 => self.settings.matched_in(command.name()),
+                            _ => None,
+                        },
+                        detail: self.saying(*command, *slot, chord.is_some()),
                         aside: Aside::Words(chord.map(|chord| chord.label()).unwrap_or_default()),
                         body: Vec::new(),
                         entry: false,
@@ -1107,7 +1129,9 @@ impl SettingsView<'_> {
                 // enough to the name to read as one phrase, and in a line
                 // down the page so that the page is read as a table.
                 let at = detail_at.max(after + 2);
-                let left = aside_at.saturating_sub(at + reserved);
+                // And a blank before the right-hand column, or a
+                // description that fills its room runs into the key.
+                let left = aside_at.saturating_sub(at + reserved + 1);
                 write(
                     cells,
                     at,
@@ -1157,9 +1181,13 @@ impl SettingsView<'_> {
                 ),
                 Aside::Words(words) => {
                     let keys = truncate_from_right(words, usize::from(CONTROL_WIDTH));
+                    // Against the column's right edge, so a command's keys,
+                    // one to a row, end in a line however long each is.
+                    let width = u16::try_from(text_width(&keys)).unwrap_or(CONTROL_WIDTH);
+                    let key_at = aside_at + CONTROL_WIDTH.saturating_sub(width);
                     write(
                         cells,
-                        aside_at,
+                        key_at,
                         y,
                         &keys,
                         plain.fg(self.theme.foreground).bg(background),
@@ -1168,7 +1196,7 @@ impl SettingsView<'_> {
                     // a cap on the row the reader is on is drawn over the
                     // colour that says so.
                     crate::cap_around(
-                        aside_at,
+                        key_at,
                         y,
                         &keys,
                         text_width(&keys),
@@ -1421,9 +1449,16 @@ impl SettingsView<'_> {
     /// row because that is where they are looking and it is that binding
     /// the answer is about -- the status row here is the page's filter, and
     /// a passing note would be cleared by the very next keystroke.
-    fn saying(&self, command: obelus_command::Command) -> Option<(String, ratatui::style::Color)> {
-        if self.settings.binding() != Some(command) {
-            return Some((command.spec().title.to_string(), self.theme.gutter));
+    fn saying(
+        &self,
+        command: obelus_command::Command,
+        slot: usize,
+        has_a_key: bool,
+    ) -> Option<(String, ratatui::style::Color)> {
+        if self.settings.binding_at() != Some((command, slot)) {
+            // What it does once, beside its name; the rows of its other
+            // keys say nothing there.
+            return (slot == 0).then(|| (command.spec().title.to_string(), self.theme.gutter));
         }
         match self.settings.refused() {
             Some((chord, Refused::Taken(taken))) => Some((
@@ -1434,8 +1469,14 @@ impl SettingsView<'_> {
                 format!("{}: {why}", chord.label()),
                 self.theme.change_removed,
             )),
+            // One line, because most commands have one key and so one row
+            // to say it on.
             None => Some((
-                "Press a key, or delete to unbind".to_string(),
+                match has_a_key {
+                    true => "Press a key to add, or Delete it",
+                    false => "Press a key to add it",
+                }
+                .to_string(),
                 self.theme.change_modified,
             )),
         }

@@ -386,8 +386,10 @@ command is gone and `App::blame` reads the setting.
   The `vscode` and `textmate` layouts borrow those editors' `ctrl+shift`
   chords, which are their names and not Obelus's -- each with an alt chord
   beside it, because a terminal without the keyboard protocol sends `ctrl`
-  and the letter, and one with it often keeps the chord for itself. A reader may bind one too, and is not warned: where it
-  cannot arrive, it does not.
+  and the letter, and one with it often keeps the chord for itself. A
+  reader may bind any key at all, as many to a command as they like, and is
+  not warned where one cannot arrive -- `why_not` refuses only what never
+  reaches the table.
 
 **Escape always gives up on the nearest thing**, and everything else is
 reached from the palette: a chord for every command is how a key table stops

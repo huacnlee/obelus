@@ -319,15 +319,15 @@ fn a_chord_survives_being_written_down() {
 fn the_readers_own_bindings_go_over_the_defaults() {
     use obelus_keymap::Context;
 
-    let moved: std::collections::BTreeMap<String, String> = [
-        ("close-document".to_string(), "alt+w".to_string()),
-        ("choose-theme".to_string(), "alt+y".to_string()),
-        ("open-file".to_string(), String::new()),
-        ("nonsense.command".to_string(), "ctrl+z".to_string()),
-        ("show-change".to_string(), "not a key".to_string()),
+    let moved: std::collections::BTreeMap<String, Vec<String>> = [
+        ("close-document".to_string(), vec!["alt+w".to_string()]),
+        ("choose-theme".to_string(), vec!["alt+y".to_string()]),
+        ("open-file".to_string(), Vec::new()),
+        ("nonsense.command".to_string(), vec!["ctrl+z".to_string()]),
+        ("show-change".to_string(), vec!["not a key".to_string()]),
         // A key Obelus can read and can never be given: the editor takes
         // the arrows before the table is reached.
-        ("go-to-line".to_string(), "up".to_string()),
+        ("go-to-line".to_string(), vec!["up".to_string()]),
     ]
     .into_iter()
     .collect();
@@ -423,30 +423,6 @@ fn copy_and_paste_answer_to_the_chords_a_desktop_sends() {
     );
 }
 
-/// And those two are the only modified `Insert` a reader may bind.
-///
-/// `why_not` is asked by the keys page and by the config file as well as by
-/// the shipped table, so letting one chord through is letting it through
-/// everywhere. Two is what the desktop sends; a third would be Obelus
-/// inventing one after all.
-///
-/// Deliberate break: `why_not` letting any modified `Insert` through, which
-/// is the obvious way to write the exception and is what the last two
-/// assertions are for.
-#[test]
-fn only_the_two_chords_a_desktop_sends_are_a_modified_insert() {
-    let may =
-        |modifiers| obelus_keymap::why_not(KeyChord::new(KeyCode::Insert, modifiers)).is_none();
-
-    assert!(may(KeyModifiers::CONTROL));
-    assert!(may(KeyModifiers::SHIFT));
-    assert!(may(KeyModifiers::NONE));
-    // Alt asks about the cursor, and there is nothing it would ask here.
-    assert!(!may(KeyModifiers::ALT));
-    // And two modifiers is the desktop's own, wherever it lands.
-    assert!(!may(KeyModifiers::CONTROL | KeyModifiers::SHIFT));
-}
-
 /// Rebinding a command with two chords leaves it with one, once per
 /// context.
 ///
@@ -464,7 +440,7 @@ fn only_the_two_chords_a_desktop_sends_are_a_modified_insert() {
 #[test]
 fn rebinding_a_command_with_two_chords_leaves_it_one_key_per_context() {
     let mut keymap = Keymap::new();
-    keymap.rebind(Command::SelectionCopy, Some(control('y')));
+    keymap.rebind(Command::SelectionCopy, &[control('y')]);
 
     let copies: Vec<_> = keymap
         .bindings()
@@ -830,7 +806,7 @@ fn one_more_modifier_is_another_key_in_every_layout() {
 /// it.
 #[test]
 fn a_readers_keys_survive_a_change_of_layout() {
-    let lines = [("open-file".to_string(), "Alt+z".to_string())]
+    let lines = [("open-file".to_string(), vec!["Alt+z".to_string()])]
         .into_iter()
         .collect();
     for layout in Layout::ALL {
@@ -920,4 +896,103 @@ fn a_chord_with_a_mark_or_a_name_reads_back() {
         Some(KeyChord::new(KeyCode::Down, KeyModifiers::ALT))
     );
     assert_eq!(KeyChord::parse("\u{2191}+"), None);
+}
+
+/// A line of `[keys]` may name several keys, and the command is on those,
+/// in that order, and on no other: the first is the one shown, and every
+/// one of them is listed.
+///
+/// Broken deliberately by binding only the first of a line's keys in
+/// `Keymap::with`: `alt+y` did nothing.
+#[test]
+fn a_command_can_be_on_several_keys() {
+    let lines = [(
+        "choose-theme".to_string(),
+        vec!["alt+z".to_string(), "alt+y".to_string()],
+    )]
+    .into_iter()
+    .collect();
+    let (keymap, unbound) = Keymap::with(Layout::Obelus, &lines);
+    assert!(unbound.is_empty(), "{unbound:?}");
+    let chord = |key: &str| KeyChord::parse(key).expect("a key");
+    assert_eq!(
+        keymap.chords_for(Command::ThemeSelect),
+        [chord("alt+z"), chord("alt+y")]
+    );
+    assert_eq!(keymap.chord_for(Command::ThemeSelect), Some(chord("alt+z")));
+    for key in ['z', 'y'] {
+        assert_eq!(
+            keymap.lookup(
+                &press(KeyCode::Char(key), KeyModifiers::ALT),
+                Context::Normal
+            ),
+            Some(Command::ThemeSelect),
+            "alt+{key}"
+        );
+    }
+}
+
+/// One key of a line that will not do is said, and the line's other keys
+/// still bind; a line none of whose keys will do leaves the command where
+/// the layout put it, rather than on nothing.
+///
+/// Broken deliberately by giving up on the whole line at its first bad
+/// key, as the one-key reading did: `alt+y` was not bound.
+#[test]
+fn a_bad_key_in_a_line_is_said_and_the_rest_bind() {
+    let lines = [
+        (
+            "choose-theme".to_string(),
+            vec![
+                "not a key".to_string(),
+                "alt+y".to_string(),
+                "esc".to_string(),
+            ],
+        ),
+        ("save-file".to_string(), vec!["nonsense".to_string()]),
+    ]
+    .into_iter()
+    .collect();
+    let (keymap, unbound) = Keymap::with(Layout::Obelus, &lines);
+    let chord = |key: &str| KeyChord::parse(key).expect("a key");
+    assert_eq!(keymap.chords_for(Command::ThemeSelect), [chord("alt+y")]);
+    let said: Vec<_> = unbound
+        .iter()
+        .map(|one| (one.name.as_str(), one.text.as_str()))
+        .collect();
+    assert_eq!(
+        said,
+        [
+            ("choose-theme", "not a key"),
+            ("choose-theme", "esc"),
+            ("save-file", "nonsense")
+        ]
+    );
+    assert_eq!(keymap.chords_for(Command::FileSave), [chord("ctrl+s")]);
+}
+
+/// Every key of a rebinding goes in every context the command was in, in
+/// the order given, and an empty list takes them all away.
+///
+/// Broken deliberately by putting only the first key in each context in
+/// `rebind`: close-document's second key did nothing in the list of what is
+/// open.
+#[test]
+fn rebinding_to_several_keys_puts_each_where_the_command_was() {
+    let mut keymap = Keymap::new();
+    let chord = |key: &str| KeyChord::parse(key).expect("a key");
+    keymap.rebind(Command::DocumentClose, &[chord("alt+w"), chord("alt+q")]);
+    for context in [Context::Normal, Context::Documents, Context::Terminal] {
+        assert_eq!(
+            keymap.lookup(&press(KeyCode::Char('q'), KeyModifiers::ALT), context),
+            Some(Command::DocumentClose),
+            "{context:?}"
+        );
+    }
+    assert_eq!(
+        keymap.chords_for(Command::DocumentClose),
+        [chord("alt+w"), chord("alt+q")]
+    );
+    keymap.rebind(Command::DocumentClose, &[]);
+    assert!(keymap.chords_for(Command::DocumentClose).is_empty());
 }

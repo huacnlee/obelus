@@ -248,12 +248,16 @@ pub struct Config {
     /// Beside `keys` rather than in it, because every line of that table
     /// is a command's name and this is not one.
     pub keys_from: String,
-    /// The keys the reader has moved, by the command's own name.
+    /// The keys the reader has moved, by the command's own name: every key
+    /// the command is on, the first being the one shown.
     ///
     /// Changes rather than the whole table: a reader who rebinds one key
     /// should be given the new default for everything they said nothing
-    /// about. An empty chord is a key taken away, which is also a decision.
-    pub keys: std::collections::BTreeMap<String, String>,
+    /// about. No keys is every key taken away, which is also a decision.
+    ///
+    /// The file says one key as a string and several as an array, and none
+    /// as either `""` or `[]` -- the shapes a reader writes by hand.
+    pub keys: std::collections::BTreeMap<String, Vec<String>>,
     /// What each agent is to start a conversation on, in its own words.
     ///
     /// The agent's id, then the agent's id for one of the settings it
@@ -1699,12 +1703,25 @@ pub fn apply(config: &mut Config, table: &toml::Table, whose: Whose) -> Applied 
     if let Some(keys) = table.get("keys").and_then(toml::Value::as_table)
         && allowed("keys")
     {
-        // Whatever is a string. A command Obelus has never heard of and a
-        // chord it cannot read are dealt with where the table is built,
-        // which is the one place that knows what either of those is.
-        for (name, chord) in keys {
-            if let Some(chord) = chord.as_str() {
-                config.keys.insert(name.clone(), chord.to_string());
+        // Whatever is a string, or an array of them. A command Obelus has
+        // never heard of and a chord it cannot read are dealt with where the
+        // table is built, which is the one place that knows what either of
+        // those is.
+        for (name, written) in keys {
+            let chords: Option<Vec<String>> = match written {
+                toml::Value::String(chord) if chord.is_empty() => Some(Vec::new()),
+                toml::Value::String(chord) => Some(vec![chord.clone()]),
+                toml::Value::Array(chords) => Some(
+                    chords
+                        .iter()
+                        .filter_map(toml::Value::as_str)
+                        .map(str::to_string)
+                        .collect(),
+                ),
+                _ => None,
+            };
+            if let Some(chords) = chords {
+                config.keys.insert(name.clone(), chords);
             }
         }
     }
@@ -2062,8 +2079,13 @@ fn lay(existing: &str, config: &Config, every: bool) -> String {
         document.remove("keys");
     } else {
         let mut keys = toml_edit::Table::new();
-        for (name, chord) in &config.keys {
-            keys[name] = toml_edit::value(chord.clone());
+        // One key as a string, which is what a reader writes for one;
+        // several, or none, as an array.
+        for (name, chords) in &config.keys {
+            keys[name] = match chords.as_slice() {
+                [chord] => toml_edit::value(chord.clone()),
+                chords => toml_edit::value(chords.iter().collect::<toml_edit::Array>()),
+            };
         }
         document["keys"] = toml_edit::Item::Table(keys);
     }
@@ -2809,8 +2831,8 @@ mod tests {
         assert_eq!(config.keys_from, "textmate", "{written}");
         assert!(config.wrap, "{written}");
         assert_eq!(
-            config.keys.get("open-file").map(String::as_str),
-            Some("Ctrl+o"),
+            config.keys.get("open-file").map(Vec::as_slice),
+            Some(["Ctrl+o".to_string()].as_slice()),
             "{written}"
         );
         assert!(written.contains("future_setting = 3"), "{written}");
@@ -2821,6 +2843,39 @@ mod tests {
         assert_eq!(from_toml(&written).keys_from, "obelus");
         assert!(from_toml(&written).wrap, "{written}");
         let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    /// A command's keys are read in every shape a reader writes them, and
+    /// written in the one they would: a string for one, an array for
+    /// several, and an empty array for none -- and what is written reads
+    /// back as itself.
+    ///
+    /// Broken deliberately twice: writing one key as an array (the file said
+    /// `["alt+o"]`), and reading `""` as a key called nothing (the command
+    /// had one key, and it was empty).
+    #[test]
+    fn a_command_is_on_one_key_several_or_none() {
+        let config = from_toml(
+            "[keys]\nopen-file = \"alt+o\"\nclose-file = \"\"\nsave-file = []\n\
+             run-command = [\"ctrl+shift+p\", \"alt+shift+p\"]\n",
+        );
+        let keys = |name: &str| config.keys.get(name).cloned();
+        assert_eq!(keys("open-file"), Some(vec!["alt+o".to_string()]));
+        assert_eq!(keys("close-file"), Some(Vec::new()));
+        assert_eq!(keys("save-file"), Some(Vec::new()));
+        assert_eq!(
+            keys("run-command"),
+            Some(vec!["ctrl+shift+p".to_string(), "alt+shift+p".to_string()])
+        );
+
+        let written = to_toml(&config);
+        assert!(written.contains("open-file = \"alt+o\"\n"), "{written}");
+        assert!(written.contains("close-file = []\n"), "{written}");
+        assert!(
+            written.contains("run-command = [\"ctrl+shift+p\", \"alt+shift+p\"]\n"),
+            "{written}"
+        );
+        assert_eq!(from_toml(&written).keys, config.keys, "{written}");
     }
 
     /// The default chosen where there was no file still makes one, because
@@ -2972,9 +3027,14 @@ mod tests {
             // A key moved and a key taken away: both are decisions, and
             // both have to survive the file or the reader makes them again
             // every time Obelus starts.
+            // And a command on two keys, which the file says as an array.
             keys: [
-                ("open-file".to_string(), "alt+o".to_string()),
-                ("close-file".to_string(), String::new()),
+                ("open-file".to_string(), vec!["alt+o".to_string()]),
+                ("close-file".to_string(), Vec::new()),
+                (
+                    "run-command".to_string(),
+                    vec!["ctrl+shift+p".to_string(), "alt+shift+p".to_string()],
+                ),
             ]
             .into_iter()
             .collect(),

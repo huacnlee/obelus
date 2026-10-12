@@ -323,7 +323,7 @@
       </div>
 
       <h3>Rebinding</h3>
-      <p>Write only what you want to change: rebind one key and everything else keeps its default, including keys Obelus adds later. An empty string removes a binding. Use the command names from above, and write keys the way the screen shows them (case doesn't matter: <code>Ctrl+P</code> is <code>ctrl+p</code>, and <kbd>Shift</kbd> is written as <code>shift+</code>). Your lines are laid over whichever layout <code>keys_from</code> names, so they survive a change of layout.</p>
+      <p>Write only what you want to change: rebind one key and everything else keeps its default, including keys Obelus adds later. A command can be on several keys: write them as a list, and the first is the one the screen shows. An empty string or an empty list removes its keys. Any key may be bound, whether or not every terminal can send it, except the few Obelus never hands to the table: a plain character, <kbd>Esc</kbd>, <kbd>Enter</kbd>, <kbd>Tab</kbd>, <kbd>Backspace</kbd>, <kbd>Delete</kbd>, and the moving keys without <kbd>Alt</kbd>. Use the command names from above, and write keys the way the screen shows them (case doesn't matter: <code>Ctrl+P</code> is <code>ctrl+p</code>, and <kbd>Shift</kbd> is written as <code>shift+</code>). Your lines are laid over whichever layout <code>keys_from</code> names, so they survive a change of layout.</p>
       <pre><code>theme = "light"
 wrap = true
 blame_margin = false
@@ -331,7 +331,9 @@ blame_margin = false
 [keys]
 open-file = "Ctrl+o"
 show-change = "Alt+g"
+run-command = ["Ctrl+Shift+p", "Alt+Shift+p"]   # on both
 quit = ""            # taken away</code></pre>
+      <p>On the settings page, the Keys tab lists every key a command is on, one to a row. <kbd>Enter</kbd> on a row waits for a key and adds it to the command; <kbd>Delete</kbd> while it waits takes away the key on that row.</p>
 
       <h3>Themes</h3>
       <p><code>dark</code>, <code>light</code> and a shelf of well-known palettes are built in; <code>choose-theme</code> switches between themes instantly. Any <code>.toml</code> file in <code>~/.config/obelus/themes/</code> is also a theme, named after the file (<code>mine.toml</code> → <code>mine</code>), and so is a directory there holding a <code>theme.toml</code>, named after the directory — which is how a theme keeps a picture beside its colours. A theme of yours by a built-in name comes first. Every colour is optional: anything you leave out comes from the built-in theme yours is based on, so an old theme file keeps working when Obelus adds a colour.</p>

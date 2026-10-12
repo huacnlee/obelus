@@ -4,35 +4,29 @@
 //! whole mechanism behind "the user can rebind keys": loading a table from a
 //! file later replaces a constructor, not the lookup path.
 //!
-//! `keymap::why_not` is the one judgement of what may be bound, and the
-//! three families are the whole of it. It is asked by the page that binds keys,
-//! by the table read out of the config file, and by the test that holds the
-//! shipped table to the same rule -- so Obelus cannot give itself a key it
-//! refuses the reader, and a reason is written once. What it refuses, and why
-//! each of them would be a binding that silently never fires:
+//! `keymap::why_not` is the one judgement of what may be bound. It is asked
+//! by the page that binds keys, by the table read out of the config file, and
+//! by the test that holds the shipped table to the same rule -- so Obelus
+//! cannot give itself a key it refuses the reader, and a reason is written
+//! once. A reader may have any key Obelus can be handed, whether or not the
+//! next terminal can send it; what is refused is only what never reaches the
+//! table at all, so a binding to it could not fire anywhere:
 //!
-//! * the arrows, `home`, `end` and the paging keys, bare or with `ctrl` or
-//!   `shift` -- the editor takes those before the table is reached, and the
-//!   ones it does not take it has said it wants (`ctrl` and an arrow is a word
-//!   motion, `ctrl` and a paging key is the previous and next buffer). `alt`
-//!   and an arrow is the exception, which is how changes and history are
-//!   walked;
-//! * `ctrl` plus `i`, `m`, `j`, `h`, `[`, space or `2`, which *are* tab, enter,
-//!   newline, backspace, escape and NUL on the wire, whatever the reader
-//!   pressed;
+//! * the arrows, `home`, `end` and the paging keys without `alt` -- the editor
+//!   takes those before the table is reached, and the ones it does not take it
+//!   has said it wants (`ctrl` and an arrow is a word motion, `ctrl` and a
+//!   paging key is the previous and next buffer);
 //! * a bare character, `enter`, `tab`, `backspace`, `delete` -- typing, and the
 //!   keys every list and box takes itself;
 //! * `escape`, which Obelus keeps: give up on the nearest thing is not
-//!   negotiable, and it is the one default a reader cannot move;
-//! * anything with two modifiers, which is the desktop's (`ctrl+alt`) or a
-//!   chord a terminal reports as one of its halves. Shift on a letter is not a
-//!   second modifier: it is the capital, and `ctrl+shift+p` may be bound,
-//!   because two editors' layouts are built on such chords. It works on a
-//!   terminal speaking the keyboard protocol; on the rest it arrives as
-//!   `ctrl+p`, which is why those layouts give each of them an alt chord as
-//!   well (`Keymap::laid_out`). `alt+shift+p` is fine everywhere, because alt
-//!   is the escape prefix and really does carry the shifted letter;
-//! * a function key with anything held, for the same reason.
+//!   negotiable, and it is the one default a reader cannot move.
+//!
+//! What Obelus *ships* is held to more than that, by the families below and
+//! by reasons argued where each key is bound: nothing with two modifiers, a
+//! function key bare, and `ctrl+shift` on a letter only where another
+//! editor's layout borrows it -- with an alt chord beside it, because a
+//! terminal without the keyboard protocol sends `ctrl` and the letter, and
+//! one with it often keeps the chord for itself.
 //!
 //! `ctrl+b` belongs to tmux, so Obelus does not ship it -- a reader outside
 //! tmux may still have it. `ctrl+a` is screen's prefix and is shipped anyway,
@@ -41,14 +35,15 @@
 //!
 //! Keys are rebound on the keys page, and the file holds the changes. The
 //! table is data on `App`, so a rebinding is `Keymap::rebind` plus a line in
-//! the config's `[keys]` -- command *name* to chord spelled out (`ctrl+p`),
+//! the config's `[keys]` -- command *name* to its chords spelled out
+//! (`ctrl+p`, or a list of them, the first being the one shown),
 //! because an enum's spelling and a keycode are Obelus's business rather than
 //! the reader's. What is in the file is a list of changes over the defaults, so
 //! a reader who moved one key still gets the new default for everything else,
 //! and a name or a chord Obelus cannot read is skipped with a word in the log.
 //! Rebinding moves *every* binding of the command -- `close-file` is bound in
-//! `Normal` and in `Buffers` and is still one command with one key -- and a
-//! command that had none gets one in `Normal`, which is where a key a reader
+//! `Normal` and in `Buffers` and is still one command with its keys -- and a
+//! command that had none gets them in `Normal`, which is where a key a reader
 //! presses belongs. A chord already spoken for is refused on the row that asked
 //! for it, with what has it: the row is where the reader is looking, the status
 //! row there is the page's own filter, and a passing note would be cleared by
@@ -659,19 +654,20 @@ impl Keymap {
             .map(|binding| binding.command)
     }
 
-    /// Moves a command onto another key, or takes its key away.
+    /// Puts a command on these keys and no others, or takes every key
+    /// away with none.
     ///
     /// Every binding of it, because a command bound in two contexts is one
-    /// command with one key: `close-file` closes the file being read and
+    /// command with its keys: `close-file` closes the file being read and
     /// the file on the row of a list, and a reader who rebinds it means
-    /// both. A command that had no key gets one where the reader is
+    /// both. A command that had no key gets them where the reader is
     /// reading, which is where a key they press belongs.
     ///
-    /// Which includes the chords a command has that the reader did not
-    /// choose -- copy answers to `ctrl+Insert` as well as `ctrl+c` -- so
-    /// the reader gets the one key the page shows them and no second one
-    /// firing behind it.
-    pub fn rebind(&mut self, command: Command, chord: Option<KeyChord>) {
+    /// The whole list, in order, because the first is the one every other
+    /// place shows ([`Self::chord_for`]) and the page that binds keys shows
+    /// them all -- so a key the reader did not choose cannot stay firing
+    /// behind the ones they can see.
+    pub fn rebind(&mut self, command: Command, chords: &[KeyChord]) {
         // Each context once, not once per binding: a command with two
         // chords in one context appears in that context twice, and one
         // binding per appearance is two bindings on the same key.
@@ -682,19 +678,18 @@ impl Keymap {
             }
         }
         self.bindings.retain(|binding| binding.command != command);
-        let Some(chord) = chord else {
-            return;
-        };
         let contexts = match contexts.is_empty() {
             true => vec![Context::Normal],
             false => contexts,
         };
-        for context in contexts {
-            self.bindings.push(Binding {
-                command,
-                context,
-                chord,
-            });
+        for chord in chords {
+            for context in &contexts {
+                self.bindings.push(Binding {
+                    command,
+                    context: *context,
+                    chord: *chord,
+                });
+            }
         }
     }
 
@@ -724,9 +719,13 @@ impl Keymap {
     /// file's command on `ctrl+p` is no reason for a terminal, where that
     /// command cannot run, to lose its way to the palette.
     #[must_use]
+    /// A line may name several keys, and the command is on those and no
+    /// others; one that cannot be read or given is said, and the rest are
+    /// bound. A line all of whose keys are wrong leaves the command where
+    /// the layout put it, rather than on nothing.
     pub fn with(
         layout: Layout,
-        bindings: &std::collections::BTreeMap<String, String>,
+        bindings: &std::collections::BTreeMap<String, Vec<String>>,
     ) -> (Self, Vec<Unbound>) {
         let mut keymap = Self::laid_out(layout);
         let mut unbound = Vec::new();
@@ -735,32 +734,41 @@ impl Keymap {
             text: text.clone(),
             why,
         };
-        for (name, text) in bindings {
+        for (name, texts) in bindings {
             let Some(command) = obelus_command::by_name(name) else {
                 tracing::warn!(name, "no command by that name to bind");
-                unbound.push(skipped(name, text, Unbindable::NoSuchCommand));
+                unbound.push(skipped(name, &texts.join(", "), Unbindable::NoSuchCommand));
                 continue;
             };
-            // An empty chord is the reader having taken the key away, which
-            // is a decision and not a mistake.
-            if text.is_empty() {
-                keymap.rebind(command, None);
+            // No keys is the reader having taken them away, which is a
+            // decision and not a mistake.
+            if texts.is_empty() {
+                keymap.rebind(command, &[]);
                 continue;
             }
-            let Some(chord) = KeyChord::parse(text) else {
-                tracing::warn!(name, text, "not a key Obelus can read");
-                unbound.push(skipped(name, text, Unbindable::Unreadable));
-                continue;
-            };
-            // The same judgement the page that binds keys makes. A chord
-            // that cannot fire is worse in a file than on a page: there is
-            // nothing on screen to say why the key does nothing.
-            if let Some(why) = why_not(chord) {
-                tracing::warn!(name, text, why, "not a key Obelus can be given");
-                unbound.push(skipped(name, text, Unbindable::NotAllowed(why)));
+            let mut chords = Vec::new();
+            for text in texts {
+                let Some(chord) = KeyChord::parse(text) else {
+                    tracing::warn!(name, text, "not a key Obelus can read");
+                    unbound.push(skipped(name, text, Unbindable::Unreadable));
+                    continue;
+                };
+                // The same judgement the page that binds keys makes. A
+                // chord that cannot fire is worse in a file than on a page:
+                // there is nothing on screen to say why the key does nothing.
+                if let Some(why) = why_not(chord) {
+                    tracing::warn!(name, text, why, "not a key Obelus can be given");
+                    unbound.push(skipped(name, text, Unbindable::NotAllowed(why)));
+                    continue;
+                }
+                if !chords.contains(&chord) {
+                    chords.push(chord);
+                }
+            }
+            if chords.is_empty() {
                 continue;
             }
-            keymap.rebind(command, Some(chord));
+            keymap.rebind(command, &chords);
             let contexts: Vec<Context> = keymap
                 .bindings
                 .iter()
@@ -768,7 +776,7 @@ impl Keymap {
                 .map(|binding| binding.context)
                 .collect();
             keymap.bindings.retain(|binding| {
-                binding.chord != chord
+                !chords.contains(&binding.chord)
                     || binding.command == command
                     || !contexts.contains(&binding.context)
             });
@@ -776,7 +784,22 @@ impl Keymap {
         (keymap, unbound)
     }
 
-    /// The key bound to a command, if one is.
+    /// Every key a command is on, each once, in the order the table has
+    /// them: what the page that binds keys lists, the first of them being
+    /// [`Self::chord_for`]'s.
+    #[must_use]
+    pub fn chords_for(&self, command: Command) -> Vec<KeyChord> {
+        let mut chords = Vec::new();
+        for binding in &self.bindings {
+            if binding.command == command && !chords.contains(&binding.chord) {
+                chords.push(binding.chord);
+            }
+        }
+        chords
+    }
+
+    /// The key bound to a command, if one is: the first of its keys, which
+    /// is the one every place that shows a single key shows.
     #[must_use]
     pub fn chord_for(&self, command: Command) -> Option<KeyChord> {
         self.bindings
@@ -830,80 +853,31 @@ pub enum Unbindable {
 
 /// One judgement, used by the page that binds keys, by the table read out of
 /// the config file, and by the test that holds the shipped table to the same
-/// rule. The three families are the whole of what is allowed:
+/// rule.
 ///
-/// * a bare function key, which is what the most used commands are on;
-/// * `ctrl` and a character, which is what does something to the file;
-/// * `alt` and a character, an arrow or enter, which is what asks about the
-///   cursor.
+/// A reader may put a command on any key Obelus can be handed, whether or not
+/// the next terminal can send it -- a window can, a terminal speaking the
+/// keyboard protocol mostly can, and which is the reader's to know. What is
+/// refused is only what Obelus itself never hands the table, so that a
+/// binding to it could not fire anywhere:
 ///
-/// Everything else is refused with the reason, because every one of them is
-/// a key that would do nothing -- or would do nothing *here*, or nothing on
-/// the next machine -- and a binding that silently never fires is worse
-/// than a key the reader cannot have.
+/// * a character with nothing held, which is typing;
+/// * `escape`, which always gives up on the nearest thing;
+/// * `enter`, `tab`, `backspace` and `delete`, which every list and box takes
+///   itself -- all but `alt+enter`, which nothing takes;
+/// * the arrows, `home`, `end` and the paging keys without `alt`, which the
+///   editor takes before the table is reached, or has said it wants.
 #[must_use]
 pub fn why_not(chord: KeyChord) -> Option<&'static str> {
     let alone = chord.modifiers.is_empty();
-    let control = chord.modifiers == KeyModifiers::CONTROL;
-    let alt = chord.modifiers == KeyModifiers::ALT;
-
-    // Copy and paste, under the names the desktop knows them by. Not
-    // Obelus naming a command with shift -- these two are the chords a
-    // terminal has meant by copy and paste since long before any of this,
-    // and they are what a desktop sends a *terminal* when the reader
-    // presses its own one chord for copy: omarchy's `super+c` is
-    // `ctrl+Insert` where it thinks it is talking to a terminal and
-    // `ctrl+c` where it does not, and `super+v` is `shift+Insert` or
-    // `ctrl+v` the same way. Obelus is both and is read as either, so it
-    // answers all four, and which of the two it is taken for stops
-    // mattering. One table, so binding it once binds it for `ob` and `obg`
-    // together. The same shape as `shift+enter` and `alt+enter` being taken
-    // together: one act, two chords, because what arrives is not Obelus's
-    // to decide.
-    //
-    // Which is the whole of the exception: `alt+Insert` is still refused,
-    // because nothing sends it. Every terminal reports these the same way,
-    // unlike a modified function key, and no terminal shipped here binds
-    // them for itself: foot, kitty, alacritty and wezterm all put copy on
-    // `ctrl+shift+c`. A terminal that is *configured* to take them keeps
-    // them and Obelus never sees them -- which is what a desktop does to
-    // make its own chord land somewhere in a shell (omarchy adds them to
-    // foot's bindings for exactly that), and is the one case this cannot
-    // reach. Measured, by pressing it at `ob` in such a terminal and at
-    // `ob` in the same terminal with that one binding turned off: the first
-    // copies nothing, the second copies the selection.
-    //
-    // And the two halves come apart there. With the terminal holding both
-    // keys, paste still works and copy cannot, because pasting is something
-    // a terminal can do on behalf of the program inside it and copying is
-    // not: it puts the words down the pty, where they arrive as an ordinary
-    // bracketed paste. Copy it cannot do, because what is selected is the
-    // program's and the terminal does not know -- and `ob` has taken the
-    // mouse, so the selection the terminal *would* copy is empty. The key
-    // does nothing at all. Which is the shape of the whole problem: a
-    // desktop can tell a terminal from a window, and nothing can tell a
-    // shell from a program that has taken the terminal over. Not something
-    // Obelus can answer from the inside -- the terminal decides before
-    // Obelus is asked, and decides unconditionally.
-    if chord.code == KeyCode::Insert && (control || chord.modifiers == KeyModifiers::SHIFT) {
-        return None;
-    }
-
-    // Two of them, or shift with something that is not a letter: shift
-    // extends and reverses, and a second modifier is either the desktop's
-    // (`ctrl+alt`) or a chord the next terminal reports as one of its
-    // halves. Shift on a letter has already been folded into the capital,
-    // so `ctrl+shift+p` is `ctrl+P` by now and is not refused here.
-    if !alone && !control && !alt {
-        return Some("Shift extends, and two modifiers is the desktop's");
-    }
-
+    let alt = chord.modifiers.contains(KeyModifiers::ALT);
     match chord.code {
         // The keys that move about a file. The editor takes them before the
         // table is reached -- bare and with shift -- and the rest are
         // spoken for: `ctrl` and an arrow is the word motion Obelus does
         // not have yet, and `ctrl` and a paging key is the previous and
-        // next buffer.
+        // next buffer. With alt held they are how changes and history are
+        // walked, and free.
         KeyCode::Up
         | KeyCode::Down
         | KeyCode::Left
@@ -916,30 +890,68 @@ pub fn why_not(chord: KeyChord) -> Option<&'static str> {
         {
             Some("The editor's own, for moving about a file")
         }
-        KeyCode::Up | KeyCode::Down | KeyCode::Left | KeyCode::Right => None,
-        // A function key, which is the one family that wants nothing held.
-        KeyCode::F(_) if alone => None,
-        KeyCode::F(_) => Some("A function key is bare, or it is two keys on the next terminal"),
         // Enter under alt is the only one of these that is a chord: the
         // rest are what a dialog takes and what typing will mean.
-        KeyCode::Enter if alt => None,
+        KeyCode::Enter if chord.modifiers == KeyModifiers::ALT => None,
         KeyCode::Enter | KeyCode::Tab | KeyCode::BackTab | KeyCode::Backspace | KeyCode::Delete => {
             Some("Every list and box takes this one itself")
         }
         // Escape has one meaning everywhere: give up on the nearest thing.
         KeyCode::Esc => Some("Escape always backs out of the nearest thing"),
         KeyCode::Char(_) if alone => Some("Typing, not a command"),
-        // The six the wire cannot tell from tab, enter, newline, backspace,
-        // escape and NUL, whatever the reader pressed.
-        KeyCode::Char(character) if control && "imjh[ 2".contains(character) => {
-            Some("The terminal sends another key for this")
-        }
-        KeyCode::Char(_) => None,
-        // The one key with a name and no family. Every terminal reports it
-        // as itself and no other key folds onto it, it cannot be typing,
-        // and the mode it turns on is the one it is named after -- so a
-        // reader may bind it, and Obelus binds it by default.
-        KeyCode::Insert if alone => None,
+        // Copy and paste, under the names the desktop knows them by --
+        // `shift+Insert` and `ctrl+Insert` are shipped, and are not Obelus
+        // naming a command with shift. These two are the chords a terminal
+        // has meant by copy and paste since long before any of this, and
+        // they are what a desktop sends a *terminal* when the reader
+        // presses its own one chord for copy: omarchy's `super+c` is
+        // `ctrl+Insert` where it thinks it is talking to a terminal and
+        // `ctrl+c` where it does not, and `super+v` is `shift+Insert` or
+        // `ctrl+v` the same way. Obelus is both and is read as either, so it
+        // answers all four, and which of the two it is taken for stops
+        // mattering. One table, so binding it once binds it for `ob` and
+        // `obg` together. The same shape as `shift+enter` and `alt+enter`
+        // being taken together: one act, two chords, because what arrives
+        // is not Obelus's to decide.
+        //
+        // No terminal shipped here binds them for itself: foot, kitty,
+        // alacritty and wezterm all put copy on `ctrl+shift+c`. A terminal
+        // that is *configured* to take them keeps them and Obelus never
+        // sees them -- which is what a desktop does to make its own chord
+        // land somewhere in a shell (omarchy adds them to foot's bindings
+        // for exactly that), and is the one case this cannot reach.
+        // Measured, by pressing it at `ob` in such a terminal and at `ob` in
+        // the same terminal with that one binding turned off: the first
+        // copies nothing, the second copies the selection.
+        //
+        // And the two halves come apart there. With the terminal holding
+        // both keys, paste still works and copy cannot, because pasting is
+        // something a terminal can do on behalf of the program inside it and
+        // copying is not: it puts the words down the pty, where they arrive
+        // as an ordinary bracketed paste. Copy it cannot do, because what is
+        // selected is the program's and the terminal does not know -- and
+        // `ob` has taken the mouse, so the selection the terminal *would*
+        // copy is empty. The key does nothing at all. Which is the shape of
+        // the whole problem: a desktop can tell a terminal from a window,
+        // and nothing can tell a shell from a program that has taken the
+        // terminal over. Not something Obelus can answer from the inside --
+        // the terminal decides before Obelus is asked, and decides
+        // unconditionally.
+        //
+        // And bare, the one key with a name and no family: every terminal
+        // reports it as itself, it cannot be typing, and the mode it turns
+        // on is the one it is named after.
+        KeyCode::Insert => None,
+        KeyCode::Char(_)
+        | KeyCode::F(_)
+        | KeyCode::Up
+        | KeyCode::Down
+        | KeyCode::Left
+        | KeyCode::Right
+        | KeyCode::Home
+        | KeyCode::End
+        | KeyCode::PageUp
+        | KeyCode::PageDown => None,
         _ => Some("Not a key Obelus can be given"),
     }
 }
@@ -1036,11 +1048,15 @@ mod tests {
         }
     }
 
-    /// Each way out of the families is refused, and with a reason.
+    /// What never reaches the table is refused, with a reason, and what
+    /// only some terminals send is not.
     ///
-    /// Every one of these is a key that would do nothing, or nothing here,
-    /// or nothing on the next machine -- which is the same as a binding
-    /// that silently never fires.
+    /// Every refused one is a key that would do nothing anywhere -- the
+    /// same as a binding that silently never fires. The ones a terminal may
+    /// not send are the reader's to know: a window sends them all.
+    ///
+    /// Broken deliberately by refusing two modifiers again, as `why_not`
+    /// did: `ctrl+alt+x` was refused.
     #[test]
     fn the_keys_that_cannot_be_bound_are_refused() {
         let refused = [
@@ -1060,19 +1076,9 @@ mod tests {
             (KeyCode::Backspace, KeyModifiers::NONE),
             (KeyCode::Delete, KeyModifiers::NONE),
             (KeyCode::Esc, KeyModifiers::NONE),
-            // Two keys on the next terminal.
-            (KeyCode::F(5), KeyModifiers::SHIFT),
-            (
-                KeyCode::Char('x'),
-                KeyModifiers::CONTROL | KeyModifiers::ALT,
-            ),
-            // The six the wire cannot tell from another key.
-            (KeyCode::Char('i'), KeyModifiers::CONTROL),
-            (KeyCode::Char('m'), KeyModifiers::CONTROL),
-            (KeyCode::Char('j'), KeyModifiers::CONTROL),
-            (KeyCode::Char('h'), KeyModifiers::CONTROL),
-            (KeyCode::Char('['), KeyModifiers::CONTROL),
-            (KeyCode::Char(' '), KeyModifiers::CONTROL),
+            (KeyCode::Esc, KeyModifiers::CONTROL),
+            (KeyCode::Tab, KeyModifiers::CONTROL),
+            (KeyCode::Enter, KeyModifiers::CONTROL),
         ];
         for (code, modifiers) in refused {
             let chord = KeyChord::new(code, modifiers);
@@ -1097,6 +1103,22 @@ mod tests {
             (KeyCode::Enter, KeyModifiers::ALT),
             (KeyCode::Up, KeyModifiers::ALT),
             (KeyCode::Left, KeyModifiers::ALT),
+            (KeyCode::Home, KeyModifiers::ALT),
+            // What some terminal will not send, or will send as another
+            // key: a window sends every one of them.
+            (KeyCode::F(5), KeyModifiers::SHIFT),
+            (
+                KeyCode::Char('x'),
+                KeyModifiers::CONTROL | KeyModifiers::ALT,
+            ),
+            (
+                KeyCode::Char('p'),
+                KeyModifiers::CONTROL | KeyModifiers::SHIFT,
+            ),
+            (KeyCode::Char('i'), KeyModifiers::CONTROL),
+            (KeyCode::Char('['), KeyModifiers::CONTROL),
+            (KeyCode::Char(' '), KeyModifiers::CONTROL),
+            (KeyCode::Insert, KeyModifiers::ALT),
         ];
         for (code, modifiers) in allowed {
             let chord = KeyChord::new(code, modifiers);
@@ -1208,7 +1230,7 @@ mod tests {
     /// because that binding comes first.
     #[test]
     fn a_line_of_the_readers_beats_the_layout() {
-        let lines = [("choose-theme".to_string(), "ctrl+e".to_string())]
+        let lines = [("choose-theme".to_string(), vec!["ctrl+e".to_string()])]
             .into_iter()
             .collect();
         let (keymap, unbound) = Keymap::with(Layout::Mnemonic, &lines);
@@ -1234,7 +1256,7 @@ mod tests {
     /// lost its way to the palette to a command it cannot run.
     #[test]
     fn a_line_of_the_readers_takes_its_chord_only_where_it_is_bound() {
-        let lines = [("choose-theme".to_string(), "ctrl+p".to_string())]
+        let lines = [("choose-theme".to_string(), vec!["ctrl+p".to_string()])]
             .into_iter()
             .collect();
         let control_p = crossterm::event::KeyEvent::new(KeyCode::Char('p'), KeyModifiers::CONTROL);
@@ -1265,7 +1287,7 @@ mod tests {
             keymap.command_on(free).is_none(),
             "the key this test borrows is bound, and it borrows a free one"
         );
-        keymap.rebind(obelus_command::Command::ThemeSelect, Some(free));
+        keymap.rebind(obelus_command::Command::ThemeSelect, &[free]);
         assert_eq!(
             keymap.lookup(
                 &crossterm::event::KeyEvent::new(KeyCode::Char('z'), KeyModifiers::ALT),
