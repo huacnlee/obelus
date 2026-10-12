@@ -61,7 +61,7 @@ fn pick(app: &mut App, called: &str) {
 
 /// Every layout is a row, called what it is called, with two keys it would
 /// give -- and the keys are that layout's, not the ones in force. What it
-/// is, is what `ob keymap` says it is.
+/// is, is what the setting says it is.
 ///
 /// Deliberate breaks: building the examples from `self.keymap` instead of
 /// the layout's own table -- every row then says `F1`, and the VS Code row
@@ -84,7 +84,7 @@ fn the_list_says_what_each_layout_would_give() {
         assert_eq!(row.label, written.name);
         assert!(
             detail.starts_with(written.about),
-            "{} says something else here than `ob keymap` does: {detail}",
+            "{} says something else here than the setting does: {detail}",
             row.label
         );
         for command in [Command::FileOpen, Command::CommandPalette] {

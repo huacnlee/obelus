@@ -19,8 +19,6 @@ use obelus_buffer::Buffer;
 
 use crate::app::{self, App};
 
-pub mod keymap;
-
 /// Opens what the command line named, and builds the application round it.
 ///
 /// Called before there is a screen, and that is not incidental: a path that

@@ -632,9 +632,9 @@ impl App {
     /// What a layout puts the keys on, and two of them as they would be.
     ///
     /// Because the name is a word to remember it by and not a description
-    /// of it. What it is comes from [`obelus_config::key_layout`], which
-    /// `ob keymap` says too, so the two cannot describe one layout two
-    /// ways. The two keys are asked of the table that layout would build,
+    /// of it. What it is comes from [`obelus_config::key_layout`], beside
+    /// the setting, so the list and the setting cannot describe one layout
+    /// two ways. The two keys are asked of the table that layout would build,
     /// with the reader's own `[keys]` laid over it as they would be, so a
     /// row cannot name a key the layout does not give -- and the two are
     /// the ones a reader reaches for first: a file, and everything else.
@@ -675,7 +675,7 @@ impl App {
     ///
     /// No command opens it. Which keys these are is a preference, chosen
     /// once, and a preference is a setting: after the first start the
-    /// settings page is the way to it, and `ob keymap set` from a shell.
+    /// settings page is the way to it.
     pub fn open_keymap_picker(&mut self) {
         let mut picker = self.choices(
             "keys_from",

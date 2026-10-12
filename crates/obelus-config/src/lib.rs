@@ -2366,39 +2366,6 @@ pub fn project_path_for(root: &Path) -> PathBuf {
     root.join(".obelus").join("config.toml")
 }
 
-/// Chooses the layout the reader's keys start from, in their own settings.
-///
-/// For `ob keymap set` and a first start's question, which have no settings
-/// of their own to save: what is in the file *now* is read and the one line
-/// changed, so another window's changes since this one started are not
-/// written back over. Which narrows the window two writers have and does
-/// not close it -- [`save_to`] makes the write atomic, and nothing locks a
-/// read to the write after it.
-///
-/// A word that names no layout is refused before anything is read, and so
-/// is a file that will not read, which stays as it is: writing the layout
-/// would mean writing the defaults over everything else in it.
-///
-/// The file is written even where the layout is the default and the line
-/// comes out: that the file exists is what says a layout was chosen.
-pub fn write_keymap(path: &Path, word: &str) -> std::io::Result<()> {
-    if !KEY_LAYOUTS.contains(&word) {
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::InvalidInput,
-            format!("no layout is called {word}"),
-        ));
-    }
-    let mut config = match read_from(path) {
-        Reading::Settings { config, .. } => *config,
-        Reading::Nothing | Reading::Nowhere => Config::default(),
-        Reading::Unreadable(why, _) => {
-            return Err(std::io::Error::new(std::io::ErrorKind::InvalidData, why));
-        }
-    };
-    config.keys_from = word.to_string();
-    save_to(path, &config)
-}
-
 /// Writes a config to a path, making its directory if it is not there.
 ///
 /// The path is passed in rather than looked up here, so that nothing can
@@ -2804,45 +2771,6 @@ mod tests {
         assert!(super::Reading::Nowhere.keymap_is_chosen());
     }
 
-    /// Choosing a layout changes that line and nothing the reader said: a
-    /// setting of theirs, a key of theirs and a line this version has never
-    /// heard of all stay, and going back to the default takes the line out
-    /// and leaves the file.
-    ///
-    /// Broken deliberately by starting from `Config::default()` instead of
-    /// what the file says: the setting and the key went.
-    #[test]
-    fn choosing_a_layout_keeps_what_the_reader_said() {
-        let directory =
-            std::env::temp_dir().join(format!("obelus-choosing-a-layout-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&directory);
-        let file = directory.join("config.toml");
-        std::fs::create_dir_all(&directory).expect("a directory");
-        std::fs::write(
-            &file,
-            "wrap = true\nfuture_setting = 3\n\n[keys]\nopen-file = \"Ctrl+o\"\n",
-        )
-        .expect("the file");
-        super::write_keymap(&file, "textmate").expect("choosing");
-        let written = std::fs::read_to_string(&file).expect("the file");
-        let config = from_toml(&written);
-        assert_eq!(config.keys_from, "textmate", "{written}");
-        assert!(config.wrap, "{written}");
-        assert_eq!(
-            config.keys.get("open-file").map(Vec::as_slice),
-            Some(["Ctrl+o".to_string()].as_slice()),
-            "{written}"
-        );
-        assert!(written.contains("future_setting = 3"), "{written}");
-
-        super::write_keymap(&file, "obelus").expect("choosing again");
-        let written = std::fs::read_to_string(&file).expect("the file");
-        assert!(!written.contains("keys_from"), "{written}");
-        assert_eq!(from_toml(&written).keys_from, "obelus");
-        assert!(from_toml(&written).wrap, "{written}");
-        let _ = std::fs::remove_dir_all(&directory);
-    }
-
     /// A command's keys are read in every shape a reader writes them, and
     /// written in the one they would: a string for one, an array for
     /// several, and an empty array for none -- and what is written reads
@@ -2889,54 +2817,6 @@ mod tests {
             Some(&vec!["1".to_string(), "alt+o".to_string()])
         );
         assert_eq!(config.keys.get("save-file"), Some(&vec!["3".to_string()]));
-    }
-
-    /// The default chosen where there was no file still makes one, because
-    /// a file is what says a layout was chosen.
-    ///
-    /// Broken deliberately by returning early from `write_keymap` when the
-    /// word is already the one in force: nothing was written, and the next
-    /// start would have asked again.
-    #[test]
-    fn choosing_the_default_makes_the_file() {
-        let directory = std::env::temp_dir().join(format!(
-            "obelus-choosing-the-default-{}",
-            std::process::id()
-        ));
-        let _ = std::fs::remove_dir_all(&directory);
-        let file = directory.join("obelus").join("config.toml");
-        assert!(!super::read_from(&file).keymap_is_chosen());
-        super::write_keymap(&file, "obelus").expect("choosing");
-        assert!(super::read_from(&file).keymap_is_chosen());
-        let _ = std::fs::remove_dir_all(&directory);
-    }
-
-    /// A word that names no layout, and a file that will not read, are
-    /// both refused -- and the file is left exactly as it was.
-    ///
-    /// Broken deliberately by dropping the check of the word (a layout
-    /// nothing answers to was written), and by treating an unreadable file
-    /// as none (the defaults went over it).
-    #[test]
-    fn choosing_a_layout_refuses_and_leaves_the_file() {
-        let directory =
-            std::env::temp_dir().join(format!("obelus-refusing-a-layout-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&directory);
-        let file = directory.join("config.toml");
-        std::fs::create_dir_all(&directory).expect("a directory");
-        std::fs::write(&file, "wrap = true\n").expect("the file");
-        assert!(super::write_keymap(&file, "lazyvim").is_err());
-        assert_eq!(
-            std::fs::read_to_string(&file).expect("the file"),
-            "wrap = true\n"
-        );
-        std::fs::write(&file, "wrap = [").expect("the file");
-        assert!(super::write_keymap(&file, "vscode").is_err());
-        assert_eq!(
-            std::fs::read_to_string(&file).expect("the file"),
-            "wrap = ["
-        );
-        let _ = std::fs::remove_dir_all(&directory);
     }
 
     /// A project cannot choose which keys a reader starts from: it would be

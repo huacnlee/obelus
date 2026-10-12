@@ -59,10 +59,6 @@ use obelus_app::startup;
 // name from the crate, and `obelus-gui --version` is a name nobody has.
 #[command(name = "obg", version, about)]
 struct Arguments {
-    /// Something to do instead of opening anything.
-    #[command(subcommand)]
-    command: Option<startup::keymap::Management>,
-
     /// What to open: a file, or a directory to work in.
     ///
     /// A file names the tree it is in and is opened. A directory is the
@@ -80,11 +76,6 @@ fn main() -> Result<()> {
     #[cfg(windows)]
     take_the_console_it_was_started_from();
     let arguments = Arguments::parse();
-    // Before the log and the window: it opens nothing, so it has nothing to
-    // say in either, and what it says goes to the console taken above.
-    if let Some(command) = &arguments.command {
-        return command.run("obg");
-    }
     // Before anything else starts a thread, because changing the
     // environment while another thread reads it is undefined. And before
     // the log, which starts one -- so what happened is said after it.
@@ -230,28 +221,5 @@ mod tests {
         assert!(shown("font_size"));
         // And what both of them are drawn with is nobody's front end.
         assert!(shown("theme"));
-    }
-
-    /// `obg keymap` is what `ob keymap` is, and a file called `keymap` still
-    /// opens.
-    ///
-    /// Broken deliberately by taking the value parser off `layout`:
-    /// `lazyvim` was taken.
-    #[test]
-    fn keymap_is_a_subcommand_here_too() {
-        use clap::Parser as _;
-        let parse = |words: &[&str]| {
-            super::Arguments::try_parse_from(std::iter::once("obg").chain(words.iter().copied()))
-        };
-        assert!(matches!(
-            parse(&["keymap", "set", "textmate"]).expect("choosing").command,
-            Some(obelus_app::startup::keymap::Management::Keymap {
-                choose: Some(obelus_app::startup::keymap::Choose::Set { ref layout }),
-            }) if layout == "textmate"
-        ));
-        assert!(parse(&["keymap", "set", "lazyvim"]).is_err());
-        let escaped = parse(&["--", "keymap"]).expect("a file called keymap");
-        assert!(escaped.command.is_none());
-        assert_eq!(escaped.paths, [std::path::PathBuf::from("keymap")]);
     }
 }

@@ -18,10 +18,6 @@ use obelus_app::{app, event, startup};
 // the command a reader types. `obelus-cli --version` is a name nobody has.
 #[command(name = "ob", version, about)]
 struct Arguments {
-    /// Something to do instead of opening anything.
-    #[command(subcommand)]
-    command: Option<startup::keymap::Management>,
-
     /// What to open: a file, or a directory to work in.
     ///
     /// A file names the tree it is in and is opened. A directory is the
@@ -45,12 +41,6 @@ struct Arguments {
 
 fn main() -> Result<ExitCode> {
     let arguments = Arguments::parse();
-    // Before the log and everything else: it opens nothing, so it has
-    // nothing to say there.
-    if let Some(command) = &arguments.command {
-        command.run("ob")?;
-        return Ok(ExitCode::SUCCESS);
-    }
 
     // Held until main returns, so buffered log lines are flushed on the way
     // out.
@@ -261,48 +251,5 @@ fn enable_mouse() -> bool {
             tracing::warn!(%error, "no mouse reporting");
             false
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    /// `keymap` is the subcommand, `keymap set` takes only a layout's word,
-    /// and a file called `keymap` can still be opened.
-    ///
-    /// Broken deliberately by renaming the subcommand (`keymap set vscode`
-    /// became three paths), and by taking the value parser off `layout`
-    /// (`lazyvim` was taken, to be refused only once the file was read).
-    #[test]
-    fn keymap_is_a_subcommand_and_a_path_called_keymap_still_opens() {
-        use clap::Parser as _;
-        let parse = |words: &[&str]| {
-            super::Arguments::try_parse_from(std::iter::once("ob").chain(words.iter().copied()))
-        };
-        let chosen = parse(&["keymap", "set", "vscode"]).expect("choosing");
-        assert!(chosen.paths.is_empty());
-        assert!(matches!(
-            chosen.command,
-            Some(obelus_app::startup::keymap::Management::Keymap {
-                choose: Some(obelus_app::startup::keymap::Choose::Set { ref layout }),
-            }) if layout == "vscode"
-        ));
-        for word in obelus_app::startup::keymap::PRESETS {
-            assert!(parse(&["keymap", "set", word]).is_ok(), "{word}");
-        }
-        let asked = parse(&["keymap"]).expect("asking");
-        assert!(matches!(
-            asked.command,
-            Some(obelus_app::startup::keymap::Management::Keymap { choose: None })
-        ));
-        assert!(parse(&["keymap", "set", "lazyvim"]).is_err());
-        assert!(parse(&["keymap", "set"]).is_err());
-        for path in ["./keymap", "main.rs"] {
-            let opening = parse(&[path]).expect("a path");
-            assert!(opening.command.is_none());
-            assert_eq!(opening.paths, [std::path::PathBuf::from(path)]);
-        }
-        let escaped = parse(&["--", "keymap"]).expect("a file called keymap");
-        assert!(escaped.command.is_none());
-        assert_eq!(escaped.paths, [std::path::PathBuf::from("keymap")]);
     }
 }

@@ -145,13 +145,7 @@ has the command (`ctrl+p` for a file, `ctrl+shift+p` for the palette in
 In `obg` on a Mac, `ctrl` is `cmd` in every layout.
 
 The Layout setting, under Keys in `open-settings`, switches between them,
-and your own `[keys]` lines are kept on top of whichever you pick. From a
-shell:
-
-```
-ob keymap              # which layout, and the others
-ob keymap set vscode   # choose one without opening anything
-```
+and your own `[keys]` lines are kept on top of whichever you pick.
 
 Every key, and each layout's, is in
 [the reference](https://obelus-editor.github.io/obelus/reference.html#layouts).
