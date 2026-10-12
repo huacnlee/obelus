@@ -778,9 +778,18 @@ impl App {
     /// the keys it lists and has to hear that they moved.
     pub fn set_keymap(&mut self, keymap: Keymap) {
         self.keymap = keymap;
+        let laid_out = self.laid_out_keys();
         if let Some(settings) = self.settings.as_mut() {
-            settings.hear_keymap(&self.keymap);
+            settings.hear_keymap(&self.keymap, &laid_out);
         }
+    }
+
+    /// The table the reader's layout makes with none of their own keys
+    /// laid over it: what a command's keys are changed from.
+    pub(crate) fn laid_out_keys(&self) -> Keymap {
+        Keymap::laid_out(
+            obelus_keymap::Layout::named(&self.settled.config.keys_from).unwrap_or_default(),
+        )
     }
 
     /// The colours currently in force.

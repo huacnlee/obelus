@@ -105,6 +105,12 @@ pub enum SettingsOutcome {
     /// and asked again, because the reader is looking at the row and it is
     /// that binding the answer is about.
     Bind(Command, Vec<KeyChord>),
+    /// A command should be on the keys its layout gives it again: the
+    /// reader's line for it taken out of the file.
+    ResetKeys(Command),
+    /// Every command should be on the keys its layout gives it -- asked
+    /// first, because it takes every key the reader chose.
+    ResetAllKeys,
     /// One of the active agent's settings wants its values.
     ///
     /// Which setting, by the agent's id for it. What the values are is not
@@ -609,6 +615,10 @@ pub struct Settings {
     /// almost none of those have the table to hand. The application says
     /// when the table changes, which is the one moment the answer can.
     held: Vec<(Command, Vec<KeyChord>)>,
+    /// The commands whose keys are not the ones their layout gives them,
+    /// heard with the keys: what the page marks, and what the keys that
+    /// put a command back are offered on.
+    changed: Vec<Command>,
     /// The chord that would not do, and why it would not.
     ///
     /// On the row, because that is where the reader is looking and it is
@@ -650,6 +660,7 @@ impl Settings {
             query: Field::new(),
             binding: None,
             held: Vec::new(),
+            changed: Vec::new(),
             refused: None,
             whose: Whose::Reader,
             page: 0,
@@ -665,6 +676,7 @@ impl Settings {
             query: Field::new(),
             binding: None,
             held: Vec::new(),
+            changed: Vec::new(),
             refused: None,
             whose: Whose::Project,
             page: 0,
@@ -898,7 +910,11 @@ impl Settings {
     /// The focus stays on the command it was on, on the same row of it or
     /// its last: a key taken away is a row fewer, and an index kept as it
     /// was would land on the next command.
-    pub fn hear_keymap(&mut self, keymap: &Keymap) {
+    ///
+    /// And the table the layout alone would make, which is what a command
+    /// is changed from: asked of the keys, not of the file, so a line that
+    /// says what the layout says anyway marks nothing.
+    pub fn hear_keymap(&mut self, keymap: &Keymap, laid_out: &Keymap) {
         let focused = match self.on_keys() {
             true => self.key_rows().get(self.window.focus()).copied(),
             false => None,
@@ -906,6 +922,12 @@ impl Settings {
         self.held = obelus_command::ALL
             .iter()
             .map(|spec| (spec.command, keymap.chords_for(spec.command)))
+            .collect();
+        self.changed = self
+            .held
+            .iter()
+            .filter(|(command, chords)| *chords != laid_out.chords_for(*command))
+            .map(|(command, _)| *command)
             .collect();
         if !self.on_keys() {
             return;
@@ -920,6 +942,18 @@ impl Settings {
                 self.window.set_focus(at);
             }
         }
+    }
+
+    /// Whether a command's keys are not the ones its layout gives it.
+    #[must_use]
+    pub fn changed(&self, command: Command) -> bool {
+        self.changed.contains(&command)
+    }
+
+    /// Whether any command's are.
+    #[must_use]
+    pub fn any_changed(&self) -> bool {
+        !self.changed.is_empty()
     }
 
     /// The keys a command is on, as last heard.
@@ -1445,12 +1479,13 @@ impl Settings {
                 self.refused = None;
                 return SettingsOutcome::Consumed;
             }
-            // Taking the key on this row away is a decision a reader can
-            // make, and there is nowhere else on the page to make it. Only
-            // where the row is being changed: one waiting for a key to add
-            // has nothing of its own to take, and goes on waiting.
+            // Taking the key on this row away, on the key that does it
+            // everywhere on this page. Only where the row is being changed:
+            // one waiting for a key to add has nothing of its own to take,
+            // and goes on waiting.
             let held = self.held(command).to_vec();
-            if matches!(key.code, KeyCode::Delete | KeyCode::Backspace) && key.modifiers.is_empty()
+            if KeyChord::from_event(key)
+                == Some(KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT))
             {
                 if !replacing || slot >= held.len() {
                     return SettingsOutcome::Consumed;
@@ -1522,6 +1557,38 @@ impl Settings {
                 self.refused = None;
             }
             return SettingsOutcome::Consumed;
+        }
+
+        // Taking keys away, on alt because the filter takes nothing on it:
+        // `alt+backspace` the key on this row, `alt+r` this command put back
+        // on its layout's keys, and `alt+shift+r` every command, asked
+        // first. Backspace and delete are the filter's, and a Mac has no
+        // delete to press.
+        if self.on_keys() {
+            let chord = KeyChord::from_event(key);
+            let focused = self.keys().get(self.window.focus()).copied();
+            let removing = chord == Some(KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT));
+            let resetting = chord == Some(KeyChord::new(KeyCode::Char('r'), KeyModifiers::ALT));
+            let resetting_all = chord
+                == Some(KeyChord::new(
+                    KeyCode::Char('r'),
+                    KeyModifiers::ALT | KeyModifiers::SHIFT,
+                ));
+            match focused {
+                Some((KeyRow::Key { command, slot }, Some(_))) if removing => {
+                    let mut kept = self.held(command).to_vec();
+                    kept.remove(slot);
+                    return SettingsOutcome::Bind(command, kept);
+                }
+                Some((KeyRow::Key { command, .. }, _)) if resetting && self.changed(command) => {
+                    return SettingsOutcome::ResetKeys(command);
+                }
+                _ if resetting_all && self.any_changed() => {
+                    return SettingsOutcome::ResetAllKeys;
+                }
+                _ if removing || resetting || resetting_all => return SettingsOutcome::Consumed,
+                _ => {}
+            }
         }
 
         // The same rule every other view follows: a modifier Obelus has no

@@ -240,6 +240,17 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
             settings.keys().get(settings.focus()),
             Some((KeyRow::Key { .. }, None))
         );
+    // The row the reader is on, on the keys page: whether it has a key to
+    // take away, and whether its command is off its layout's keys.
+    let on_keys_row = settings
+        .on_keys()
+        .then(|| settings.keys().get(settings.focus()).copied())
+        .flatten();
+    let on_a_key = matches!(on_keys_row, Some((KeyRow::Key { .. }, Some(_))));
+    let changed_here = matches!(
+        on_keys_row,
+        Some((KeyRow::Key { command, .. }, _)) if settings.changed(command)
+    );
     // And one more key for the command the reader is on, which is always
     // control: enter changes a key, and control adds one.
     let adds = settings.on_keys()
@@ -267,7 +278,13 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
     // has one. Not escape, which gives up on the nearest thing here as
     // everywhere, and a foot does not spend itself saying so (`ui::foot`).
     if let Some(binding) = settings.binding_at() {
-        return vec![Hint::new(bare(KeyCode::Delete), "Remove").when(binding.replacing)];
+        return vec![
+            Hint::new(
+                obelus_keymap::KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT),
+                "Remove",
+            )
+            .when(binding.replacing),
+        ];
     }
     // Delete is the filter's while the filter has something for it, so
     // nothing below says what it does to a row until then.
@@ -283,6 +300,27 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
             "Add a key",
         )
         .when(adds),
+        // Taking keys away, each offered only where it would do something:
+        // the key on this row, this command put back on its layout's keys,
+        // and every command.
+        Hint::new(
+            obelus_keymap::KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT),
+            "Remove",
+        )
+        .when(on_a_key),
+        Hint::new(
+            obelus_keymap::KeyChord::new(KeyCode::Char('r'), KeyModifiers::ALT),
+            "Reset",
+        )
+        .when(changed_here),
+        Hint::new(
+            obelus_keymap::KeyChord::new(
+                KeyCode::Char('r'),
+                KeyModifiers::ALT | KeyModifiers::SHIFT,
+            ),
+            "Reset all",
+        )
+        .when(settings.on_keys() && settings.any_changed()),
         Hint::new(bare(KeyCode::Delete), "Forget").when(forgets && rows_delete),
         // On an agent's row, and only while there is something to undo:
         // what `delete` leaves there is not a default of Obelus's but the
@@ -585,7 +623,10 @@ impl Widget for SettingsView<'_> {
                         entry: false,
                         warning: Vec::new(),
                         pinned: None,
-                        scope: None,
+                        // Once, beside the name: the rows under it are
+                        // more of the same command's keys.
+                        scope: (*slot == 0 && self.settings.changed(*command))
+                            .then_some(Scope::Changed),
                     },
                 })
                 .collect();
@@ -876,6 +917,10 @@ enum Scope {
     Global,
     /// Nobody's: what Obelus ships with.
     Default,
+    /// On the keys page, a command the reader has put on keys other than
+    /// its layout's: their own, said against the layout rather than
+    /// against Obelus's defaults, which on that page are the layout.
+    Changed,
 }
 
 impl Scope {
@@ -885,6 +930,7 @@ impl Scope {
             Self::Project => "Project",
             Self::Global => "Global",
             Self::Default => "Default",
+            Self::Changed => "Changed",
         }
     }
 }
@@ -1447,7 +1493,7 @@ impl SettingsView<'_> {
             // to say it on.
             None => Some((
                 match binding.replacing && has_a_key {
-                    true => "Press the new key, or Delete it",
+                    true => "Press the new key",
                     false => "Press a key to add it",
                 }
                 .to_string(),

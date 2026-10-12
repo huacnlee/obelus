@@ -119,6 +119,9 @@ pub enum PickerValue {
     /// a question about the settings directories -- which the list knows
     /// nothing about and the application does.
     Theme(String),
+    /// Put every command back on the keys its layout gives it: the row a
+    /// reader confirms that with.
+    KeysBack,
     /// Set a setting to one of its choices.
     ///
     /// The settings view's droplist is this picker, opened over it: a list

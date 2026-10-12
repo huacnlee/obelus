@@ -247,7 +247,7 @@ impl App {
         // what was last heard until the answer arrives.
         self.ask_what_the_agent_offers();
         let mut settings = Settings::new();
-        settings.hear_keymap(&self.keymap);
+        settings.hear_keymap(&self.keymap, &self.laid_out_keys());
         self.settings = Some(settings);
     }
 
@@ -262,7 +262,7 @@ impl App {
         // Nothing asked of the agent: what it starts on is the reader's
         // alone, and the project's page has no group for it.
         let mut settings = Settings::for_project();
-        settings.hear_keymap(&self.keymap);
+        settings.hear_keymap(&self.keymap, &self.laid_out_keys());
         self.settings = Some(settings);
     }
 
@@ -367,6 +367,15 @@ impl App {
             }
             SettingsOutcome::Bind(command, chords) => {
                 self.rebind(command, chords);
+                true
+            }
+            SettingsOutcome::ResetKeys(command) => {
+                self.settled.readers.keys.remove(command.name());
+                self.keep_the_keys();
+                true
+            }
+            SettingsOutcome::ResetAllKeys => {
+                self.ask_to_put_every_key_back();
                 true
             }
             SettingsOutcome::Choose(key, choices, word) => {
@@ -1340,6 +1349,54 @@ impl App {
             .readers
             .keys
             .insert(command.name().to_string(), written);
+        self.keep_the_keys();
+    }
+
+    /// Asks whether to put every command back on its layout's keys: a
+    /// list of two, because it takes every key the reader chose at once,
+    /// and the reader is in a list of keys already.
+    fn ask_to_put_every_key_back(&mut self) {
+        let layout = obelus_config::key_layout(&self.settled.config.keys_from)
+            .map_or("the layout", |layout| layout.name);
+        let row = |label: &str, value| PickerItem {
+            prose: false,
+            marker: None,
+            icon: None,
+            label: label.to_string(),
+            version: None,
+            detail: None,
+            trailing: None,
+            changed: None,
+            value,
+            enabled: true,
+            colours: None,
+            status: None,
+            depth: 0,
+            opens: None,
+            kind: None,
+            tab: None,
+            section: None,
+        };
+        let items = vec![
+            row("Put them back", PickerValue::KeysBack),
+            row("Keep them", PickerValue::Nothing),
+        ];
+        let mut picker = Picker::new(items, PickerLayout::Compact { rows: 2 });
+        picker.ask(&format!("Put every key back to {layout}'s?"));
+        self.show_list(picker);
+    }
+
+    /// Puts every command back on its layout's keys: the reader's key table
+    /// taken out of the file.
+    pub(in crate::app) fn put_every_key_back(&mut self) {
+        self.settled.readers.keys.clear();
+        self.keep_the_keys();
+    }
+
+    /// Makes the keys the reader's layer says the ones in force, and writes
+    /// the file -- the way a setting is: the project laid back over it, the
+    /// table built again, and nothing saved over a file that will not read.
+    fn keep_the_keys(&mut self) {
         self.apply_project();
         let Some(path) = self.settled.path.clone() else {
             return;

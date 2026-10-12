@@ -907,6 +907,9 @@ impl App {
             | PickerValue::Action(_)
             | PickerValue::Theme(_)
             | PickerValue::MoreThemes
+            // A question about the keys, answered over the page that lists
+            // them: there is nothing to show beside it.
+            | PickerValue::KeysBack
             | PickerValue::Setting { .. }
             | PickerValue::AgentValue { .. }
             | PickerValue::AgentDefault { .. }
