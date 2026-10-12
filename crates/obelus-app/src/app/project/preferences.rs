@@ -1716,16 +1716,16 @@ impl App {
                 obelus_keymap::Unbindable::NoSuchCommand => {
                     format!("No command is called `{}`", one.name)
                 }
+                // About the key and not the line: a line may name several,
+                // and the ones that would do are bound -- which command it
+                // is goes without saying, because the mark is on its line.
                 obelus_keymap::Unbindable::Unreadable => {
-                    format!(
-                        "Nothing is bound to `{}`: `{}` is not a key",
-                        one.name, one.text
-                    )
+                    format!("No key is called `{}`", one.text)
                 }
                 // The reason the page that binds keys gives, in its own
                 // words, because it is the same judgement.
                 obelus_keymap::Unbindable::NotAllowed(why) => {
-                    format!("Nothing is bound to `{}`: {why}", one.name)
+                    format!("No command can be on `{}`: {why}", one.text)
                 }
             };
             let at = spans.get(&format!("keys.{}", one.name)).copied();

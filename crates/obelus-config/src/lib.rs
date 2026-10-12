@@ -1708,21 +1708,19 @@ pub fn apply(config: &mut Config, table: &toml::Table, whose: Whose) -> Applied 
         // table is built, which is the one place that knows what either of
         // those is.
         for (name, written) in keys {
-            let chords: Option<Vec<String>> = match written {
-                toml::Value::String(chord) if chord.is_empty() => Some(Vec::new()),
-                toml::Value::String(chord) => Some(vec![chord.clone()]),
-                toml::Value::Array(chords) => Some(
-                    chords
-                        .iter()
-                        .filter_map(toml::Value::as_str)
-                        .map(str::to_string)
-                        .collect(),
-                ),
-                _ => None,
+            // What is not a string goes through as the text it is written
+            // in, to be said where the table is built: dropped, `[1]` would
+            // read as no keys, and take the command's away without a word.
+            let text = |value: &toml::Value| match value {
+                toml::Value::String(chord) => chord.clone(),
+                other => other.to_string(),
             };
-            if let Some(chords) = chords {
-                config.keys.insert(name.clone(), chords);
-            }
+            let chords = match written {
+                toml::Value::String(chord) if chord.is_empty() => Vec::new(),
+                toml::Value::Array(chords) => chords.iter().map(text).collect(),
+                other => vec![text(other)],
+            };
+            config.keys.insert(name.clone(), chords);
         }
     }
     if let Some(agents) = table.get("agents").and_then(toml::Value::as_table)
@@ -2876,6 +2874,21 @@ mod tests {
             "{written}"
         );
         assert_eq!(from_toml(&written).keys, config.keys, "{written}");
+    }
+
+    /// What in a key's line is not a string is kept as the text it is, so
+    /// that it is said where the table is built rather than read as no keys.
+    ///
+    /// Broken deliberately by dropping what is not a string, as the reading
+    /// did: `open-file = [1]` came back as no keys at all.
+    #[test]
+    fn what_is_not_a_key_in_a_line_is_kept_to_be_said() {
+        let config = from_toml("[keys]\nopen-file = [1, \"alt+o\"]\nsave-file = 3\n");
+        assert_eq!(
+            config.keys.get("open-file"),
+            Some(&vec!["1".to_string(), "alt+o".to_string()])
+        );
+        assert_eq!(config.keys.get("save-file"), Some(&vec!["3".to_string()]));
     }
 
     /// The default chosen where there was no file still makes one, because

@@ -900,13 +900,31 @@ impl Settings {
 
     /// Hears the table of keys as it is now, which is what the keys page
     /// lists: on opening, and whenever the application changes it.
+    ///
+    /// The focus stays on the command it was on, on the same row of it or
+    /// its last: a key taken away is a row fewer, and an index kept as it
+    /// was would land on the next command.
     pub fn hear_keymap(&mut self, keymap: &Keymap) {
+        let focused = match self.on_keys() {
+            true => self.key_rows().get(self.window.focus()).copied(),
+            false => None,
+        };
         self.held = obelus_command::ALL
             .iter()
             .map(|spec| (spec.command, keymap.chords_for(spec.command)))
             .collect();
-        if self.on_keys() {
-            self.window.set_count(self.row_count(None));
+        if !self.on_keys() {
+            return;
+        }
+        self.window.set_count(self.row_count(None));
+        if let Some(KeyRow::Key { command, slot }) = focused {
+            let slot = slot.min(self.held(command).len().saturating_sub(1));
+            let landed = self.key_rows().iter().position(|row| {
+                matches!(row, KeyRow::Key { command: on, slot: at } if *on == command && *at == slot)
+            });
+            if let Some(at) = landed {
+                self.window.set_focus(at);
+            }
         }
     }
 

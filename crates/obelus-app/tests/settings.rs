@@ -2628,6 +2628,122 @@ fn a_key_given_back_is_in_every_context_the_command_was() {
     }
 }
 
+/// A key of a line that will not do is said about that key, and the line's
+/// other keys bind: the mark does not say nothing was bound when something
+/// was.
+///
+/// Broken deliberately by saying it of the line, as the marks did --
+/// "Nothing is bound to `redo`" over a line that had put redo on `alt+y`.
+#[test]
+fn a_bad_key_on_a_line_is_said_of_the_key() {
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("bad-key-of-several");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "[keys]\nredo = [\"nope\", \"alt+y\"]\n").expect("the file");
+    let mut app = App::new(vec![
+        obelus_buffer::Buffer::open(&file).expect("opening the settings file"),
+    ]);
+    app.config_file_for_test(file.clone());
+    support::lay_out(&mut app, 72, 24);
+    let said: Vec<String> = app
+        .problems()
+        .map(|problem| problem.message.clone())
+        .collect();
+    assert_eq!(said, ["No key is called `nope`"]);
+    assert_eq!(
+        app.keymap().chords_for(Command::Redo),
+        [KeyChord::parse("alt+y").expect("a key")]
+    );
+}
+
+/// Taking a command's last key away leaves the focus on that command, on
+/// the row that is left, rather than on the next command.
+///
+/// Broken deliberately by keeping the focus's index as it was when the rows
+/// change, as the page did: it landed on the command after.
+#[test]
+fn taking_a_key_away_leaves_the_focus_on_its_command() {
+    use obelus_component::settings::KeyRow;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("focus-stays");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "keys_from = \"vscode\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "-");
+    let rows = app.settings().expect("the settings").key_rows();
+    let second = rows
+        .iter()
+        .position(|row| {
+            matches!(
+                row,
+                KeyRow::Key {
+                    command: Command::CommandPalette,
+                    slot: 1
+                }
+            )
+        })
+        .expect("the second key's row");
+    while app.settings().expect("the settings").focus() < second {
+        support::press(&mut app, KeyCode::Down);
+    }
+    support::press(&mut app, KeyCode::Enter);
+    support::press(&mut app, KeyCode::Delete);
+    let settings = app.settings().expect("the settings");
+    assert!(
+        matches!(
+            settings.key_rows().get(settings.focus()),
+            Some(KeyRow::Key {
+                command: Command::CommandPalette,
+                slot: 0
+            })
+        ),
+        "the focus left the command: {:?}",
+        settings.key_rows().get(settings.focus())
+    );
+}
+
+/// A press while a row waits for its key does nothing: a press on a tab is
+/// not the tab key taken for the row, and one on another row does not move
+/// the focus off the row that is waiting.
+///
+/// Broken deliberately by letting presses through while a row waits: a
+/// press on the Settings tab was refused on the row as `Tab`.
+#[test]
+fn a_press_while_a_row_waits_does_nothing() {
+    use obelus_app::event::{Event, Pointer};
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("press-waits");
+    let file = settings_file(&scratch);
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    support::press(&mut app, KeyCode::Enter);
+    let focus = app.settings().expect("the settings").focus();
+    let area = app.editor_area_for_test();
+    // The first tab, on the page's first row, and a row further down.
+    for (x, y) in [(area.x + 3, area.y), (area.x + 3, area.y + 5)] {
+        app.handle(Event::Pointer {
+            kind: Pointer::Pressed,
+            x,
+            y,
+        });
+    }
+    let settings = app.settings().expect("the settings");
+    assert!(settings.on_keys(), "a press moved the page off the keys");
+    assert_eq!(
+        settings.binding(),
+        Some(Command::Redo),
+        "the row stopped waiting"
+    );
+    assert!(settings.refused().is_none(), "a press was taken as a key");
+    assert_eq!(settings.focus(), focus, "a press moved the focus");
+}
+
 /// The settings file opens as a file, and is written first if it is not
 /// there yet.
 ///
@@ -4856,17 +4972,12 @@ fn a_key_that_bound_nothing_is_a_warning_on_that_line() {
     assert_eq!(said[0], (4, "No command is called `open-fiel`".to_string()));
     assert_eq!(
         said[1],
-        (
-            5,
-            "Nothing is bound to `save-file`: `ctrl+shiftier+s` is not a key".to_string()
-        )
+        (5, "No key is called `ctrl+shiftier+s`".to_string())
     );
     // The reason the page that binds keys gives, in its own words, because
     // it is the same judgement.
     assert!(
-        said[2]
-            .1
-            .starts_with("Nothing is bound to `close-document`: "),
+        said[2].1.starts_with("No command can be on `ctrl+enter`: "),
         "{said:?}"
     );
     assert_eq!(said[2].0, 6);
