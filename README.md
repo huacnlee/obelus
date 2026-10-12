@@ -77,6 +77,26 @@ what omarchy renders — and it leaves the PATH, which it never changed. Neither
 there is no `obg` to install at all — the window finds Vulkan, Wayland and X11 by `dlopen`, which a static
 binary cannot do — so the script says so and installs `ob`.
 
+With [mise](https://mise.jdx.dev), on Linux, macOS or Windows, each binary
+is a tool with a name of its own — the first pair is `obg`, the second
+`ob`, and running both pairs installs both:
+
+```
+mise tool-alias set obg 'github:obelus-editor/obelus[matching=obg-]'
+mise use -g obg
+mise tool-alias set ob 'github:obelus-editor/obelus[matching=ob-]'
+mise use -g ob
+```
+
+The names are what let the two sit side by side: mise keeps one tool per
+name, so two `mise use` of the bare repository are one tool and the second
+replaces the first. `matching` is what picks the archive, where mise left
+to itself takes whichever name is shorter. `mise upgrade` keeps them
+current. What mise does not make is the desktop entry or the Start menu
+entry, so `obg` from it is started by name. Nor does it know about musl:
+asked for `obg` there, it downloads the glibc build, which will not start,
+so on musl install `ob` alone.
+
 [The releases](https://github.com/obelus-editor/obelus/releases) carry an archive
 for every platform as well as a `.deb`, an `.rpm`, an AppImage, a macOS
 `.app` and a Windows `.msi`.

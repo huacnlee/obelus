@@ -165,6 +165,20 @@
         <li>There's no window version on musl: the window loads Vulkan, Wayland and X11 at runtime, which a static binary can't do. The script says so and installs <code>ob</code> instead.</li>
       </ul>
 
+      <h4>With mise, on any system</h4>
+      <pre><code>mise tool-alias set obg 'github:obelus-editor/obelus[matching=obg-]'
+mise use -g obg</code></pre>
+
+      <pre><code>mise tool-alias set ob 'github:obelus-editor/obelus[matching=ob-]'
+mise use -g ob</code></pre>
+
+      <ul>
+        <li>The first pair installs <code>obg</code>, the window version, and the second <code>ob</code>, the terminal version. Run both for both.</li>
+        <li>Each gets a name of its own so the two can sit side by side: mise keeps one tool per name, so installing the bare repository twice replaces the first with the second. <code>matching</code> picks which archive to download. <code>mise upgrade</code> keeps them up to date.</li>
+        <li>There's no launcher or Start menu entry this way, so start <code>obg</code> by name.</li>
+        <li>On musl, install only <code>ob</code>. mise doesn't check, and for <code>obg</code> it downloads the glibc build, which won't start there.</li>
+      </ul>
+
       <h3>From source</h3>
       <p>All you need is a stable Rust toolchain (edition 2024).</p>
 
