@@ -210,7 +210,7 @@ ob src/main.rs       # the same file, in the terminal</code></pre>
       <h3>The first five minutes</h3>
       <ol>
         <li><kbd>F1</kbd> opens a file: type to filter, <kbd>↑</kbd><kbd>↓</kbd> to pick, <kbd>Enter</kbd> to open, <kbd>Esc</kbd> to cancel.</li>
-        <li>The row of keys at the bottom of a list only shows what works <em>right now</em>; <kbd>Ctrl+k</kbd> shows them all, with the unavailable ones greyed out.</li>
+        <li>The row of keys at the bottom of a list only shows what works <em>right now</em>, so it never offers a key that would do nothing.</li>
         <li><kbd>Ctrl+p</kbd> is the command palette. Anything you can't remember a key for, you can find by name.</li>
         <li>Put the cursor on a change and press <kbd>Alt+d</kbd>: what was there before opens up <em>in place</em>.</li>
         <li>See a line that looks wrong? Press <kbd>Alt+t</kbd> and write a sentence. Then <kbd>Ctrl+t</kbd> opens the notes: pick it and press <kbd>Alt+a</kbd> to talk it over with the agent. That's where the workflow below starts.</li>
@@ -386,7 +386,7 @@ ob src/main.rs       # the same file, in the terminal</code></pre>
       </div>
 
       <h3 id="modeless">No modes: every key does what it says</h3>
-      <p>There's no insert mode to get into before you can type. It works like VS Code or Emacs, not like vim or helix. The pattern is simple: function keys open something to look at, <kbd>Ctrl</kbd> does something to the current file, and <kbd>Alt</kbd> asks about what's under the cursor. Can't remember a key? <kbd>Ctrl+p</kbd> finds any command by name, and wherever a list has keys along the bottom, <kbd>Ctrl+k</kbd> shows all of them. The full table is in the <a href="reference.html#keys">reference</a>.</p>
+      <p>There's no insert mode to get into before you can type. It works like VS Code or Emacs, not like vim or helix. The pattern is simple: function keys open something to look at, <kbd>Ctrl</kbd> does something to the current file, and <kbd>Alt</kbd> asks about what's under the cursor. Can't remember a key? <kbd>Ctrl+p</kbd> finds any command by name, and wherever a list has keys of its own, the row along the bottom says what they do. The full table is in the <a href="reference.html#keys">reference</a>.</p>
     </section>
 
     <section id="all">

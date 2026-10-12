@@ -104,8 +104,6 @@ pub struct Counts {
     counted: Option<Counted>,
     /// Which page.
     page: Page,
-    /// Whether every key this view answers to is showing.
-    keys: bool,
     /// The one language the file page is showing, if it was reached by
     /// choosing that language rather than by asking for every file.
     only: Option<&'static str>,
@@ -267,7 +265,6 @@ impl Counts {
         Self {
             counted: None,
             page: Page::Languages,
-            keys: false,
             only: None,
             rows: Vec::new(),
             window: Window::new(),
@@ -475,12 +472,6 @@ impl Counts {
         self.rows.iter().any(|row| row.open.is_some())
     }
 
-    /// Whether the list of every key is showing.
-    #[must_use]
-    pub const fn showing_keys(&self) -> bool {
-        self.keys
-    }
-
     /// Whether the row at `at` is one enter does something to.
     fn can_choose(&self, at: usize) -> bool {
         self.rows.get(at).is_some_and(|row| row.go.is_some())
@@ -546,15 +537,6 @@ impl Counts {
             // page is showing one language is that language: the reader
             // chose it a keystroke ago, and taking the whole view away is
             // not what going back from it means.
-            // The card first: a key that opens a thing closes that thing.
-            KeyCode::Esc if bare && self.keys => {
-                self.keys = false;
-                CountsOutcome::Consumed
-            }
-            _ if obelus_keymap::is_keys_card(key) => {
-                self.keys = !self.keys;
-                CountsOutcome::Consumed
-            }
             KeyCode::Esc if bare && self.only.is_some() => {
                 self.page = Page::Languages;
                 self.only = None;

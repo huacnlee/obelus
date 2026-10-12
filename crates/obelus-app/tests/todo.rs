@@ -872,7 +872,7 @@ fn a_note_with_nothing_in_it_is_dropped() {
     );
 }
 
-/// The foot says only what can be pressed, and `f1` says all of it.
+/// The foot says only what can be pressed.
 #[test]
 fn the_foot_drops_a_key_that_would_do_nothing() {
     let scratch = tree("usable", THREE);
@@ -898,11 +898,7 @@ fn the_foot_drops_a_key_that_would_do_nothing() {
 /// a foot indistinguishable from one that had said everything it had. A
 /// reader was told this view answers to three keys.
 ///
-/// Here the mark is the whole of the trace, because a document's foot has
-/// no card behind it to point at: it says the terminal is too narrow for
-/// all of this, and promises nothing else.
-///
-/// Broken deliberately by returning from `ui::row_of_keys` without calling
+/// Broken deliberately by returning from `ui::foot` without calling
 /// `cut`: the narrow row looks exactly like the wide one and this goes red.
 #[test]
 fn a_foot_that_ran_out_of_room_says_so() {
@@ -940,34 +936,8 @@ fn a_foot_that_ran_out_of_room_says_so() {
     );
 }
 
-/// The foot points at no card, and takes back the room the pointer had.
-///
-/// Every other view with a foot ends it with `ctrl+k keys`, because every other
-/// view with a foot is a layer and has a card behind it. Pointing at one
-/// from here would be a key that appears to do nothing -- and would cost
-/// the row the eight cells the pointer sits in, which is a hint.
-///
-/// Broken deliberately by calling `ui::foot` from `ui::todo` instead of
-/// `ui::foot_without_a_card`: the pointer comes back and this goes red.
-#[test]
-fn the_foot_of_the_notes_points_at_no_card() {
-    let scratch = tree("no-card", THREE);
-    let mut app = open(&scratch, 76, 18);
-    let text = support::text_block(&support::render(&mut app, 76, 18)).to_string();
-    let foot = text
-        .lines()
-        .find(|row| row.contains("Another"))
-        .unwrap_or_else(|| panic!("no foot at all:\n{text}"));
-    assert!(
-        !foot.contains("Keys"),
-        "the foot still points at a card:\n{foot}"
-    );
-}
-
 /// `f1` over the notes opens a file, the way it does from anywhere else.
 ///
-/// It used to put up a card of every key here. A card is a layer's: a thing
-/// opened over the reader's work, which owns the keyboard while it is up.
 /// The notes are a document -- the reader is *in* them -- and a document
 /// that swallows `f1` leaves them with no way to open a file without
 /// leaving first.
@@ -984,13 +954,6 @@ fn f1_over_the_notes_opens_a_file() {
     assert!(
         app.picker().is_some(),
         "f1 did not open the file picker from the notes"
-    );
-
-    // And nothing that reads like a card of keys went up in its place.
-    let dump = support::render(&mut app, 76, 18);
-    assert!(
-        !support::text_block(&dump).contains("The keys here"),
-        "the card is still there:\n{dump}"
     );
 }
 

@@ -232,47 +232,6 @@ fn the_three_switches_change_what_the_search_finds() {
     assert_eq!(picker.nothing_to_show(), Some("That is not a pattern"));
 }
 
-/// A cut row still points at the card, and the card still has everything.
-///
-/// The two traces are different promises. The mark says this row is not
-/// all of it; the pointer says where the rest is. A view with a card shows
-/// both, and the card is drawn from the same list the foot was cut from,
-/// so what the reader finds there is what the row could not hold.
-///
-/// Broken deliberately by returning from `ui::row_of_keys` without calling
-/// `cut`: the narrow row keeps its pointer and says nothing about the keys
-/// that went, and this goes red.
-#[test]
-fn a_cut_foot_still_points_at_the_card() {
-    let mut app = App::new(vec![support::open_fixture("sample.rs")]);
-    support::lay_out(&mut app, 44, 16);
-    support::press_function(&mut app, 5);
-
-    let dump = support::render(&mut app, 44, 16);
-    let text = support::text_block(&dump);
-    let rows: Vec<&str> = text.lines().collect();
-    let foot = rows[rows.len() - 3];
-    assert!(
-        !foot.contains("Case"),
-        "nothing was dropped, so this proves nothing:\n{foot}"
-    );
-    assert!(
-        foot.contains('\u{2026}'),
-        "the row was cut and did not say so:\n{foot}"
-    );
-    assert!(
-        foot.contains("Keys"),
-        "the way to the rest was given up instead:\n{foot}"
-    );
-
-    // And the key the row could not hold is on the card.
-    support::press_control(&mut app, 'k');
-    assert!(
-        support::text_block(&support::render(&mut app, 44, 16)).contains("as typed"),
-        "the card does not have what the foot dropped"
-    );
-}
-
 /// Which switches mean anything depends on the tab: three of them read a
 /// text, and the fourth is about how far an index reaches.
 ///

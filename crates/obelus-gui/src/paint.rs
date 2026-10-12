@@ -1322,8 +1322,8 @@ mod tests {
         }
 
         /// Three things open at once -- the settings, a setting's choices
-        /// over them, and the card of every key over those -- each with
-        /// what it was put over, a frame or a rule round it, and its glass.
+        /// over them, and a third thing over those -- each with what it was
+        /// put over, a frame or a rule round it, and its glass.
         fn three() -> Placed {
             let level = |under: std::ops::Range<usize>, glass, end| Level {
                 under,
@@ -2087,9 +2087,9 @@ mod tests {
     /// A square of colour is a hole in a pane only where it is the pane's
     /// own colour, inside the pane.
     ///
-    /// Deliberate break: drop `pane.ground == colour`. A key's cap in the
-    /// card of every key then leaves the cells beside its rounded corners
-    /// unpainted wherever the cap's page differs from the glass -- and the
+    /// Deliberate break: drop `pane.ground == colour`. A key's cap in a box
+    /// then leaves the cells beside its rounded corners unpainted wherever
+    /// the cap's page differs from the glass -- and the
     /// selected row's ground inside a list, asked the same question, would
     /// be taken for glass.
     #[test]

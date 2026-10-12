@@ -54,12 +54,12 @@ const SLIDE: Duration = Duration::from_millis(190);
 /// How long a box put over the page takes to arrive.
 ///
 /// A box is joined to nothing and travels nowhere, so what it does
-/// instead is come up: the card of every key, a hover, a completion list
-/// and the line that says what a call takes. Shorter than a pane's
-/// slide, because there is no distance to cover and the reader asked for
-/// this one with a key they have just pressed -- and not nothing, because
-/// a box that is simply there between two frames is a thing that appeared
-/// rather than a thing that opened.
+/// instead is come up: a hover, a completion list and the line that says
+/// what a call takes. Shorter than a pane's slide, because there is no
+/// distance to cover and the reader asked for this one with a key they
+/// have just pressed -- and not nothing, because a box that is simply
+/// there between two frames is a thing that appeared rather than a thing
+/// that opened.
 const FADE: Duration = Duration::from_millis(120);
 
 /// How long a band takes to catch up with where it has got to.

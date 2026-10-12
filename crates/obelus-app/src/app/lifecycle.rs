@@ -128,6 +128,10 @@ impl App {
         self.monospace_here = was.monospace_here;
         self.screen_area = was.screen_area;
         self.editor_area = was.editor_area;
+        // Whether `ctrl+enter` arrives, which `ob` asked the terminal once
+        // and nothing asks again: lost, a terminal without the protocol was
+        // offered a key it cannot send.
+        self.ctrl_enter_arrives = was.ctrl_enter_arrives;
         self.settled = was.settled;
         self.keymap = was.keymap;
         self.theme = was.theme;
@@ -229,17 +233,19 @@ impl App {
         // What went wrong on the way up, over whatever the first screen is,
         // and last of all so that everything that could go wrong has.
         let told = self.tell_what_went_wrong();
-        // Last, and here rather than at the command line: the rows come
-        // from a walk that sends on this channel, so a list opened before
-        // there was one would be a list nothing ever fills. Not over what
-        // went wrong, though: a list opened over a list would put the one
-        // the reader is owed under the one they asked for, and the files
-        // are one key away once it has been read.
+        // Which keys to start from, on a first start, and not over what
+        // went wrong: a list over a list hides the one the reader is owed.
+        // That start goes without the question -- the whole of it, or it
+        // would come up hours later when a project is next chosen -- and
+        // with no file written the next one asks it.
         //
-        // Nor where nobody is at the screen to choose from it: the walk
-        // that fills it is the whole project.
-        if self.list_at_start && !told && !self.headless {
-            self.open_file_picker();
+        // Over a file the command line named, or one reopened, all the
+        // same: escape is one key back to the file, and every key the
+        // reader is about to press depends on it.
+        if told {
+            self.let_the_keymap_question_go();
+        } else {
+            self.ask_for_a_keymap();
         }
     }
 

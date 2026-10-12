@@ -60,33 +60,6 @@ fn a_file_is_opened_in_the_tree_it_is_in() {
     );
 }
 
-/// A directory named opens nothing and leaves the list to answer which
-/// file.
-///
-/// Broken deliberately by dropping the `app.list_at_start()` call: nothing
-/// is open and no list opens over it, so Obelus starts on an empty screen.
-#[test]
-fn a_tree_opens_on_the_list() {
-    let scratch = support::Scratch::new("starting-tree");
-    std::fs::write(scratch.path().join("one.rs"), "fn main() {}\n").expect("writing it");
-
-    let mut app = startup::start(&[scratch.path().to_path_buf()], BUILT).expect("starting");
-    assert!(
-        app.current_buffer().is_none(),
-        "a directory was opened as a document"
-    );
-
-    // The list is filled by a walk that sends on the loop's channel, so it
-    // is not there until Obelus starts -- which is what `app.start` is.
-    support::lay_out(&mut app, 76, 18);
-    let (sender, _events) = obelus_app::event::channel();
-    app.start(sender);
-    assert!(
-        app.picker().is_some(),
-        "Obelus opened on nothing, with no file named and no list"
-    );
-}
-
 /// The tree is settled before its settings are read.
 ///
 /// A tree keeps settings of its own in `.obelus/config.toml`, and they are

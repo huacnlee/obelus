@@ -29,12 +29,12 @@ const TITLE: &str = "The project has gone";
 /// cannot leave this one either, because there is nothing behind it to go
 /// back to.
 fn hints(keymap: &Keymap) -> Vec<Hint> {
-    let mut hints = vec![Hint::common(
+    let mut hints = vec![Hint::new(
         KeyChord::new(KeyCode::Enter, KeyModifiers::NONE),
         "Open a project",
     )];
     if let Some(chord) = keymap.chord_for(Command::Quit) {
-        hints.push(Hint::common(chord, "Leave").saying("Leave Obelus"));
+        hints.push(Hint::new(chord, "Leave"));
     }
     hints
 }
@@ -94,6 +94,6 @@ impl Widget for GoneView<'_> {
             let x = page.x + page.width.saturating_sub(width) / 2;
             write(cells, x, y, line, Style::new().fg(ink));
         }
-        crate::foot_without_a_card(cells, area, &hints, self.theme);
+        crate::foot(cells, area, &hints, self.theme);
     }
 }

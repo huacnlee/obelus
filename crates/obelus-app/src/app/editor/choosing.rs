@@ -717,6 +717,7 @@ impl App {
                 WorktreeEnter::Stay => {}
             },
             PickerValue::Task { id, .. } => self.open_background_output(&id),
+            PickerValue::KeysBack => self.put_every_key_back(),
             PickerValue::Nothing => {}
         }
     }

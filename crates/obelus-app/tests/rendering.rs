@@ -2698,27 +2698,6 @@ fn a_start_with_nothing_wrong_puts_nothing_up() {
     assert!(app.picker().is_none(), "a list was put up over nothing");
 }
 
-/// A start that was asked for the files, as `ob some-directory` is, says
-/// what went wrong first, and does not put the files over it.
-///
-/// Deliberate break: opening the file list whatever was said, and it goes
-/// up over the list the reader is owed.
-#[test]
-fn what_went_wrong_is_not_put_under_the_files() {
-    let scratch = support::Scratch::new("welcome-files");
-    let mut app = App::new(Vec::new());
-    app.working_directory_for_test(scratch.path().to_path_buf());
-    app.config_file_for_test(a_settings_file_with_two_mistakes(&scratch));
-    app.list_at_start();
-    started(&mut app);
-    let dump = support::render(&mut app, 76, 26);
-    let text = support::text_block(&dump);
-    assert!(
-        text.contains("No setting is called `shrift`"),
-        "the files went up over what went wrong:\n{text}"
-    );
-}
-
 /// A start with nothing to go on asks which project, and offers the ones
 /// this reader has had open -- on a screen of its own, with no plate: the
 /// welcome screen comes after, once there is a project to welcome anybody

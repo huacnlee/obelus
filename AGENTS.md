@@ -365,9 +365,12 @@ command is gone and `App::blame` reads the setting.
   what is on its way into the history: the pull requests and issues. Bare,
   never with a
   modifier: one terminal reports `shift+f5` and the next reports `f17` for the
-  same press. That is the `classic` layout; a keyboard without the row starts
+  same press. That is the `obelus` layout; a keyboard without the row starts
   from `mnemonic` (`keys_from`), the same twelve on control and alt by the
-  letter of the word, and nothing else moved (`keymap::Layout`).
+  letter of the word, and nothing else moved -- or from another editor's,
+  `vscode` or `textmate`, which have no function key at all and are on
+  control like everything else, so a Mac's window makes them command too
+  (`keymap::Layout`).
 * **Control does something to the file in front of you**, on the letter of the
   word (`ctrl+p` the palette, `ctrl+w` close, `ctrl+c` copy, `ctrl+q` leave).
   In `obg` on a Mac it is command, and drawn so: one table, two names for the
@@ -380,11 +383,19 @@ command is gone and `App::blame` reads the setting.
   what the rule is about: they are the names a desktop already sends a
   terminal for paste and copy. Why Obelus answers them, and why copy still
   cannot work where a terminal keeps them, is argued in `keymap::why_not`.
+  The `vscode` and `textmate` layouts borrow those editors' `ctrl+shift`
+  chords, which are their names and not Obelus's -- each with an alt chord
+  beside it, because a terminal without the keyboard protocol sends `ctrl`
+  and the letter, and one with it often keeps the chord for itself. A
+  reader may bind any key at all, as many to a command as they like, and is
+  not warned where one cannot arrive -- `why_not` refuses only what never
+  reaches the table.
 
 **Escape always gives up on the nearest thing**, and everything else is
 reached from the palette: a chord for every command is how a key table stops
 being memorable. Which key is which is argued where it is bound, in
-`Keymap::new`.
+`obelus-keymap/keymaps/` -- each layout a JSON file with comments, compiled
+in, and the reasons beside the keys.
 
 **What is showing owns the keys.** A list and the settings page are dialogs:
 each takes the keys bound *in* its context and nothing else, so a global key
@@ -435,7 +446,8 @@ gestures depending on what was under it.
 `alt+enter`.** Both, every time: `shift+enter` arrives only from a terminal
 that speaks the kitty keyboard protocol -- `main` pushes its narrowest flag
 for this, and nothing else in Obelus depends on it but `ctrl+enter`, which is
-plain enter without it -- and `alt+enter` arrives from the rest, because alt
+plain enter without it, and the editors' layouts' `ctrl+shift` chords, each
+with an alt chord beside it -- and `alt+enter` arrives from the rest, because alt
 is the escape prefix. A place that took one left the other falling through to
 whatever was underneath, so the pair is taken together, and before the
 modifier check (`component::composer`).
@@ -628,7 +640,8 @@ crates/
                       the desktop's name for paste and not Obelus's; a dialog
                       gets a context, not a fall-through; keys are rebound on
                       the keys page; modifiers are judged exactly, in one
-                      place (lib)
+                      place (lib); a layout is data, and the reasons stay
+                      beside the keys (shipped)
   obelus-buffer/    one open file: text, syntax, cursor, viewport
                     · an edit knows where it happened; do not read over an
                       edit; two modes, and two is enough (lib); a folded line
@@ -832,8 +845,9 @@ crates/
                       own shape too (native); what is taken for a picture is
                       a file that is one (dropped)
   obelus-cli/       the `ob` binary: Obelus drawn on a terminal
-                    · two keys need the terminal's permission, and nothing
-                      else depends on the protocol (main)
+                    · two keys need the terminal's permission, and the
+                      editors' `ctrl+shift` chords are the only others that
+                      depend on the protocol (main)
   obelus-check-theme/ whether Obelus can read a theme, for the themes
                     registry, and in no release
                     · the same reading the editor does and nothing of its

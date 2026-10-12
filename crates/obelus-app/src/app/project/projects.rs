@@ -815,10 +815,10 @@ impl crate::app::App {
     /// A file and a directory are the two answers, and which is which is
     /// not this function's to decide: [`crate::app::opening`] already says
     /// what a path on the command line means -- a directory is the project
-    /// and the question it leaves is which file, a file names the tree it
-    /// is in and is opened. A reader typing a path here means exactly what
-    /// a reader typing one after `ob` means, and two answers to that would
-    /// be two ways to open the same thing.
+    /// and opens nothing, a file names the tree it is in and is opened. A
+    /// reader typing a path here means exactly what a reader typing one
+    /// after `ob` means, and two answers to that would be two ways to open
+    /// the same thing.
     fn settle_on(&mut self, path: &Path) {
         // A path that is not there is not a project, and this is the one
         // place that has to say so. `opening` answers what a path on the
@@ -860,12 +860,9 @@ impl crate::app::App {
         self.which_project.naming_read = None;
         self.which_project.naming_shut = false;
         self.settle(root, &opening.files);
-        // A directory is a reader saying which project and asking which
-        // file, which is the list -- the same thing `ob some-directory`
-        // does, said in the same place.
-        if opening.list {
-            self.open_file_picker();
-        }
+        // A first start's question about the keys, held back while this
+        // page was the screen (`App::ask_for_a_keymap`).
+        self.ask_for_a_keymap();
     }
 
     /// Puts a window with no project on `root`, opening `files` in it.

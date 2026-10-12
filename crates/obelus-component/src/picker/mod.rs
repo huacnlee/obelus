@@ -119,6 +119,9 @@ pub enum PickerValue {
     /// a question about the settings directories -- which the list knows
     /// nothing about and the application does.
     Theme(String),
+    /// Put every command back on the keys its layout gives it: the row a
+    /// reader confirms that with.
+    KeysBack,
     /// Set a setting to one of its choices.
     ///
     /// The settings view's droplist is this picker, opened over it: a list
@@ -849,8 +852,6 @@ pub struct Picker {
     /// saying so is a row spent on what they just did -- so the foot goes
     /// where there is something they could not have guessed.
     footed: bool,
-    /// Whether the card listing every key is up.
-    keys: bool,
     /// Whether a key that opens a view may take this list's place.
     ///
     /// Every list the reader opened will: it is somewhere they are
@@ -1032,7 +1033,6 @@ impl Picker {
             unfinished: false,
             ordered: false,
             footed: false,
-            keys: false,
             gives_way: true,
             looking: None,
             outside: None,
@@ -1576,12 +1576,6 @@ impl Picker {
     #[must_use]
     pub const fn says_keys(&self) -> bool {
         self.footed
-    }
-
-    /// Whether the card listing every key is showing.
-    #[must_use]
-    pub const fn showing_keys(&self) -> bool {
-        self.keys
     }
 
     /// Says how this search is looking, or that the question does not arise.
@@ -2486,20 +2480,10 @@ impl Picker {
                 self.step_tab(false);
                 PickerOutcome::Consumed
             }
-            // The card first: a key that opens a thing closes that thing,
-            // and escape reaches the nearest thing on screen.
-            KeyCode::Esc if bare && self.keys => {
-                self.keys = false;
-                PickerOutcome::Consumed
-            }
-            // Then what is held in the query, which is nearer than the
-            // list it is part of.
+            // What is held in the query first, which is nearer than the
+            // list it is part of: escape reaches the nearest thing on screen.
             KeyCode::Esc if bare && self.query.let_go() => PickerOutcome::Consumed,
             KeyCode::Esc if bare => PickerOutcome::Cancelled,
-            _ if self.footed && obelus_keymap::is_keys_card(key) => {
-                self.keys = !self.keys;
-                PickerOutcome::Consumed
-            }
             // A row the wheel left off the screen is brought back rather
             // than chosen: see `Window::reach_for_the_focus`.
             KeyCode::Enter if !self.matched.is_empty() && self.window.reach_for_the_focus() => {

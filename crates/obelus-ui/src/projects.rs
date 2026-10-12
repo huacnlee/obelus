@@ -75,7 +75,7 @@ pub fn hints(choosing: &crate::Choosing, keymap: &Keymap) -> Vec<Hint> {
     let bare = |code| KeyChord::new(code, KeyModifiers::NONE);
     let on_the_opening_row = choosing.at >= choosing.known.len();
     let mut hints = match choosing.naming {
-        false => vec![Hint::common(
+        false => vec![Hint::new(
             bare(KeyCode::Enter),
             match on_the_opening_row {
                 true => "Type a path",
@@ -86,7 +86,7 @@ pub fn hints(choosing: &crate::Choosing, keymap: &Keymap) -> Vec<Hint> {
         // saying in its ink, so it is offered only where it would do it:
         // a candidate taken into the box, or a path that is there.
         true => vec![
-            Hint::common(
+            Hint::new(
                 bare(KeyCode::Enter),
                 match choosing.offering {
                     true => "Fill it in",
@@ -97,7 +97,7 @@ pub fn hints(choosing: &crate::Choosing, keymap: &Keymap) -> Vec<Hint> {
         ],
     };
     if let Some(chord) = keymap.chord_for(Command::Quit) {
-        hints.push(Hint::common(chord, "Leave").saying("Leave Obelus"));
+        hints.push(Hint::new(chord, "Leave"));
     }
     hints
 }
@@ -246,7 +246,7 @@ impl Widget for ProjectsView<'_> {
             said,
             style.fg(self.theme.foreground),
         );
-        crate::foot_without_a_card(cells, area, &hints, self.theme);
+        crate::foot(cells, area, &hints, self.theme);
     }
 }
 

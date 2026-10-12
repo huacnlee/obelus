@@ -70,8 +70,8 @@ pub enum SettingsOutcome {
     /// A setting should stop being the project's, and go back to being
     /// whatever the reader has.
     ///
-    /// Only from the project's page, where `delete` means what it means on the
-    /// keys page: take this one out.
+    /// Only from the project's page, where `delete` means take this one
+    /// out.
     Unset(&'static str),
     /// An agent should be installed.
     Install(String),
@@ -98,12 +98,19 @@ pub enum SettingsOutcome {
     /// A setting that is typed wants its line: which setting, and what it
     /// says now, which is where the typing starts.
     Type(&'static str, String),
-    /// A command should be on this key from now on, or on none.
+    /// A command should be on these keys from now on, in this order, and
+    /// on no others -- on none, where the list is empty.
     ///
-    /// Only ever a key nothing else is on: what is taken is said on the row
+    /// Only ever keys nothing else is on: what is taken is said on the row
     /// and asked again, because the reader is looking at the row and it is
     /// that binding the answer is about.
-    Bind(Command, Option<KeyChord>),
+    Bind(Command, Vec<KeyChord>),
+    /// A command should be on the keys its layout gives it again: the
+    /// reader's line for it taken out of the file.
+    ResetKeys(Command),
+    /// Every command should be on the keys its layout gives it -- asked
+    /// first, because it takes every key the reader chose.
+    ResetAllKeys,
     /// One of the active agent's settings wants its values.
     ///
     /// Which setting, by the agent's id for it. What the values are is not
@@ -547,14 +554,34 @@ fn narrowed_to(setting: &Setting, query: &str) -> bool {
     query.is_empty() || setting.name.to_lowercase().contains(query) || setting.key.contains(query)
 }
 
+/// A row of the keys page waiting for its key, and what that key will do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Binding {
+    /// The command.
+    pub command: Command,
+    /// The row it is waiting on, which is where it says so.
+    pub slot: usize,
+    /// Whether the key pressed takes the place of the one on that row, or
+    /// is one more key for the command.
+    pub replacing: bool,
+}
+
 /// One row of the keys page.
 #[derive(Clone, Copy, Debug)]
 pub enum KeyRow {
     /// A setting about the whole table, above the commands it changes:
     /// which layout the reader's keys start from.
     Setting(&'static Setting),
-    /// A command, and the key it is on.
-    Command(Command),
+    /// One of a command's keys, by where it is in the command's list: a
+    /// row each, so every key a command is on can be stood on, replaced
+    /// and taken away. The first is the one that carries the command's
+    /// name, and a command on no key has that one row and no key in it.
+    Key {
+        /// The command.
+        command: Command,
+        /// Which of its keys, from nought.
+        slot: usize,
+    },
 }
 
 impl KeyRow {
@@ -563,7 +590,7 @@ impl KeyRow {
     pub fn name(self) -> &'static str {
         match self {
             Self::Setting(setting) => setting.name,
-            Self::Command(command) => command.name(),
+            Self::Key { command, .. } => command.name(),
         }
     }
 }
@@ -571,16 +598,32 @@ impl KeyRow {
 /// The settings view.
 #[derive(Debug)]
 pub struct Settings {
-    /// Whether every key this page answers to is showing.
-    keys_showing: bool,
     /// What has been typed, which narrows the rows.
     query: Field,
-    /// Which command's key is being pressed, while one is.
+    /// Which command's key is being pressed, while one is, and on which of
+    /// its rows.
     ///
     /// The page is in no mode otherwise: a key means what it means here
-    /// until the reader says "this row's key is the next thing I press",
+    /// until the reader says "the next thing I press is this command's",
     /// and from then until they press it every key belongs to that row.
-    binding: Option<Command>,
+    binding: Option<Binding>,
+    /// The keys each command is on, as the table was when it was last
+    /// heard ([`Settings::hear_keymap`]).
+    ///
+    /// Kept rather than asked for, because how many rows the keys page has
+    /// is asked by everything that moves its focus or scrolls it, and
+    /// almost none of those have the table to hand. The application says
+    /// when the table changes, which is the one moment the answer can.
+    held: Vec<(Command, Vec<KeyChord>)>,
+    /// The commands whose keys are not the ones their layout gives them,
+    /// heard with the keys: what the page marks, and what the keys that
+    /// put a command back are offered on.
+    changed: Vec<Command>,
+    /// The commands the reader's own file has a line for: the ones a
+    /// command can be put back from. A command can be changed without
+    /// one -- another's line took its key -- and putting it back would
+    /// take nothing out.
+    lined: Vec<Command>,
     /// The chord that would not do, and why it would not.
     ///
     /// On the row, because that is where the reader is looking and it is
@@ -619,9 +662,11 @@ impl Settings {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            keys_showing: false,
             query: Field::new(),
             binding: None,
+            held: Vec::new(),
+            changed: Vec::new(),
+            lined: Vec::new(),
             refused: None,
             whose: Whose::Reader,
             page: 0,
@@ -634,9 +679,11 @@ impl Settings {
     #[must_use]
     pub fn for_project() -> Self {
         Self {
-            keys_showing: false,
             query: Field::new(),
             binding: None,
+            held: Vec::new(),
+            changed: Vec::new(),
+            lined: Vec::new(),
             refused: None,
             whose: Whose::Project,
             page: 0,
@@ -673,12 +720,6 @@ impl Settings {
             .get(self.page)
             .copied()
             .unwrap_or(Page::Settings)
-    }
-
-    /// Whether the list of every key is showing.
-    #[must_use]
-    pub const fn showing_keys(&self) -> bool {
-        self.keys_showing
     }
 
     /// What typing into this page narrows, for the row before anything
@@ -860,22 +901,94 @@ impl Settings {
     /// something to bind is looking for the ones that have none, and a page
     /// that hid them could not be used for that.
     #[must_use]
-    pub fn keys(&self, keymap: &Keymap) -> Vec<(KeyRow, Option<KeyChord>)> {
+    pub fn keys(&self) -> Vec<(KeyRow, Option<KeyChord>)> {
         self.key_rows()
             .into_iter()
             .map(|row| match row {
                 KeyRow::Setting(_) => (row, None),
-                KeyRow::Command(command) => (row, keymap.chord_for(command)),
+                KeyRow::Key { command, slot } => (row, self.held(command).get(slot).copied()),
             })
             .collect()
+    }
+
+    /// Hears the table of keys as it is now, which is what the keys page
+    /// lists: on opening, and whenever the application changes it.
+    ///
+    /// The focus stays on the command it was on, on the same row of it or
+    /// its last: a key taken away is a row fewer, and an index kept as it
+    /// was would land on the next command.
+    ///
+    /// And the table the layout alone would make, which is what a command
+    /// is changed from: asked of the keys, not of the file, so a line that
+    /// says what the layout says anyway marks nothing.
+    ///
+    /// And which commands the reader's file has a line for, which is what
+    /// putting one back takes out.
+    pub fn hear_keymap(&mut self, keymap: &Keymap, laid_out: &Keymap, lined: Vec<Command>) {
+        self.lined = lined;
+        let focused = match self.on_keys() {
+            true => self.key_rows().get(self.window.focus()).copied(),
+            false => None,
+        };
+        self.held = obelus_command::ALL
+            .iter()
+            .map(|spec| (spec.command, keymap.chords_for(spec.command)))
+            .collect();
+        self.changed = self
+            .held
+            .iter()
+            .filter(|(command, chords)| *chords != laid_out.chords_for(*command))
+            .map(|(command, _)| *command)
+            .collect();
+        if !self.on_keys() {
+            return;
+        }
+        self.window.set_count(self.row_count(None));
+        if let Some(KeyRow::Key { command, slot }) = focused {
+            let slot = slot.min(self.held(command).len().saturating_sub(1));
+            let landed = self.key_rows().iter().position(|row| {
+                matches!(row, KeyRow::Key { command: on, slot: at } if *on == command && *at == slot)
+            });
+            if let Some(at) = landed {
+                self.window.set_focus(at);
+            }
+        }
+    }
+
+    /// Whether a command's keys are not the ones its layout gives it.
+    #[must_use]
+    pub fn changed(&self, command: Command) -> bool {
+        self.changed.contains(&command)
+    }
+
+    /// Whether a command can be put back on its layout's keys: changed,
+    /// and by a line of the reader's own for it.
+    #[must_use]
+    pub fn resettable(&self, command: Command) -> bool {
+        self.changed(command) && self.lined.contains(&command)
+    }
+
+    /// Whether any command's are.
+    #[must_use]
+    pub fn any_changed(&self) -> bool {
+        !self.changed.is_empty()
+    }
+
+    /// The keys a command is on, as last heard.
+    fn held(&self, command: Command) -> &[KeyChord] {
+        self.held
+            .iter()
+            .find(|(held, _)| *held == command)
+            .map_or(&[], |(_, chords)| chords.as_slice())
     }
 
     /// The commands this page lists, without the keys they are on.
     ///
     /// What the filter leaves, which is what the focus moves over and how
-    /// far the window can scroll. Split from [`Settings::keys`] because
-    /// counting the rows does not need the table and the callers that
-    /// count do not have it.
+    /// far the window can scroll: a row for each of a command's keys, as
+    /// the page last heard them ([`Settings::hear_keymap`]). Split from
+    /// [`Settings::keys`] because counting the rows does not need the keys
+    /// themselves, only how many each command has.
     #[must_use]
     pub fn key_rows(&self) -> Vec<KeyRow> {
         if !self.on_keys() {
@@ -898,7 +1011,13 @@ impl Settings {
                     || spec.name.to_lowercase().contains(&query)
                     || spec.title.to_lowercase().contains(&query)
             })
-            .map(|spec| KeyRow::Command(spec.command));
+            .flat_map(|spec| {
+                let rows = self.held(spec.command).len().max(1);
+                (0..rows).map(|slot| KeyRow::Key {
+                    command: spec.command,
+                    slot,
+                })
+            });
         settings.chain(commands).collect()
     }
 
@@ -942,7 +1061,14 @@ impl Settings {
 
     /// Which command's key is being pressed, if one is.
     #[must_use]
-    pub const fn binding(&self) -> Option<Command> {
+    pub fn binding(&self) -> Option<Command> {
+        self.binding.map(|binding| binding.command)
+    }
+
+    /// And on which of its rows, and whether the key pressed will take the
+    /// place of the one there or be one more.
+    #[must_use]
+    pub const fn binding_at(&self) -> Option<Binding> {
         self.binding
     }
 
@@ -1349,7 +1475,6 @@ impl Settings {
         &mut self,
         key: &KeyEvent,
         config: &Config,
-        keymap: &Keymap,
         cards: Cards<'_>,
         offering: Option<&Offering>,
         room: (u16, u16),
@@ -1361,19 +1486,33 @@ impl Settings {
         // out, because escape is the way out of everything -- and it gives
         // up on the nearest thing first, which is this row rather than the
         // page.
-        if let Some(command) = self.binding {
+        if let Some(Binding {
+            command,
+            slot,
+            replacing,
+        }) = self.binding
+        {
             if key.code == KeyCode::Esc && key.modifiers.is_empty() {
                 self.binding = None;
                 self.refused = None;
                 return SettingsOutcome::Consumed;
             }
-            // Taking the key away is a decision a reader can make, and
-            // there is nowhere else on the page to make it.
-            if matches!(key.code, KeyCode::Delete | KeyCode::Backspace) && key.modifiers.is_empty()
+            // Taking the key on this row away, on the key that does it
+            // everywhere on this page. Only where the row is being changed:
+            // one waiting for a key to add has nothing of its own to take,
+            // and goes on waiting.
+            let held = self.held(command).to_vec();
+            if KeyChord::from_event(key)
+                == Some(KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT))
             {
+                if !replacing || slot >= held.len() {
+                    return SettingsOutcome::Consumed;
+                }
+                let mut kept = held;
+                kept.remove(slot);
                 self.binding = None;
                 self.refused = None;
-                return SettingsOutcome::Bind(command, None);
+                return SettingsOutcome::Bind(command, kept);
             }
             let Some(chord) = KeyChord::from_event(key) else {
                 // A release, or a modifier Obelus cannot bind. Nothing to
@@ -1382,9 +1521,8 @@ impl Settings {
             };
             // A key that could never fire is not offered, whatever the
             // reader pressed: the editor's own keys never reach the table,
-            // the terminal sends another key for some chords, and some work
-            // on this machine and not the next. The row says which of those
-            // it is and goes on waiting.
+            // and every list and box takes some for itself. The row says
+            // which of those it is and goes on waiting.
             if let Some(why) = obelus_keymap::why_not(chord) {
                 self.refused = Some((chord, Refused::Never(why)));
                 return SettingsOutcome::Consumed;
@@ -1392,24 +1530,94 @@ impl Settings {
             // And a key already spoken for stays where it is. One key, one
             // meaning, is a rule a reader can hold in their head -- and the
             // row says which command has it.
-            match keymap.command_on(chord) {
+            let taken = self
+                .held
+                .iter()
+                .find(|(_, chords)| chords.contains(&chord))
+                .map(|(taken, _)| *taken);
+            match taken {
                 Some(taken) if taken != command => {
                     self.refused = Some((chord, Refused::Taken(taken)));
                     return SettingsOutcome::Consumed;
                 }
-                _ => {
+                // A key the command is already on changes nothing.
+                Some(_) => {
                     self.binding = None;
                     self.refused = None;
-                    return SettingsOutcome::Bind(command, Some(chord));
+                    return SettingsOutcome::Consumed;
+                }
+                None => {
+                    let mut chords = held;
+                    match chords.get_mut(slot).filter(|_| replacing) {
+                        Some(on_the_row) => *on_the_row = chord,
+                        None => chords.push(chord),
+                    }
+                    self.binding = None;
+                    self.refused = None;
+                    return SettingsOutcome::Bind(command, chords);
                 }
             }
         }
 
-        // The card's key before the modifiers are judged, because it has
-        // one: control is what every key below this refuses.
-        if obelus_keymap::is_keys_card(key) {
-            self.keys_showing = !self.keys_showing;
+        // One more key for the command the reader is on, whichever of its
+        // rows: `ctrl+enter`, and only that, so enter always changes a key
+        // and control always adds one. A terminal without the keyboard
+        // protocol sends it as enter, and there a key is added in the
+        // file -- a command's first as well, enter having nothing to change
+        // on a row with no key.
+        let adding = key.code == KeyCode::Enter && key.modifiers == KeyModifiers::CONTROL;
+        if adding && self.on_keys() {
+            if let Some(KeyRow::Key { command, slot }) = self.key_rows().get(self.window.focus()) {
+                self.binding = Some(Binding {
+                    command: *command,
+                    slot: *slot,
+                    replacing: false,
+                });
+                self.refused = None;
+            }
             return SettingsOutcome::Consumed;
+        }
+
+        // Taking keys away, on alt because the filter takes nothing on it:
+        // `alt+backspace` the key on this row, `alt+r` this command put back
+        // on its layout's keys, and `alt+shift+r` every command, asked
+        // first. Backspace and delete are the filter's, and a Mac has no
+        // delete to press.
+        if self.on_keys() {
+            let chord = KeyChord::from_event(key);
+            let focused = self.keys().get(self.window.focus()).copied();
+            let removing = chord == Some(KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT));
+            let resetting = chord == Some(KeyChord::new(KeyCode::Char('r'), KeyModifiers::ALT));
+            let resetting_all = chord
+                == Some(KeyChord::new(
+                    KeyCode::Char('r'),
+                    KeyModifiers::ALT | KeyModifiers::SHIFT,
+                ));
+            // The two that act on the row with the focus wait, as enter
+            // does, for the row to be on the screen: the first press brings
+            // back a row the wheel took away, and takes nothing from it.
+            if removing || resetting {
+                let count = self.key_rows().len();
+                self.window.set_count(count);
+                if count > 0 && self.window.reach_for_the_focus() {
+                    return SettingsOutcome::Consumed;
+                }
+            }
+            match focused {
+                Some((KeyRow::Key { command, slot }, Some(_))) if removing => {
+                    let mut kept = self.held(command).to_vec();
+                    kept.remove(slot);
+                    return SettingsOutcome::Bind(command, kept);
+                }
+                Some((KeyRow::Key { command, .. }, _)) if resetting && self.resettable(command) => {
+                    return SettingsOutcome::ResetKeys(command);
+                }
+                _ if resetting_all && self.any_changed() => {
+                    return SettingsOutcome::ResetAllKeys;
+                }
+                _ if removing || resetting || resetting_all => return SettingsOutcome::Consumed,
+                _ => {}
+            }
         }
 
         // The same rule every other view follows: a modifier Obelus has no
@@ -1436,7 +1644,7 @@ impl Settings {
         }
         let bare = modifiers == KeyModifiers::NONE;
         let rows = self.rows(offering);
-        let keys = self.keys(keymap);
+        let keys = self.keys();
         // How many things the focus can be on: the rows of the page, or the
         // agents that the query leaves.
         let themes = self.themes(cards.themes);
@@ -1472,12 +1680,7 @@ impl Settings {
         }
 
         match key.code {
-            // The card first: a key that opens a thing closes that thing.
-            KeyCode::Esc if bare && self.keys_showing => {
-                self.keys_showing = false;
-                SettingsOutcome::Consumed
-            }
-            // Then what is held in the filter, which is nearer than the
+            // What is held in the filter first, which is nearer than the
             // page it is on.
             KeyCode::Esc if bare && self.query.let_go() => SettingsOutcome::Consumed,
             KeyCode::Esc if bare => SettingsOutcome::Cancelled,
@@ -1561,15 +1764,24 @@ impl Settings {
                     _ => SettingsOutcome::Consumed,
                 }
             }
-            // On the keys page, enter is the reader saying "the next key I
-            // press is this command's".
+            // On the keys page, enter on a key is the reader saying "the
+            // next key I press goes here instead", with `alt+backspace` to
+            // take it away. On a command with no key there is nothing to
+            // change, and
+            // enter does nothing: a key is added with `ctrl+enter`, there as
+            // on every row.
             KeyCode::Enter if bare && self.on_keys() => match keys.get(self.window.focus()) {
                 Some((KeyRow::Setting(setting), _)) => Self::change(setting, config),
-                Some((KeyRow::Command(command), _)) => {
-                    self.binding = Some(*command);
+                Some((KeyRow::Key { command, slot }, Some(_))) => {
+                    self.binding = Some(Binding {
+                        command: *command,
+                        slot: *slot,
+                        replacing: true,
+                    });
                     self.refused = None;
                     SettingsOutcome::Consumed
                 }
+                Some((KeyRow::Key { .. }, None)) => SettingsOutcome::Consumed,
                 None => SettingsOutcome::Consumed,
             },
             // A row of the remote page asks for what it is about, and the
@@ -1825,7 +2037,7 @@ impl Settings {
                         },
                         description_width(room.0),
                     ),
-                    KeyRow::Command(_) => 1,
+                    KeyRow::Key { .. } => 1,
                 })
                 .collect(),
             false => self

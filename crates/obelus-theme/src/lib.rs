@@ -186,10 +186,10 @@ pub struct Theme {
     /// Behind something that reads as a surface rather than as prose: the
     /// cap a key is drawn in at the foot of a view.
     ///
-    /// Not a panel's ground -- the card that lists every key, a hover, the
-    /// completion list -- which is the page's own colour: a panel's frame
-    /// already says it is not the file, and in a window the ground is the
-    /// colour of the panel's glass, which everywhere else is the page's.
+    /// Not a panel's ground -- a hover, the completion list -- which is the
+    /// page's own colour: a panel's frame already says it is not the file,
+    /// and in a window the ground is the colour of the panel's glass, which
+    /// everywhere else is the page's.
     ///
     /// Not the welcome screen, which has the same key-and-word shape and
     /// argues its way out of the cap: six caps in a block is six strips of

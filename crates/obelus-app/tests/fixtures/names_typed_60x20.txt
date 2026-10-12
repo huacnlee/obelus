@@ -17,7 +17,7 @@ screen 60x20  editor 60x18  status 60x1
 14| Noto Sans CJK SC                                           
 15| noto                                   Not on this machine 
 16|────────────────────────────────────────────────────────────
-17|   Enter  Add                                 Ctrl+k  Keys  
+17|   Enter  Add                                               
 18|────────────────────────────────────────────────────────────
 19| > noto                                                     
 -- style --
@@ -38,7 +38,7 @@ screen 60x20  editor 60x18  status 60x1
 14|ahhhhaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 15|ahhhhaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaccccccccccccccccccca
 16|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
-17|aaiiiiiiiacccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaiiiiiiiiaccccaa
+17|aaiiiiiiiacccaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 18|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 19|jjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjjj
 -- legend --

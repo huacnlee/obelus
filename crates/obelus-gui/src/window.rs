@@ -1078,9 +1078,8 @@ impl ApplicationHandler<Waking> for Showing {
                         }
                         // Every one said is kept, in the order it was
                         // said, which is the order they are stacked in: a
-                        // setting's choices open over the settings, and
-                        // the card of every key over those. Each is glass,
-                        // and what the reader sees through one is
+                        // setting's choices open over the settings. Each is
+                        // glass, and what the reader sees through one is
                         // everything said before it -- the settings kept
                         // their glass under a list once there was more
                         // than one place to keep a pane.

@@ -21,7 +21,7 @@ struct Arguments {
     /// What to open: a file, or a directory to work in.
     ///
     /// A file names the tree it is in and is opened. A directory is the
-    /// tree itself, and Obelus opens on the list of what is in it.
+    /// tree itself, and Obelus opens on the welcome screen.
     paths: Vec<PathBuf>,
 
     /// Connect to the chat set in the settings once started, as
@@ -193,7 +193,10 @@ fn ctrl_enter_arrives() -> bool {
 ///
 /// Nothing else in Obelus depends on the protocol but `ctrl+enter` in the
 /// same box, which sends into a running turn now rather than after it --
-/// and without the protocol arrives as enter, which waits for the turn.
+/// and without the protocol arrives as enter, which waits for the turn --
+/// and the `ctrl+shift` chords the editors' layouts borrow, which arrive
+/// as `ctrl` and the letter without it, and have an alt chord beside each
+/// for that.
 fn enable_keyboard() -> bool {
     use crossterm::event::{KeyboardEnhancementFlags, PushKeyboardEnhancementFlags};
 

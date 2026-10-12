@@ -49,9 +49,8 @@ fn list_region_rows(picker: &Picker, width: u16) -> u16 {
 
 /// What the keys do in a file list, and which of them do anything now.
 ///
-/// One list read two ways, the way every other footed view here reads its
-/// own: the foot draws the common ones that can be pressed, and the card
-/// draws all of them with the rest greyed.
+/// The foot draws the ones that can be pressed, and those it was told to
+/// keep greyed where they cannot.
 ///
 /// Nothing about enter or escape: a list is a list, and what a reader does
 /// to one is not news. Nothing about the keys that walk the tabs either --
@@ -66,12 +65,12 @@ fn list_region_rows(picker: &Picker, width: u16) -> u16 {
 /// And none at all where none of them can be pressed, unless one of them is
 /// kept there greyed (the list of background work). The file list's
 /// changed tab was the case: every key it has is about the tree, the rows
-/// there are git's answer, so its foot was a rule and a pointer to a card
-/// of keys that were all grey -- two rows of the screen saying that
-/// nothing here answers to anything. Which lets that foot come and go as
-/// the reader walks between the two tabs, where the search's keeps its
-/// height on purpose; but each of the search's tabs has a key that works,
-/// so this never takes one of those away.
+/// there are git's answer, so its foot was a rule over a row with nothing
+/// on it -- two rows of the screen saying that nothing here answers to
+/// anything. Which lets that foot come and go as the reader walks between
+/// the two tabs, where the search's keeps its height on purpose; but each
+/// of the search's tabs has a key that works, so this never takes one of
+/// those away.
 #[must_use]
 pub fn hints(picker: &Picker) -> Vec<Hint> {
     let hints = every_hint(picker);
@@ -95,11 +94,10 @@ fn every_hint(picker: &Picker) -> Vec<Hint> {
     // time the reader walked from running work to finished.
     if picker.listing_tasks().is_some() {
         return vec![
-            Hint::common(
+            Hint::new(
                 obelus_keymap::KeyChord::new(KeyCode::Char('s'), KeyModifiers::ALT),
                 "Stop",
             )
-            .saying("Ask the agent to stop this piece of background work")
             .when(picker.stops_this_one())
             .kept(),
         ];
@@ -112,10 +110,8 @@ fn every_hint(picker: &Picker) -> Vec<Hint> {
     if picker.rows_open() {
         let enter = |modifiers| obelus_keymap::KeyChord::new(KeyCode::Enter, modifiers);
         return vec![
-            Hint::common(enter(KeyModifiers::NONE), "Open")
-                .saying("Show what this row reaches, or hide it again"),
-            Hint::common(enter(KeyModifiers::ALT), "Go there")
-                .saying("Leave the list and read the line this row names"),
+            Hint::new(enter(KeyModifiers::NONE), "Open"),
+            Hint::new(enter(KeyModifiers::ALT), "Go there"),
         ];
     }
     // The worktrees in a window, for the reason the two enters above are
@@ -125,24 +121,16 @@ fn every_hint(picker: &Picker) -> Vec<Hint> {
     if picker.goes_in_place() {
         use obelus_component::picker::WorktreeEnter;
         let enter = |modifiers| obelus_keymap::KeyChord::new(KeyCode::Enter, modifiers);
-        let switch = "Put this window on this tree in place of the one it is on";
         let does = picker.worktree_enter();
-        let (word, saying) = match does {
-            Some(WorktreeEnter::Bring) => ("Go to it", "Bring the window this row is forward"),
-            Some(WorktreeEnter::Stay) => ("Stay", "Leave the list and go on in this window"),
-            Some(WorktreeEnter::Switch) => ("Switch", switch),
-            Some(WorktreeEnter::Open) | None => (
-                "New window",
-                "Open another Obelus on this tree, in a window of its own",
-            ),
+        let word = match does {
+            Some(WorktreeEnter::Bring) => "Go to it",
+            Some(WorktreeEnter::Stay) => "Stay",
+            Some(WorktreeEnter::Switch) => "Switch",
+            Some(WorktreeEnter::Open) | None => "New window",
         };
         return vec![
-            Hint::common(enter(KeyModifiers::NONE), word)
-                .saying(saying)
-                .when(does.is_some()),
-            Hint::common(enter(KeyModifiers::CONTROL), "Switch")
-                .saying(switch)
-                .when(picker.switches_here()),
+            Hint::new(enter(KeyModifiers::NONE), word).when(does.is_some()),
+            Hint::new(enter(KeyModifiers::CONTROL), "Switch").when(picker.switches_here()),
         ];
     }
     let alt = |letter| obelus_keymap::KeyChord::new(KeyCode::Char(letter), KeyModifiers::ALT);
@@ -153,22 +141,12 @@ fn every_hint(picker: &Picker) -> Vec<Hint> {
         // the foot does not change height as the reader walks the tabs.
         let here = how.is_some();
         return vec![
-            Hint::common(alt('r'), "Regex")
-                .saying("Read the query as a pattern rather than as the text")
-                .set(asked.regex)
-                .when(here),
-            Hint::common(alt('w'), "Word")
-                .saying("Only where it stands as a word of its own")
-                .set(asked.word)
-                .when(here),
-            Hint::common(alt('c'), "Case")
-                .saying("The capitals as typed, rather than as the query implies")
-                .set(asked.sensitive)
-                .when(here),
+            Hint::new(alt('r'), "Regex").set(asked.regex).when(here),
+            Hint::new(alt('w'), "Word").set(asked.word).when(here),
+            Hint::new(alt('c'), "Case").set(asked.sensitive).when(here),
             // The other way round from the three above: this one is the
             // symbols tab's, and they are the two that read a text.
-            Hint::common(alt('o'), "Outside")
-                .saying("Names from outside the project, where a server knows any")
+            Hint::new(alt('o'), "Outside")
                 .set(picker.reaches_outside().unwrap_or(false))
                 .when(picker.reaches_outside().is_some()),
         ];
@@ -176,27 +154,23 @@ fn every_hint(picker: &Picker) -> Vec<Hint> {
     let offering = picker.offers_ignored();
     let showing = picker.offers_hidden();
     vec![
-        Hint::common(alt('i'), "Ignored files")
-            .saying("Offer the files the project ignores, or leave them out")
+        Hint::new(alt('i'), "Ignored files")
             .set(offering.unwrap_or(false))
             .when(offering.is_some()),
         // Beside it and not folded into it: what a project said to ignore
         // and what a convention says not to show are two different things
         // kept out, and one switch for both would say one was set when the
         // other was.
-        Hint::common(alt('.'), "Hidden files")
-            .saying("Offer the files a system keeps out of sight, `.git` and all")
+        Hint::new(alt('.'), "Hidden files")
             .set(showing.unwrap_or(false))
             .when(showing.is_some()),
         // Not a switch: what it does depends on the row the reader is on,
         // which is why it draws no setting.
-        Hint::common(alt('n'), "Rename")
-            .saying("Put this file or directory somewhere else, or call it something else")
-            .when(offering.is_some()),
+        Hint::new(alt('n'), "Rename").when(offering.is_some()),
     ]
 }
 
-/// The foot saying what this list's own keys do, and the card over it.
+/// The foot saying what this list's own keys do.
 ///
 /// Over the whole room rather than over the list, because a foot is the
 /// bottom of the *view*: a full-area file list has a preview under it, and a
@@ -207,11 +181,6 @@ pub fn foot_of(cells: &mut CellBuffer, picker: &Picker, room: Rect, theme: &Them
         return;
     }
     crate::foot(cells, room, &hints, theme);
-    if picker.showing_keys() {
-        // Above the foot: the foot says how to close this, and a card over
-        // it would be a card with no way out on screen.
-        crate::keys_card(cells, room_for(picker, room), &hints, theme);
-    }
 }
 
 /// The room a list and its preview have, once a foot has taken its rows.

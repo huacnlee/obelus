@@ -133,7 +133,7 @@ impl<'a> SettingsView<'a> {
             themes: app.listed_themes(),
             themes_failure: app.themes_failure(),
             images: app.images(),
-            keys: app.settings()?.keys(app.keymap()),
+            keys: app.settings()?.keys(),
             offering: app.agent_offering(),
             pinned: app.pinned().to_vec(),
             named: app.readers_named().to_vec(),
@@ -223,31 +223,41 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
     let on_row = settings.rows(offering).get(settings.focus()).copied();
     let adding = matches!(on_row, Some(Shown::AddVariable { .. }));
     let removes = matches!(on_row, Some(Shown::Variable { .. }));
-    let (enter, saying) = match remote {
+    let enter = match remote {
         Some(Shown::Remote { row, .. }) => match row {
-            RemoteRow::Pair => (
-                "Pair",
-                "Make a code to send in the group you put the bot in",
-            ),
-            RemoteRow::Setup(obelus_remote::platform::Setup::Copy { .. }) => {
-                ("Copy", "Copy it, to paste where the app is made")
-            }
-            RemoteRow::Setup(obelus_remote::platform::Setup::Steps { .. }) => {
-                ("Open", "Open the steps in the browser")
-            }
-            RemoteRow::Platform | RemoteRow::Field(_) | RemoteRow::People => {
-                ("Change", "Change it, or open what it can be")
-            }
+            RemoteRow::Pair => "Pair",
+            RemoteRow::Setup(obelus_remote::platform::Setup::Copy { .. }) => "Copy",
+            RemoteRow::Setup(obelus_remote::platform::Setup::Steps { .. }) => "Open",
+            RemoteRow::Platform | RemoteRow::Field(_) | RemoteRow::People => "Change",
         },
-        _ if adding => ("Add", "Add a variable to what the agent is started with"),
-        _ => (
-            "Change",
-            match settings.key_rows().get(settings.focus()) {
-                Some(KeyRow::Command(_)) => "Put this command on another key",
-                Some(KeyRow::Setting(_)) | None => "Change it, or open what it can be",
-            },
-        ),
+        _ if adding => "Add",
+        _ => "Change",
     };
+    // On a command with no key there is nothing for enter to change, so
+    // the foot does not offer it there.
+    let nothing_to_change = settings.on_keys()
+        && matches!(
+            settings.keys().get(settings.focus()),
+            Some((KeyRow::Key { .. }, None))
+        );
+    // The row the reader is on, on the keys page: whether it has a key to
+    // take away, and whether its command is off its layout's keys.
+    let on_keys_row = settings
+        .on_keys()
+        .then(|| settings.keys().get(settings.focus()).copied())
+        .flatten();
+    let on_a_key = matches!(on_keys_row, Some((KeyRow::Key { .. }, Some(_))));
+    let changed_here = matches!(
+        on_keys_row,
+        Some((KeyRow::Key { command, .. }, _)) if settings.resettable(command)
+    );
+    // And one more key for the command the reader is on, which is always
+    // control: enter changes a key, and control adds one.
+    let adds = settings.on_keys()
+        && matches!(
+            settings.keys().get(settings.focus()),
+            Some((KeyRow::Key { .. }, _))
+        );
     // Pairing does nothing where the chat could not be reached, and a key
     // that does nothing is not offered at the foot.
     let pairing_waits = matches!(
@@ -263,35 +273,63 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
         Some(Shown::Remote { row: RemoteRow::Field(field), .. })
             if settings.reached().kept.contains_key(field.key)
     );
+    // A row waiting for its key takes every key, so the foot says the one
+    // that does something else there: taking this row's key away, where it
+    // has one. Not escape, which gives up on the nearest thing here as
+    // everywhere, and a foot does not spend itself saying so (`ui::foot`).
+    if let Some(binding) = settings.binding_at() {
+        return vec![
+            Hint::new(
+                obelus_keymap::KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT),
+                "Remove",
+            )
+            .when(binding.replacing),
+        ];
+    }
     // Delete is the filter's while the filter has something for it, so
     // nothing below says what it does to a row until then.
     let rows_delete = !settings.delete_is_the_filters();
     vec![
-        Hint::common(bare(KeyCode::Enter), enter)
-            .saying(saying)
+        Hint::new(bare(KeyCode::Enter), enter)
             // Asked of whichever page is showing rather than of the
             // settings: the keys page has rows too, and enter does the same
             // sort of thing to one of them.
-            .when(settings.row_count(offering) > 0 && !pairing_waits),
-        Hint::common(bare(KeyCode::Delete), "Forget")
-            .saying("Take this out of the keyring, or out of the settings")
-            .when(forgets && rows_delete),
+            .when(settings.row_count(offering) > 0 && !pairing_waits && !nothing_to_change),
+        Hint::new(
+            obelus_keymap::KeyChord::new(KeyCode::Enter, KeyModifiers::CONTROL),
+            "Add a key",
+        )
+        .when(adds),
+        // Taking keys away, each offered only where it would do something:
+        // the key on this row, this command put back on its layout's keys,
+        // and every command.
+        Hint::new(
+            obelus_keymap::KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT),
+            "Remove",
+        )
+        .when(on_a_key),
+        Hint::new(
+            obelus_keymap::KeyChord::new(KeyCode::Char('r'), KeyModifiers::ALT),
+            "Reset",
+        )
+        .when(changed_here),
+        Hint::new(
+            obelus_keymap::KeyChord::new(
+                KeyCode::Char('r'),
+                KeyModifiers::ALT | KeyModifiers::SHIFT,
+            ),
+            "Reset all",
+        )
+        .when(settings.on_keys() && settings.any_changed()),
+        Hint::new(bare(KeyCode::Delete), "Forget").when(forgets && rows_delete),
         // On an agent's row, and only while there is something to undo:
         // what `delete` leaves there is not a default of Obelus's but the
         // agent's own answer.
-        Hint::common(bare(KeyCode::Delete), AGENTS_OWN)
-            .saying("Stop saying what this one starts on, and leave it to the agent")
-            .when(focused.is_some() && rows_delete),
-        Hint::common(bare(KeyCode::Delete), "Remove")
-            .saying("Stop starting the agent with this one")
-            .when(removes && rows_delete),
-        Hint::common(bare(KeyCode::Delete), "Unset")
-            .saying("Take this setting out of the project's file")
-            .when(
-                rows_delete && settings.on_project() && !settings.on_keys() && !settings.on_cards(),
-            ),
-        // The card's, not the foot's: see `crate::foot`.
-        Hint::rare(bare(KeyCode::Esc), "Leave").saying("Leave the settings"),
+        Hint::new(bare(KeyCode::Delete), AGENTS_OWN).when(focused.is_some() && rows_delete),
+        Hint::new(bare(KeyCode::Delete), "Remove").when(removes && rows_delete),
+        Hint::new(bare(KeyCode::Delete), "Unset").when(
+            rows_delete && settings.on_project() && !settings.on_keys() && !settings.on_cards(),
+        ),
     ]
 }
 
@@ -303,19 +341,15 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
 fn theme_hints(settings: &Settings, card: Option<&ThemeCard>) -> Vec<Hint> {
     use crossterm::event::{KeyCode, KeyModifiers};
     let bare = |code| obelus_keymap::KeyChord::new(code, KeyModifiers::NONE);
-    let (enter, saying) = match card {
-        Some(card) if card.installed => ("Update", "Fetch the newer version of this theme"),
-        _ => ("Install", "Fetch this theme, to choose among your own"),
+    let enter = match card {
+        Some(card) if card.installed => "Update",
+        _ => "Install",
     };
     vec![
-        Hint::common(bare(KeyCode::Enter), enter)
-            .saying(saying)
-            .when(card.is_some_and(ThemeCard::may_be_installed)),
-        Hint::common(bare(KeyCode::Delete), "Remove")
-            .saying("Take this theme off this machine")
-            .when(
-                card.is_some_and(ThemeCard::may_be_taken_away) && !settings.delete_is_the_filters(),
-            ),
+        Hint::new(bare(KeyCode::Enter), enter).when(card.is_some_and(ThemeCard::may_be_installed)),
+        Hint::new(bare(KeyCode::Delete), "Remove").when(
+            card.is_some_and(ThemeCard::may_be_taken_away) && !settings.delete_is_the_filters(),
+        ),
     ]
 }
 
@@ -369,10 +403,12 @@ fn entry_rows(row: &Row) -> u16 {
 /// and what it does.
 ///
 /// A row with no name is its prose and nothing else: there is nothing to
-/// put on a first line.
+/// put on a first line -- unless it has a key, which is the line: a
+/// command's second key is a row with no name, and one counted as nothing
+/// is a row the next command is drawn over.
 fn own_rows(row: &Row) -> u16 {
     u16::try_from(row.body.len() + row.warning.len()).unwrap_or(0)
-        + u16::from(!row.label.is_empty())
+        + u16::from(!row.label.is_empty() || matches!(row.aside, Aside::Words(_)))
 }
 
 /// How many rows of the screen are above the first entry a page shows.
@@ -541,14 +577,12 @@ impl Widget for SettingsView<'_> {
         // and a row of a table has nowhere to say what one is.
         if self.settings.on_agents() {
             self.agents(cells, region);
-            self.keys_card(cells, area, &hints);
             return;
         }
         // And so are the themes, for the same reason and one more: there is
         // no picture of one on its card, so its words are all there is.
         if self.settings.on_themes() {
             self.themes(cells, region);
-            self.keys_card(cells, area, &hints);
             return;
         }
 
@@ -571,28 +605,37 @@ impl Widget for SettingsView<'_> {
                         },
                         obelus_component::settings::description_width(region.width),
                     ),
-                    KeyRow::Command(command) => Row {
+                    // A row a key, and the command named on the first of
+                    // them only: the rows under it are more of its keys.
+                    KeyRow::Key { command, slot } => Row {
                         opens: None,
-                        label: command.name().to_string(),
-                        matched: self.settings.matched_in(command.name()),
-                        detail: self.saying(*command),
+                        label: match slot {
+                            0 => command.name().to_string(),
+                            _ => String::new(),
+                        },
+                        matched: match slot {
+                            0 => self.settings.matched_in(command.name()),
+                            _ => None,
+                        },
+                        detail: self.saying(*command, *slot, chord.is_some()),
                         aside: Aside::Words(chord.map(|chord| chord.label()).unwrap_or_default()),
                         body: Vec::new(),
                         entry: false,
                         warning: Vec::new(),
                         pinned: None,
-                        scope: None,
+                        // Once, beside the name: the rows under it are
+                        // more of the same command's keys.
+                        scope: (*slot == 0 && self.settings.changed(*command))
+                            .then_some(Scope::Changed),
                     },
                 })
                 .collect();
             self.column(cells, region, &rows, "No command by that name");
-            self.keys_card(cells, area, &hints);
             return;
         }
 
         let rows = self.rows(region);
         self.column(cells, region, &rows, "No setting by that name");
-        self.keys_card(cells, area, &hints);
     }
 }
 
@@ -874,6 +917,10 @@ enum Scope {
     Global,
     /// Nobody's: what Obelus ships with.
     Default,
+    /// On the keys page, a command the reader has put on keys other than
+    /// its layout's: their own, said against the layout rather than
+    /// against Obelus's defaults, which on that page are the layout.
+    Changed,
 }
 
 impl Scope {
@@ -883,6 +930,7 @@ impl Scope {
             Self::Project => "Project",
             Self::Global => "Global",
             Self::Default => "Default",
+            Self::Changed => "Changed",
         }
     }
 }
@@ -909,16 +957,6 @@ enum Aside {
 }
 
 impl SettingsView<'_> {
-    /// Every key this page answers to, where the reader asked for them.
-    ///
-    /// Above the foot, which says how to close it: a card that covered the
-    /// way out would be a card with no way out on screen.
-    fn keys_card(&self, cells: &mut CellBuffer, area: Rect, hints: &[Hint]) {
-        if self.settings.showing_keys() {
-            crate::keys_card(cells, crate::footed(area, hints), hints, self.theme);
-        }
-    }
-
     /// A page's rows, drawn one to a row.
     ///
     /// One loop for the settings and for the keys, because they are the
@@ -1107,7 +1145,9 @@ impl SettingsView<'_> {
                 // enough to the name to read as one phrase, and in a line
                 // down the page so that the page is read as a table.
                 let at = detail_at.max(after + 2);
-                let left = aside_at.saturating_sub(at + reserved);
+                // And a blank before the right-hand column, or a
+                // description that fills its room runs into the key.
+                let left = aside_at.saturating_sub(at + reserved + 1);
                 write(
                     cells,
                     at,
@@ -1157,9 +1197,13 @@ impl SettingsView<'_> {
                 ),
                 Aside::Words(words) => {
                     let keys = truncate_from_right(words, usize::from(CONTROL_WIDTH));
+                    // Against the column's right edge, so a command's keys,
+                    // one to a row, end in a line however long each is.
+                    let width = u16::try_from(text_width(&keys)).unwrap_or(CONTROL_WIDTH);
+                    let key_at = aside_at + CONTROL_WIDTH.saturating_sub(width);
                     write(
                         cells,
-                        aside_at,
+                        key_at,
                         y,
                         &keys,
                         plain.fg(self.theme.foreground).bg(background),
@@ -1168,7 +1212,7 @@ impl SettingsView<'_> {
                     // a cap on the row the reader is on is drawn over the
                     // colour that says so.
                     crate::cap_around(
-                        aside_at,
+                        key_at,
                         y,
                         &keys,
                         text_width(&keys),
@@ -1421,10 +1465,21 @@ impl SettingsView<'_> {
     /// row because that is where they are looking and it is that binding
     /// the answer is about -- the status row here is the page's filter, and
     /// a passing note would be cleared by the very next keystroke.
-    fn saying(&self, command: obelus_command::Command) -> Option<(String, ratatui::style::Color)> {
-        if self.settings.binding() != Some(command) {
-            return Some((command.spec().title.to_string(), self.theme.gutter));
-        }
+    fn saying(
+        &self,
+        command: obelus_command::Command,
+        slot: usize,
+        has_a_key: bool,
+    ) -> Option<(String, ratatui::style::Color)> {
+        let Some(binding) = self
+            .settings
+            .binding_at()
+            .filter(|binding| binding.command == command && binding.slot == slot)
+        else {
+            // What it does once, beside its name; the rows of its other
+            // keys say nothing there.
+            return (slot == 0).then(|| (command.spec().title.to_string(), self.theme.gutter));
+        };
         match self.settings.refused() {
             Some((chord, Refused::Taken(taken))) => Some((
                 format!("{} is {}", chord.label(), taken.name()),
@@ -1434,8 +1489,14 @@ impl SettingsView<'_> {
                 format!("{}: {why}", chord.label()),
                 self.theme.change_removed,
             )),
+            // One line, because most commands have one key and so one row
+            // to say it on.
             None => Some((
-                "Press a key, or delete to unbind".to_string(),
+                match binding.replacing && has_a_key {
+                    true => "Press the new key",
+                    false => "Press a key to add it",
+                }
+                .to_string(),
                 self.theme.change_modified,
             )),
         }

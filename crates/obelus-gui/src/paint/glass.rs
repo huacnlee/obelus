@@ -651,11 +651,10 @@ impl Painter {
     /// What is under anything over the first pane, or under a box with
     /// a frame round it: the picture its glass reads, which goes into its
     /// own backdrop and never onto the screen -- the cells it was put over,
-    /// as the screen had them. Where those were glass further down -- the
-    /// card of every key is nearly always over a list or a page of
-    /// settings, and a setting's choices are over the settings -- they are
-    /// the letters alone, because the picture draws that glass before them
-    /// and a ground under the letters would cover it.
+    /// as the screen had them. Where those were glass further down -- a
+    /// setting's choices are over the settings -- they are the letters
+    /// alone, because the picture draws that glass before them and a ground
+    /// under the letters would cover it.
     pub(super) fn seen_under(&mut self, over: &Behind, lower: &[&Behind], fonts: &mut Fonts) {
         let cell = fonts.cell();
         for y in over.area.top()..over.area.bottom() {
@@ -692,8 +691,8 @@ impl Painter {
         fonts: &mut Fonts,
     ) -> (usize, [f32; 4]) {
         let (inside, radius) = self.frame(page, card, lower, fonts);
-        // Over a pane where it is over one at all: the card of every key
-        // always is, a hover over the code never.
+        // Over a pane where it is over one at all, which a hover over the
+        // code never is.
         let on_glass = lower.iter().any(|lower| lower.area.intersects(card.area));
         let mut tint = rgba(card.ground, Ink::Background);
         tint[3] = match on_glass {
