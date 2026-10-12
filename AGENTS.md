@@ -386,7 +386,7 @@ command is gone and `App::blame` reads the setting.
   The `vscode` and `textmate` layouts borrow those editors' `ctrl+shift`
   chords, which are their names and not Obelus's -- each with an alt chord
   beside it, because a terminal without the keyboard protocol sends `ctrl`
-  and the letter. A reader may bind one too, and is not warned: where it
+  and the letter, and one with it often keeps the chord for itself. A reader may bind one too, and is not warned: where it
   cannot arrive, it does not.
 
 **Escape always gives up on the nearest thing**, and everything else is
@@ -444,7 +444,8 @@ gestures depending on what was under it.
 `alt+enter`.** Both, every time: `shift+enter` arrives only from a terminal
 that speaks the kitty keyboard protocol -- `main` pushes its narrowest flag
 for this, and nothing else in Obelus depends on it but `ctrl+enter`, which is
-plain enter without it -- and `alt+enter` arrives from the rest, because alt
+plain enter without it, and the editors' layouts' `ctrl+shift` chords, each
+with an alt chord beside it -- and `alt+enter` arrives from the rest, because alt
 is the escape prefix. A place that took one left the other falling through to
 whatever was underneath, so the pair is taken together, and before the
 modifier check (`component::composer`).
@@ -842,8 +843,9 @@ crates/
                       own shape too (native); what is taken for a picture is
                       a file that is one (dropped)
   obelus-cli/       the `ob` binary: Obelus drawn on a terminal
-                    · two keys need the terminal's permission, and nothing
-                      else depends on the protocol (main)
+                    · two keys need the terminal's permission, and the
+                      editors' `ctrl+shift` chords are the only others that
+                      depend on the protocol (main)
   obelus-check-theme/ whether Obelus can read a theme, for the themes
                     registry, and in no release
                     · the same reading the editor does and nothing of its
