@@ -2887,6 +2887,31 @@ fn alt_r_puts_a_command_back() {
     assert!(!written.contains("redo"), "the line stayed: {written}");
 }
 
+/// A command another's line took a key from is changed, but has no line
+/// of its own to take out: `alt+r` is not offered there, and does nothing.
+///
+/// Broken deliberately by offering it wherever a command is changed: the
+/// foot said `Alt+r  Reset` over `open-file`, and pressing it changed
+/// nothing.
+#[test]
+fn alt_r_is_offered_only_where_a_line_can_be_taken_out() {
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("reset-no-line");
+    let file = settings_file(&scratch);
+    let before = "keys_from = \"mnemonic\"\n\n[keys]\nchoose-theme = \"ctrl+o\"\n";
+    std::fs::write(&file, before).expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "open-file");
+    let dump = support::render(&mut app, 100, 16);
+    let said = support::text_block(&dump);
+    assert!(
+        said.contains("Changed"),
+        "open-file lost its key and is not marked:\n{said}"
+    );
+    assert!(!said.contains("Alt+r  Reset"), "{said}");
+}
+
 /// `alt+shift+r` asks before it puts every command back: escape
 /// keeps the keys, and the first row puts them all back and empties the
 /// file of them.

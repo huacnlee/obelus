@@ -779,9 +779,20 @@ impl App {
     pub fn set_keymap(&mut self, keymap: Keymap) {
         self.keymap = keymap;
         let laid_out = self.laid_out_keys();
+        let lined = self.lined_keys();
         if let Some(settings) = self.settings.as_mut() {
-            settings.hear_keymap(&self.keymap, &laid_out);
+            settings.hear_keymap(&self.keymap, &laid_out, lined);
         }
+    }
+
+    /// The commands the reader's own `[keys]` has a line for.
+    pub(crate) fn lined_keys(&self) -> Vec<obelus_command::Command> {
+        self.settled
+            .readers
+            .keys
+            .keys()
+            .filter_map(|name| obelus_command::by_name(name))
+            .collect()
     }
 
     /// The table the reader's layout makes with none of their own keys

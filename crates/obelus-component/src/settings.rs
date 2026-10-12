@@ -619,6 +619,11 @@ pub struct Settings {
     /// heard with the keys: what the page marks, and what the keys that
     /// put a command back are offered on.
     changed: Vec<Command>,
+    /// The commands the reader's own file has a line for: the ones a
+    /// command can be put back from. A command can be changed without
+    /// one -- another's line took its key -- and putting it back would
+    /// take nothing out.
+    lined: Vec<Command>,
     /// The chord that would not do, and why it would not.
     ///
     /// On the row, because that is where the reader is looking and it is
@@ -661,6 +666,7 @@ impl Settings {
             binding: None,
             held: Vec::new(),
             changed: Vec::new(),
+            lined: Vec::new(),
             refused: None,
             whose: Whose::Reader,
             page: 0,
@@ -677,6 +683,7 @@ impl Settings {
             binding: None,
             held: Vec::new(),
             changed: Vec::new(),
+            lined: Vec::new(),
             refused: None,
             whose: Whose::Project,
             page: 0,
@@ -914,7 +921,11 @@ impl Settings {
     /// And the table the layout alone would make, which is what a command
     /// is changed from: asked of the keys, not of the file, so a line that
     /// says what the layout says anyway marks nothing.
-    pub fn hear_keymap(&mut self, keymap: &Keymap, laid_out: &Keymap) {
+    ///
+    /// And which commands the reader's file has a line for, which is what
+    /// putting one back takes out.
+    pub fn hear_keymap(&mut self, keymap: &Keymap, laid_out: &Keymap, lined: Vec<Command>) {
+        self.lined = lined;
         let focused = match self.on_keys() {
             true => self.key_rows().get(self.window.focus()).copied(),
             false => None,
@@ -948,6 +959,13 @@ impl Settings {
     #[must_use]
     pub fn changed(&self, command: Command) -> bool {
         self.changed.contains(&command)
+    }
+
+    /// Whether a command can be put back on its layout's keys: changed,
+    /// and by a line of the reader's own for it.
+    #[must_use]
+    pub fn resettable(&self, command: Command) -> bool {
+        self.changed(command) && self.lined.contains(&command)
     }
 
     /// Whether any command's are.
@@ -1580,7 +1598,7 @@ impl Settings {
                     kept.remove(slot);
                     return SettingsOutcome::Bind(command, kept);
                 }
-                Some((KeyRow::Key { command, .. }, _)) if resetting && self.changed(command) => {
+                Some((KeyRow::Key { command, .. }, _)) if resetting && self.resettable(command) => {
                     return SettingsOutcome::ResetKeys(command);
                 }
                 _ if resetting_all && self.any_changed() => {

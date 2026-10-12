@@ -249,7 +249,7 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
     let on_a_key = matches!(on_keys_row, Some((KeyRow::Key { .. }, Some(_))));
     let changed_here = matches!(
         on_keys_row,
-        Some((KeyRow::Key { command, .. }, _)) if settings.changed(command)
+        Some((KeyRow::Key { command, .. }, _)) if settings.resettable(command)
     );
     // And one more key for the command the reader is on, which is always
     // control: enter changes a key, and control adds one.

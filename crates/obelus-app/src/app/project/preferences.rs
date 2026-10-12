@@ -247,7 +247,7 @@ impl App {
         // what was last heard until the answer arrives.
         self.ask_what_the_agent_offers();
         let mut settings = Settings::new();
-        settings.hear_keymap(&self.keymap, &self.laid_out_keys());
+        settings.hear_keymap(&self.keymap, &self.laid_out_keys(), self.lined_keys());
         self.settings = Some(settings);
     }
 
@@ -262,7 +262,7 @@ impl App {
         // Nothing asked of the agent: what it starts on is the reader's
         // alone, and the project's page has no group for it.
         let mut settings = Settings::for_project();
-        settings.hear_keymap(&self.keymap, &self.laid_out_keys());
+        settings.hear_keymap(&self.keymap, &self.laid_out_keys(), self.lined_keys());
         self.settings = Some(settings);
     }
 
