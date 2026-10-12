@@ -698,6 +698,12 @@ impl App {
         self.open_keymap_picker();
     }
 
+    /// Lets a first start's question about the keys go unasked, for the
+    /// rest of this process: a start that had something else to say first.
+    pub(in crate::app) const fn let_the_keymap_question_go(&mut self) {
+        self.settled.unchosen = false;
+    }
+
     /// Offers one of the agent's settings, as the same compact list.
     ///
     /// With what the agent offers, and with Obelus's own row in front of

@@ -231,13 +231,16 @@ impl App {
         let told = self.tell_what_went_wrong();
         // Which keys to start from, on a first start, and not over what
         // went wrong: a list over a list hides the one the reader is owed.
-        // That start goes without the question, and with no file written
-        // the next one asks it.
+        // That start goes without the question -- the whole of it, or it
+        // would come up hours later when a project is next chosen -- and
+        // with no file written the next one asks it.
         //
         // Over a file the command line named, or one reopened, all the
         // same: escape is one key back to the file, and every key the
         // reader is about to press depends on it.
-        if !told {
+        if told {
+            self.let_the_keymap_question_go();
+        } else {
             self.ask_for_a_keymap();
         }
     }

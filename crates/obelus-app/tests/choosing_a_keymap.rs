@@ -287,6 +287,38 @@ fn which_project_comes_first() {
     assert_eq!(asked(&app).as_deref(), Some(ASKED));
 }
 
+/// A start that said what went wrong goes without the question for the
+/// whole of its life: choosing a project afterwards does not bring it up.
+///
+/// Deliberate break: leaving `unchosen` as it was where `start` told --
+/// the list came up once the project was chosen.
+#[test]
+fn a_start_that_told_does_not_ask_later() {
+    let scratch = support::Scratch::new("keymap-told");
+    let file = settings(&scratch);
+    let mut app = App::new(Vec::new());
+    app.working_directory_for_test(std::path::PathBuf::from("/tmp/obelus"));
+    app.ask_about_these_projects_for_test(vec![obelus_component::chooser::Known {
+        path: scratch.path().to_path_buf(),
+        shown: scratch.path().display().to_string(),
+        last: Some(1),
+    }]);
+    app.config_file_for_test(file);
+    app.amiss("Something went wrong on the way up");
+    start(&mut app);
+    assert!(
+        app.picker()
+            .is_some_and(|picker| picker.question() != Some(ASKED)),
+        "what went wrong was not put up"
+    );
+
+    press(&mut app, KeyCode::Esc);
+    assert!(app.choosing().is_some(), "not asking which project");
+    press(&mut app, KeyCode::Enter);
+    assert!(app.choosing().is_none(), "still asking which project");
+    assert_ne!(asked(&app).as_deref(), Some(ASKED), "it asked after all");
+}
+
 /// Nobody is at the screen of a headless Obelus to answer.
 ///
 /// Deliberate break: taking `is_headless` out of `ask_for_a_keymap`.
