@@ -622,20 +622,14 @@ impl App {
     /// What a layout puts the keys on, and two of them as they would be.
     ///
     /// Because the name is a word to remember it by and not a description
-    /// of it. The two keys are asked of the table that layout would build,
+    /// of it. What it is comes from [`obelus_config::key_layout`], which
+    /// `ob keymap` says too, so the two cannot describe one layout two
+    /// ways. The two keys are asked of the table that layout would build,
     /// with the reader's own `[keys]` laid over it as they would be, so a
     /// row cannot name a key the layout does not give -- and the two are
     /// the ones a reader reaches for first: a file, and everything else.
     fn about_a_layout(&self, word: &str) -> Option<String> {
-        let gloss = match word {
-            "obelus" => "The function keys, in banks of four",
-            "mnemonic" => {
-                "Control and alt, on the letter of the word -- which a running terminal keeps for its program"
-            }
-            "vscode" => "VS Code's keys for files, search and the palette",
-            "textmate" => "TextMate's keys for files and symbols",
-            _ => return None,
-        };
+        let gloss = obelus_config::key_layout(word)?.about;
         let layout = obelus_keymap::Layout::named(word)?;
         let (keymap, _) = obelus_keymap::Keymap::with(layout, &self.settled.config.keys);
         let key = |command| {
@@ -976,13 +970,7 @@ impl App {
                 "" => Some("Off".into()),
                 key => obelus_remote::platform::named(key).map(|platform| platform.name.into()),
             },
-            "keys_from" => match word {
-                "obelus" => Some("Obelus".into()),
-                "mnemonic" => Some("Mnemonic".into()),
-                "vscode" => Some("VS Code".into()),
-                "textmate" => Some("TextMate".into()),
-                _ => None,
-            },
+            "keys_from" => obelus_config::key_layout(word).map(|layout| layout.name.into()),
             // A share of the machine, with what it comes to on this one:
             // the word is the same on every machine the file is read on,
             // and the number is what the reader is actually choosing.

@@ -84,11 +84,13 @@ fn the_palette_finds_choose_keymap() {
 }
 
 /// Every layout is a row, called what it is called, with two keys it would
-/// give -- and the keys are that layout's, not the ones in force.
+/// give -- and the keys are that layout's, not the ones in force. What it
+/// is, is what `ob keymap` says it is.
 ///
-/// Deliberate break: building the examples from `self.keymap` instead of
+/// Deliberate breaks: building the examples from `self.keymap` instead of
 /// the layout's own table -- every row then says `F1`, and the VS Code row
-/// does not say the key VS Code puts the files on.
+/// does not say the key VS Code puts the files on; and giving the VS Code
+/// row a line of its own again in `about_a_layout`.
 #[test]
 fn the_list_says_what_each_layout_would_give() {
     let scratch = support::Scratch::new("keymap-rows");
@@ -102,6 +104,13 @@ fn the_list_says_what_each_layout_would_give() {
     for (row, layout) in rows.iter().zip(Layout::ALL) {
         let keymap = Keymap::laid_out(layout);
         let detail = row.detail.as_deref().expect("what it is");
+        let written = obelus_config::key_layout(layout.name()).expect("a layout");
+        assert_eq!(row.label, written.name);
+        assert!(
+            detail.starts_with(written.about),
+            "{} says something else here than `ob keymap` does: {detail}",
+            row.label
+        );
         for command in [Command::FileOpen, Command::CommandPalette] {
             let key = keymap.chord_for(command).expect("bound").label();
             assert!(
