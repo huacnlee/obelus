@@ -80,11 +80,25 @@ pub fn run_at(path: &Path, program: &str, word: Option<&str>, said: &mut impl Wr
             anyhow::bail!("could not read {}: {why}", path.display())
         }
     };
-    let current = config.keys_from.as_str();
-    let name = obelus_config::key_layout(current).map_or(current, |layout| layout.name);
+    // What Obelus starts from, which a word in the file that names no
+    // layout is not: the file keeps the word, and the keys start from the
+    // default.
+    let written = config.keys_from.as_str();
+    let default = obelus_config::Config::default().keys_from;
+    let layout = obelus_config::key_layout(written)
+        .or_else(|| obelus_config::key_layout(&default))
+        .context("the default names no layout")?;
+    let current = layout.word;
     match word {
-        Some(_) => writeln!(said, "Keys start from {name} now")?,
-        None => writeln!(said, "Keys start from {name}")?,
+        Some(_) => writeln!(said, "Keys start from {} now", layout.name)?,
+        None => writeln!(said, "Keys start from {}", layout.name)?,
+    }
+    if written != current {
+        writeln!(
+            said,
+            "Nothing answers to `{written}` in {}, so they start from the default",
+            path.display()
+        )?;
     }
     // A reader's own keys are laid over whichever it is, so a switch keeps
     // them -- and a reader who expected the layout's key on a command they
@@ -156,6 +170,27 @@ mod tests {
         assert!(said.contains("\n  obelus    Obelus: "), "{said}");
         assert!(said.contains("\n  textmate  TextMate: "), "{said}");
         assert!(said.contains("obg keymap set <layout>"), "{said}");
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    /// A word in the file that names no layout is not what the keys start
+    /// from: the default is, and the word is said to be nothing.
+    ///
+    /// Broken deliberately by naming the layout after the file's word
+    /// again: it said `Keys start from mnemnic` and marked no row.
+    #[test]
+    fn a_word_that_names_no_layout_is_said_and_the_default_is_marked() {
+        let directory = scratch("misspelled");
+        let file = directory.join("config.toml");
+        std::fs::create_dir_all(&directory).expect("a directory");
+        std::fs::write(&file, "keys_from = \"mnemnic\"\n").expect("the file");
+
+        let mut said = Vec::new();
+        run_at(&file, "ob", None, &mut said).expect("asking");
+        let said = String::from_utf8(said).expect("words");
+        assert!(said.starts_with("Keys start from Obelus\n"), "{said}");
+        assert!(said.contains("Nothing answers to `mnemnic`"), "{said}");
+        assert!(said.contains("\n* obelus "), "{said}");
         let _ = std::fs::remove_dir_all(&directory);
     }
 
