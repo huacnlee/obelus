@@ -987,14 +987,15 @@ mod tests {
     /// because which terminal is theirs to know; a default cannot know it.
     /// So a shipped key has at most one modifier -- shift only on `Insert`,
     /// where it is the desktop's paste -- a function key is bare, control
-    /// is never on one of the six letters the wire cannot tell from another
-    /// key, and control with a capital is only the editors' layouts', each
-    /// with an alt chord beside it (`every_shifted_chord_has_one_every_
-    /// terminal_can_send`).
+    /// is never on one of the seven keys the wire cannot tell from another
+    /// (`i`, `m`, `j`, `h`, `[`, space and `2`), and shift on a letter --
+    /// under control or under alt, where it is folded into the capital --
+    /// is only the editors' layouts', each control one with an alt chord
+    /// beside it (`every_shifted_chord_has_one_every_terminal_can_send`).
     ///
     /// Broken deliberately by giving redo `shift+f5` in vscode.json, and
-    /// apart by giving it `ctrl+i`: each failed here and passed
-    /// `why_not`.
+    /// apart by giving it `ctrl+i`, and apart by giving it `alt+shift+x` in
+    /// obelus.json: each failed here and passed `why_not`.
     #[test]
     fn what_obelus_ships_keeps_to_the_families() {
         for layout in Layout::ALL {
@@ -1032,13 +1033,18 @@ mod tests {
                         "{}: the wire sends another key for it",
                         name()
                     );
-                    if character.is_ascii_uppercase() {
-                        assert!(
-                            matches!(layout, Layout::VsCode | Layout::TextMate),
-                            "{}: control with a capital, outside another editor's layout",
-                            name()
-                        );
-                    }
+                }
+                // Shift on a letter names no command of Obelus's own: a
+                // capital is only another editor's chord, borrowed.
+                if let KeyCode::Char(character) = code
+                    && character.is_ascii_uppercase()
+                    && !modifiers.is_empty()
+                {
+                    assert!(
+                        matches!(layout, Layout::VsCode | Layout::TextMate),
+                        "{}: shift on a letter, outside another editor's layout",
+                        name()
+                    );
                 }
             }
         }

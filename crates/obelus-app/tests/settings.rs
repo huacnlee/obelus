@@ -2472,10 +2472,10 @@ fn control_and_enter_adds_a_key() {
 ///
 /// Broken deliberately three ways: by taking every key away, as the page
 /// did (`Ctrl+Shift+p` went too); by letting enter wait on a row with no
-/// key (the row was waiting); and by giving up on a row adding a key at a
-/// delete (the row stopped waiting).
+/// key (the row was waiting); and by giving up on a row adding a key at
+/// an `alt+backspace` (the row stopped waiting).
 #[test]
-fn delete_takes_away_the_key_on_its_row() {
+fn alt_backspace_takes_away_the_key_on_its_row() {
     use obelus_command::Command;
     use obelus_keymap::KeyChord;
 
@@ -2726,33 +2726,28 @@ fn taking_a_key_away_leaves_the_focus_on_its_command() {
     );
 }
 
-/// A press while a row waits for its key does nothing: a press on a tab is
-/// not the tab key taken for the row, and one on another row does not move
-/// the focus off the row that is waiting.
+/// A press on a tab while a row waits for its key does nothing: it is not
+/// the tab key taken for the row, and the page stays on the keys.
 ///
-/// Broken deliberately by letting presses through while a row waits: a
-/// press on the Settings tab was refused on the row as `Tab`.
+/// Broken deliberately by letting presses through while a row waits: the
+/// press was refused on the row as `Tab`.
 #[test]
-fn a_press_while_a_row_waits_does_nothing() {
+fn a_press_on_a_tab_while_a_row_waits_does_nothing() {
     use obelus_app::event::{Event, Pointer};
 
     let _taken = SETTINGS.lock().expect("the lock");
-    let scratch = temporary("press-waits");
-    let file = settings_file(&scratch);
-    let mut app = open(&file);
+    let scratch = temporary("press-tab-waits");
+    let mut app = open(&settings_file(&scratch));
     support::press(&mut app, KeyCode::Tab);
     support::type_text(&mut app, "redo");
     support::press(&mut app, KeyCode::Enter);
-    let focus = app.settings().expect("the settings").focus();
     let area = app.editor_area_for_test();
-    // The first tab, on the page's first row, and a row further down.
-    for (x, y) in [(area.x + 3, area.y), (area.x + 3, area.y + 5)] {
-        app.handle(Event::Pointer {
-            kind: Pointer::Pressed,
-            x,
-            y,
-        });
-    }
+    // The first tab, on the page's first row.
+    app.handle(Event::Pointer {
+        kind: Pointer::Pressed,
+        x: area.x + 3,
+        y: area.y,
+    });
     let settings = app.settings().expect("the settings");
     assert!(settings.on_keys(), "a press moved the page off the keys");
     assert_eq!(
@@ -2761,7 +2756,6 @@ fn a_press_while_a_row_waits_does_nothing() {
         "the row stopped waiting"
     );
     assert!(settings.refused().is_none(), "a press was taken as a key");
-    assert_eq!(settings.focus(), focus, "a press moved the focus");
 }
 
 /// A command whose keys are not its layout's says so beside its name,

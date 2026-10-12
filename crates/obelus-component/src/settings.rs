@@ -70,8 +70,8 @@ pub enum SettingsOutcome {
     /// A setting should stop being the project's, and go back to being
     /// whatever the reader has.
     ///
-    /// Only from the project's page, where `delete` means what it means on the
-    /// keys page: take this one out.
+    /// Only from the project's page, where `delete` means take this one
+    /// out.
     Unset(&'static str),
     /// An agent should be installed.
     Install(String),
@@ -1562,8 +1562,9 @@ impl Settings {
         // One more key for the command the reader is on, whichever of its
         // rows: `ctrl+enter`, and only that, so enter always changes a key
         // and control always adds one. A terminal without the keyboard
-        // protocol sends it as enter, and there a second key is written in
-        // the file.
+        // protocol sends it as enter, and there a key is added in the
+        // file -- a command's first as well, enter having nothing to change
+        // on a row with no key.
         let adding = key.code == KeyCode::Enter && key.modifiers == KeyModifiers::CONTROL;
         if adding && self.on_keys() {
             if let Some(KeyRow::Key { command, slot }) = self.key_rows().get(self.window.focus()) {
@@ -1764,8 +1765,9 @@ impl Settings {
                 }
             }
             // On the keys page, enter on a key is the reader saying "the
-            // next key I press goes here instead", with `delete` to take it
-            // away. On a command with no key there is nothing to change, and
+            // next key I press goes here instead", with `alt+backspace` to
+            // take it away. On a command with no key there is nothing to
+            // change, and
             // enter does nothing: a key is added with `ctrl+enter`, there as
             // on every row.
             KeyCode::Enter if bare && self.on_keys() => match keys.get(self.window.focus()) {

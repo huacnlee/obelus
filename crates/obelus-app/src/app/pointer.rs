@@ -453,9 +453,8 @@ impl App {
     /// it.
     fn press_in_settings(&mut self, x: u16, y: u16, twice: bool) {
         // A row waiting for its key takes the next key and nothing else: a
-        // press turned into tab or enter would be taken as the key, and one
-        // that moved the focus would leave the row waiting off-screen of
-        // where the reader is. Escape is the way out of the wait.
+        // press on a tab is turned into the tab key, and would be taken as
+        // the key for the row. Escape is the way out of the wait.
         if self
             .settings
             .as_ref()
