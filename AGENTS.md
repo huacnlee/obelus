@@ -594,8 +594,8 @@ crates/
                       newest first, a conversation belongs to the agent that
                       had it and to the checkout it was had in, and a watch
                       is settled from what is open
-                      (app/chat/conversations); where Obelus has been is
-                      remembered however the project was named, and only a
+                      (app/chat/conversations); a project is remembered
+                      when it is chosen on the page that asks, and only a
                       worktree, and what a start with nothing to go on asks
                       (app/project/projects); what was open is kept by the tree,
                       and the last window to change it wins (app/project/reopening);
@@ -712,8 +712,9 @@ crates/
                       `shift+enter` and `alt+enter` (composer); a list the
                       reader builds is not a picker (names); a screen that
                       cannot be left, two boxes that never share their
-                      text, why no numbers, and what could finish a path
-                      is an ordinary list somewhere else (chooser)
+                      text, why no numbers, a walk down the tree stops at
+                      a project, and what could finish a path is an
+                      ordinary list somewhere else (chooser)
   obelus-reading/   what a file is when it is not code: markdown, a log
                     · a log's format is decided by its lines, not its name;
                       what Obelus writes, Obelus has to be able to read (log)
