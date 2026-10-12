@@ -50,7 +50,7 @@ mod window;
 use std::path::PathBuf;
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use obelus_app::startup;
 
 /// A code editor in a window, with the agent built in.
@@ -61,7 +61,7 @@ use obelus_app::startup;
 struct Arguments {
     /// Something to do instead of opening anything.
     #[command(subcommand)]
-    command: Option<Management>,
+    command: Option<startup::keymap::Management>,
 
     /// What to open: a file, or a directory to work in.
     ///
@@ -75,31 +75,6 @@ struct Arguments {
     connect_remote: bool,
 }
 
-/// What `obg` can do without opening anything: what `ob` can, so either
-/// name answers the same question.
-///
-/// A word that is also a path: `obg keymap` is this, and a file called
-/// `keymap` is `obg ./keymap` or `obg -- keymap`.
-#[derive(Subcommand)]
-enum Management {
-    /// Say which keys Obelus starts from, or choose them.
-    Keymap {
-        #[command(subcommand)]
-        choose: Option<Keymap>,
-    },
-}
-
-/// What `keymap` can be asked to do besides saying.
-#[derive(Subcommand)]
-enum Keymap {
-    /// Choose the keys every Obelus starts from, keeping your own.
-    Set {
-        /// The layout.
-        #[arg(value_parser = clap::builder::PossibleValuesParser::new(startup::keymap::PRESETS.iter().copied()))]
-        layout: String,
-    },
-}
-
 fn main() -> Result<()> {
     // Before the arguments, because `--help` is said on it.
     #[cfg(windows)]
@@ -107,11 +82,8 @@ fn main() -> Result<()> {
     let arguments = Arguments::parse();
     // Before the log and the window: it opens nothing, so it has nothing to
     // say in either, and what it says goes to the console taken above.
-    if let Some(Management::Keymap { choose }) = &arguments.command {
-        let layout = choose
-            .as_ref()
-            .map(|Keymap::Set { layout }| layout.as_str());
-        return startup::keymap::run("obg", layout);
+    if let Some(command) = &arguments.command {
+        return command.run("obg");
     }
     // Before anything else starts a thread, because changing the
     // environment while another thread reads it is undefined. And before
@@ -266,15 +238,15 @@ mod tests {
     /// Broken deliberately by taking the value parser off `layout`:
     /// `lazyvim` was taken.
     #[test]
-    fn keys_is_a_subcommand_here_too() {
+    fn keymap_is_a_subcommand_here_too() {
         use clap::Parser as _;
         let parse = |words: &[&str]| {
             super::Arguments::try_parse_from(std::iter::once("obg").chain(words.iter().copied()))
         };
         assert!(matches!(
             parse(&["keymap", "set", "textmate"]).expect("choosing").command,
-            Some(super::Management::Keymap {
-                choose: Some(super::Keymap::Set { ref layout }),
+            Some(obelus_app::startup::keymap::Management::Keymap {
+                choose: Some(obelus_app::startup::keymap::Choose::Set { ref layout }),
             }) if layout == "textmate"
         ));
         assert!(parse(&["keymap", "set", "lazyvim"]).is_err());

@@ -12,6 +12,48 @@ use anyhow::{Context as _, Result};
 /// The words `keymap set` takes, which are the settings file's own.
 pub const PRESETS: &[&str] = obelus_config::KEY_LAYOUTS;
 
+/// What `ob` and `obg` can do without opening anything.
+///
+/// One definition for both binaries, so the two names cannot come to take
+/// different words. A word that is also a path: `ob keymap` is this, and a
+/// file called `keymap` is `ob ./keymap` or `ob -- keymap`, which is how
+/// every program with subcommands tells the two apart.
+#[derive(clap::Subcommand)]
+pub enum Management {
+    /// Say which keys Obelus starts from, or choose them.
+    Keymap {
+        /// Something to do besides saying.
+        #[command(subcommand)]
+        choose: Option<Choose>,
+    },
+}
+
+/// What `keymap` can be asked to do besides saying.
+#[derive(clap::Subcommand)]
+pub enum Choose {
+    /// Choose the keys every Obelus starts from, keeping your own.
+    Set {
+        /// The layout.
+        #[arg(value_parser = clap::builder::PossibleValuesParser::new(PRESETS.iter().copied()))]
+        layout: String,
+    },
+}
+
+impl Management {
+    /// Does it, saying what to type next in the name of `program`, which
+    /// is the one the reader typed.
+    pub fn run(&self, program: &str) -> Result<()> {
+        match self {
+            Self::Keymap { choose } => run(
+                program,
+                choose
+                    .as_ref()
+                    .map(|Choose::Set { layout }| layout.as_str()),
+            ),
+        }
+    }
+}
+
 /// Says which layout the reader's keys start from, or chooses one, in the
 /// reader's own settings.
 ///
@@ -75,7 +117,7 @@ mod tests {
 
     fn scratch(name: &str) -> PathBuf {
         let directory =
-            std::env::temp_dir().join(format!("obelus-keys-{name}-{}", std::process::id()));
+            std::env::temp_dir().join(format!("obelus-keymap-{name}-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&directory);
         directory
     }

@@ -8,7 +8,7 @@
 use std::{path::PathBuf, process::ExitCode};
 
 use anyhow::Result;
-use clap::{Parser, Subcommand};
+use clap::Parser;
 use obelus_app::{app, event, startup};
 
 /// A code editor in a terminal, with the agent built in.
@@ -20,7 +20,7 @@ use obelus_app::{app, event, startup};
 struct Arguments {
     /// Something to do instead of opening anything.
     #[command(subcommand)]
-    command: Option<Management>,
+    command: Option<startup::keymap::Management>,
 
     /// What to open: a file, or a directory to work in.
     ///
@@ -43,40 +43,12 @@ struct Arguments {
     headless: bool,
 }
 
-/// What `ob` can do without opening anything.
-///
-/// A word that is also a path: `ob keymap` is this, and a file called `keymap`
-/// is `ob ./keymap` or `ob -- keymap`, which is how every program with
-/// subcommands tells the two apart.
-#[derive(Subcommand)]
-enum Management {
-    /// Say which keys Obelus starts from, or choose them.
-    Keymap {
-        #[command(subcommand)]
-        choose: Option<Keymap>,
-    },
-}
-
-/// What `keymap` can be asked to do besides saying.
-#[derive(Subcommand)]
-enum Keymap {
-    /// Choose the keys every Obelus starts from, keeping your own.
-    Set {
-        /// The layout.
-        #[arg(value_parser = clap::builder::PossibleValuesParser::new(startup::keymap::PRESETS.iter().copied()))]
-        layout: String,
-    },
-}
-
 fn main() -> Result<ExitCode> {
     let arguments = Arguments::parse();
     // Before the log and everything else: it opens nothing, so it has
     // nothing to say there.
-    if let Some(Management::Keymap { choose }) = &arguments.command {
-        let layout = choose
-            .as_ref()
-            .map(|Keymap::Set { layout }| layout.as_str());
-        startup::keymap::run("ob", layout)?;
+    if let Some(command) = &arguments.command {
+        command.run("ob")?;
         return Ok(ExitCode::SUCCESS);
     }
 
@@ -298,7 +270,7 @@ mod tests {
     /// became three paths), and by taking the value parser off `layout`
     /// (`lazyvim` was taken, to be refused only once the file was read).
     #[test]
-    fn keys_is_a_subcommand_and_a_path_called_keys_still_opens() {
+    fn keymap_is_a_subcommand_and_a_path_called_keymap_still_opens() {
         use clap::Parser as _;
         let parse = |words: &[&str]| {
             super::Arguments::try_parse_from(std::iter::once("ob").chain(words.iter().copied()))
@@ -307,8 +279,8 @@ mod tests {
         assert!(chosen.paths.is_empty());
         assert!(matches!(
             chosen.command,
-            Some(super::Management::Keymap {
-                choose: Some(super::Keymap::Set { ref layout }),
+            Some(obelus_app::startup::keymap::Management::Keymap {
+                choose: Some(obelus_app::startup::keymap::Choose::Set { ref layout }),
             }) if layout == "vscode"
         ));
         for word in obelus_app::startup::keymap::PRESETS {
@@ -317,7 +289,7 @@ mod tests {
         let asked = parse(&["keymap"]).expect("asking");
         assert!(matches!(
             asked.command,
-            Some(super::Management::Keymap { choose: None })
+            Some(obelus_app::startup::keymap::Management::Keymap { choose: None })
         ));
         assert!(parse(&["keymap", "set", "lazyvim"]).is_err());
         assert!(parse(&["keymap", "set"]).is_err());
