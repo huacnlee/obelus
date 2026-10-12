@@ -883,20 +883,24 @@ fn command_is_control_in_the_editors_layouts_and_super_never_is() {
     }
 }
 
-/// Deliberately broken by removing the KeymapSelect binding from the
-/// constructor.
+/// Which keys these are is chosen once, like the theme, and so is reached
+/// from the palette and has no key of its own in any layout: a chord for
+/// every command is how a key table stops being memorable.
+///
+/// Broken deliberately by putting `choose-keymap` back on `alt+k` in
+/// `obelus.json`, which every layout inherits.
 #[test]
-fn every_preset_has_the_same_keymap_chooser_key() {
+fn choosing_the_keys_has_no_key_of_its_own() {
     for layout in Layout::ALL {
         let keymap = Keymap::laid_out(layout);
-        assert_eq!(
-            keymap.lookup(
-                &press(KeyCode::Char('k'), KeyModifiers::ALT),
-                Context::Normal
-            ),
-            Some(Command::KeymapSelect),
-            "{layout:?}"
-        );
+        for command in [Command::KeymapSelect, Command::ThemeSelect] {
+            assert_eq!(
+                keymap.chord_for(command),
+                None,
+                "{layout:?} binds {}",
+                command.name()
+            );
+        }
     }
 }
 

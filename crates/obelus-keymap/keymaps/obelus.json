@@ -283,12 +283,6 @@
       // because a character was typed, and moving the caret into
       // a call that is already written types nothing.
       { "command": "show-signature", "context": "normal", "key": "alt+s" },
-      // `alt+k` for keymap, and the one alt key not about the
-      // caret: it is the way back for a reader whose layout has
-      // moved every other key, so it is on a chord no layout
-      // moves -- control and the function keys are what they
-      // rearrange, and alt arrives on every terminal.
-      { "command": "choose-keymap", "context": "normal", "key": "alt+k" },
       // `alt+e` for error: what the server says is wrong with
       // this file, on the letter like the rest of this family.
       { "command": "show-problems", "context": "normal", "key": "alt+e" },

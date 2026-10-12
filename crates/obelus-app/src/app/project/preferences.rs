@@ -666,8 +666,8 @@ impl App {
     ///
     /// The setting's own list -- the one the settings page opens, rows,
     /// filtering and all -- with a question over it, because from the
-    /// palette or the welcome screen there is no settings row above it to
-    /// say what is being chosen. Choosing one writes it at once, as a row
+    /// palette or a first start there is no settings row above it to say
+    /// what is being chosen. Choosing one writes it at once, as a row
     /// of the settings page does.
     pub fn open_keymap_picker(&mut self) {
         let mut picker = self.choices(

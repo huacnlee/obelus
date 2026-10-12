@@ -1,5 +1,5 @@
-//! Choosing which keys Obelus starts from: from the palette, from the
-//! welcome screen, and once on a first start.
+//! Choosing which keys Obelus starts from: from the palette, and once on a
+//! first start.
 //!
 //! Every settings file here is a temporary one, through
 //! `config_file_for_test`: a test that let Obelus find its own would be
@@ -118,13 +118,11 @@ fn the_list_says_what_each_layout_would_give() {
     }
 }
 
-/// Choosing a layout from `alt+k` writes it, moves the keys at once, and
-/// moves what the welcome screen says they are.
+/// Choosing a layout from the palette writes it, moves the keys at once,
+/// and moves what the welcome screen says they are.
 ///
-/// Deliberate breaks: taking the `alt+k` binding out of `Keymap::new` --
-/// the list never opens; taking `KeymapSelect` out of the welcome screen's
-/// list -- the screen does not offer it; and dispatching `KeymapSelect` to
-/// `open_theme_picker` -- the list asks nothing, and no layout is written.
+/// Deliberate break: dispatching `KeymapSelect` to `open_theme_picker` --
+/// the list asks nothing, and no layout is written.
 #[test]
 fn choosing_a_layout_moves_the_keys_and_the_welcome_screen() {
     let scratch = support::Scratch::new("keymap-choose");
@@ -134,14 +132,16 @@ fn choosing_a_layout_moves_the_keys_and_the_welcome_screen() {
     let obelus = Keymap::laid_out(Layout::Obelus);
     let vscode = Keymap::laid_out(Layout::VsCode);
     let opens = |keymap: &Keymap| keymap.chord_for(Command::FileOpen).expect("bound").label();
-    assert!(
-        support::text_block(&before).contains("Pick a keymap"),
-        "the welcome screen does not offer it:\n{before}"
-    );
     assert!(support::text_block(&before).contains(&opens(&obelus)));
 
-    support::press_alt(&mut app, 'k');
-    assert_eq!(asked(&app).as_deref(), Some(ASKED), "alt+k opened nothing");
+    support::press_control(&mut app, 'p');
+    support::type_text(&mut app, "choose-keymap");
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(
+        asked(&app).as_deref(),
+        Some(ASKED),
+        "the palette opened nothing"
+    );
     pick(&mut app, "VS Code");
 
     assert!(app.picker().is_none(), "the list stayed open");
@@ -340,35 +340,6 @@ fn a_file_or_the_file_list_is_asked_over() {
         asked(&app).as_deref(),
         Some(ASKED),
         "the files went over it"
-    );
-}
-
-/// On a screen too small for the plate the welcome screen is the keys
-/// alone, and the keymap is among them; and the question fits.
-///
-/// Deliberate break: taking `KeymapSelect` out of the welcome screen's
-/// list.
-#[test]
-fn a_narrow_screen_still_offers_it() {
-    let scratch = support::Scratch::new("keymap-narrow");
-    let mut app = on(&scratch, Some("wrap = true\n"));
-    let dump = support::render(&mut app, 40, 14);
-    assert!(
-        support::text_block(&dump).contains("Pick a keymap"),
-        "the narrow welcome does not offer it:\n{dump}"
-    );
-    let key = app
-        .keymap()
-        .chord_for(Command::KeymapSelect)
-        .expect("bound")
-        .label();
-    assert!(support::text_block(&dump).contains(&key), "{dump}");
-
-    support::press_alt(&mut app, 'k');
-    let dump = support::render(&mut app, 40, 14);
-    assert!(
-        support::text_block(&dump).contains("Obelus"),
-        "the list does not fit:\n{dump}"
     );
 }
 

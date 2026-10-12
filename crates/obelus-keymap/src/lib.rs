@@ -546,8 +546,8 @@ impl Keymap {
     ///
     /// Everything else is reached from the palette. A chord for every
     /// command is how a key table stops being memorable, and most of what
-    /// is left -- the theme, the log, restarting a server -- is done once
-    /// and not again.
+    /// is left -- the theme, which keys these are, the log, restarting a
+    /// server -- is done once and not again.
     #[must_use]
     pub fn new() -> Self {
         Self::laid_out(Layout::Obelus)
