@@ -596,7 +596,8 @@ fn the_input_method_is_on_only_where_typing_goes() {
     open(&mut app, Layer::Settings);
     press(&mut app, KeyCode::Tab);
     support::type_text(&mut app, "choose-theme");
-    press(&mut app, KeyCode::Enter);
+    // It has no key, so one is added: `ctrl+enter`.
+    support::press_control_key(&mut app, KeyCode::Enter);
     assert!(
         app.settings()
             .is_some_and(|settings| settings.binding().is_some()),

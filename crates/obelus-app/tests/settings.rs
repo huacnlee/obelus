@@ -2109,10 +2109,11 @@ fn a_command_can_be_put_on_another_key() {
         support::text_block(&dump).contains("choose-theme"),
         "the keys page does not list the commands:\n{dump}"
     );
-    // It has no key at all, which is what makes it worth binding.
+    // It has no key at all, which is what makes it worth binding -- and
+    // adding one is `ctrl+enter`, there being nothing for enter to change.
     assert_eq!(app.keymap().chord_for(Command::ThemeSelect), None);
 
-    support::press(&mut app, KeyCode::Enter);
+    support::press_control_key(&mut app, KeyCode::Enter);
     let asking = support::render(&mut app, 66, 12);
     assert!(
         support::text_block(&asking).contains("Press a key"),
@@ -2163,7 +2164,8 @@ fn a_key_that_is_taken_says_so_on_the_row() {
     let mut app = open(&settings_file(&scratch));
     support::press(&mut app, KeyCode::Tab);
     support::type_text(&mut app, "choose-theme");
-    support::press(&mut app, KeyCode::Enter);
+    // It has no key, so one is added: `ctrl+enter`.
+    support::press_control_key(&mut app, KeyCode::Enter);
 
     // `ctrl+p` is the palette's, and it stays the palette's.
     support::press_control(&mut app, 'p');
@@ -2218,7 +2220,8 @@ fn a_key_that_could_never_fire_is_refused() {
     let mut app = open(&settings_file(&scratch));
     support::press(&mut app, KeyCode::Tab);
     support::type_text(&mut app, "choose-theme");
-    support::press(&mut app, KeyCode::Enter);
+    // It has no key, so one is added: `ctrl+enter`.
+    support::press_control_key(&mut app, KeyCode::Enter);
 
     for (code, modifiers, why) in [
         (KeyCode::Up, KeyModifiers::NONE, "editor"),
@@ -2410,9 +2413,10 @@ fn enter_on_a_key_changes_it() {
 /// it has, and the foot says so; enter changes a key and control adds one,
 /// so `alt+enter` is not a second way to add.
 ///
-/// Broken deliberately twice: by taking `alt+enter` as adding too (the row
-/// waited after it), and by leaving `Ctrl+Enter` off a command with no key
-/// (the foot did not offer it there).
+/// Broken deliberately three ways: by taking `alt+enter` as adding too (the
+/// row waited after it), by leaving `Ctrl+Enter` off a command with no key
+/// (the foot did not offer it there), and by offering enter there anyway
+/// (the foot said `Change` over nothing to change).
 #[test]
 fn control_and_enter_adds_a_key() {
     use crossterm::event::{KeyEvent, KeyModifiers};
@@ -2456,16 +2460,19 @@ fn control_and_enter_adds_a_key() {
     let dump = support::render(&mut app, 80, 16);
     let foot = support::text_block(&dump);
     assert!(foot.contains("Ctrl+Enter"), "{foot}");
-    assert!(foot.contains("Change"), "{foot}");
+    // And not enter, which has nothing to change there.
+    assert!(!foot.contains("Change"), "{foot}");
 }
 
 /// Delete takes away the key on the row the reader is on, and only that
-/// one; on a command with no key there is nothing to take, and the row
-/// goes on waiting.
+/// one; on a command with no key, enter does nothing -- there is nothing
+/// to change -- and a row waiting to add a key has nothing to take away,
+/// and goes on waiting.
 ///
-/// Broken deliberately twice: by taking every key away, as the page did
-/// (`Ctrl+Shift+p` went too); and by giving up on a row with no key (the
-/// row stopped waiting).
+/// Broken deliberately three ways: by taking every key away, as the page
+/// did (`Ctrl+Shift+p` went too); by letting enter wait on a row with no
+/// key (the row was waiting); and by giving up on a row adding a key at a
+/// delete (the row stopped waiting).
 #[test]
 fn delete_takes_away_the_key_on_its_row() {
     use obelus_command::Command;
@@ -2509,6 +2516,14 @@ fn delete_takes_away_the_key_on_its_row() {
     support::press(&mut app, KeyCode::Tab);
     support::type_text(&mut app, "new-file");
     support::press(&mut app, KeyCode::Enter);
+    assert!(
+        app.settings()
+            .is_some_and(|settings| settings.binding().is_none()),
+        "enter waited on a command with no key to change"
+    );
+    app.handle(obelus_app::event::Event::Key(
+        crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::CONTROL),
+    ));
     support::press(&mut app, KeyCode::Delete);
     assert!(
         app.settings()
@@ -2620,7 +2635,7 @@ fn a_key_given_back_is_in_every_context_the_command_was() {
     support::press(&mut app, KeyCode::Enter);
     support::press(&mut app, KeyCode::Delete);
     assert!(app.keymap().chords_for(Command::CommandPalette).is_empty());
-    support::press(&mut app, KeyCode::Enter);
+    support::press_control_key(&mut app, KeyCode::Enter);
     support::press_alt(&mut app, 'z');
     let alt_z = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::ALT);
     for context in [Context::Normal, Context::Terminal] {

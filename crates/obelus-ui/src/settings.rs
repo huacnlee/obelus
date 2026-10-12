@@ -233,6 +233,13 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
         _ if adding => "Add",
         _ => "Change",
     };
+    // On a command with no key there is nothing for enter to change, so
+    // the foot does not offer it there.
+    let nothing_to_change = settings.on_keys()
+        && matches!(
+            settings.keys().get(settings.focus()),
+            Some((KeyRow::Key { .. }, None))
+        );
     // And one more key for the command the reader is on, which is always
     // control: enter changes a key, and control adds one.
     let adds = settings.on_keys()
@@ -270,7 +277,7 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
             // Asked of whichever page is showing rather than of the
             // settings: the keys page has rows too, and enter does the same
             // sort of thing to one of them.
-            .when(settings.row_count(offering) > 0 && !pairing_waits),
+            .when(settings.row_count(offering) > 0 && !pairing_waits && !nothing_to_change),
         Hint::new(
             obelus_keymap::KeyChord::new(KeyCode::Enter, KeyModifiers::CONTROL),
             "Add a key",

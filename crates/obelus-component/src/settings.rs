@@ -1670,18 +1670,21 @@ impl Settings {
             }
             // On the keys page, enter on a key is the reader saying "the
             // next key I press goes here instead", with `delete` to take it
-            // away -- and on a command with no key, that it goes here.
+            // away. On a command with no key there is nothing to change, and
+            // enter does nothing: a key is added with `ctrl+enter`, there as
+            // on every row.
             KeyCode::Enter if bare && self.on_keys() => match keys.get(self.window.focus()) {
                 Some((KeyRow::Setting(setting), _)) => Self::change(setting, config),
-                Some((KeyRow::Key { command, slot }, chord)) => {
+                Some((KeyRow::Key { command, slot }, Some(_))) => {
                     self.binding = Some(Binding {
                         command: *command,
                         slot: *slot,
-                        replacing: chord.is_some(),
+                        replacing: true,
                     });
                     self.refused = None;
                     SettingsOutcome::Consumed
                 }
+                Some((KeyRow::Key { .. }, None)) => SettingsOutcome::Consumed,
                 None => SettingsOutcome::Consumed,
             },
             // A row of the remote page asks for what it is about, and the
