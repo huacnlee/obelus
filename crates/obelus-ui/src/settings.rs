@@ -231,17 +231,14 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
             RemoteRow::Platform | RemoteRow::Field(_) | RemoteRow::People => "Change",
         },
         _ if adding => "Add",
-        _ => match settings.keys().get(settings.focus()) {
-            Some((KeyRow::Key { .. }, None)) => "Add a key",
-            Some((KeyRow::Key { .. }, Some(_)) | (KeyRow::Setting(_), _)) | None => "Change",
-        },
+        _ => "Change",
     };
-    // And one more key for a command that has one, on control or alt: see
-    // `Settings::adds_with`.
+    // And one more key for the command the reader is on, which is always
+    // control: enter changes a key, and control adds one.
     let adds = settings.on_keys()
         && matches!(
             settings.keys().get(settings.focus()),
-            Some((KeyRow::Key { .. }, Some(_)))
+            Some((KeyRow::Key { .. }, _))
         );
     // Pairing does nothing where the chat could not be reached, and a key
     // that does nothing is not offered at the foot.
@@ -275,7 +272,7 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
             // sort of thing to one of them.
             .when(settings.row_count(offering) > 0 && !pairing_waits),
         Hint::new(
-            obelus_keymap::KeyChord::new(KeyCode::Enter, settings.adds_with()),
+            obelus_keymap::KeyChord::new(KeyCode::Enter, KeyModifiers::CONTROL),
             "Add a key",
         )
         .when(adds),

@@ -2406,20 +2406,17 @@ fn enter_on_a_key_changes_it() {
     );
 }
 
-/// `ctrl+enter` or `alt+enter` on a command's row puts it on one more key,
-/// after the ones it has; and the foot names the one that arrives here.
+/// `ctrl+enter` on a command's row puts it on one more key, after the ones
+/// it has, and the foot says so; enter changes a key and control adds one,
+/// so `alt+enter` is not a second way to add.
 ///
-/// Both, because a terminal without the keyboard protocol sends
-/// `ctrl+enter` as enter, which would change the key rather than add one.
-///
-/// Broken deliberately twice: by taking `alt+enter` out of what adds (the
-/// second press changed nothing), and by naming `ctrl+enter` at the foot
-/// whatever arrives (the foot said `Ctrl+Enter` where it cannot).
+/// Broken deliberately twice: by taking `alt+enter` as adding too (the row
+/// waited after it), and by leaving `Ctrl+Enter` off a command with no key
+/// (the foot did not offer it there).
 #[test]
-fn control_or_alt_and_enter_add_a_key() {
+fn control_and_enter_adds_a_key() {
     use crossterm::event::{KeyEvent, KeyModifiers};
     use obelus_app::event::Event;
-    use obelus_command::Command;
     use obelus_keymap::KeyChord;
 
     let _taken = SETTINGS.lock().expect("the lock");
@@ -2433,35 +2430,33 @@ fn control_or_alt_and_enter_add_a_key() {
     };
     enter_with(&mut app, KeyModifiers::CONTROL);
     support::press_alt(&mut app, 'z');
-    enter_with(&mut app, KeyModifiers::ALT);
-    support::press_alt(&mut app, 'x');
-
     let chord = |key: &str| KeyChord::parse(key).expect("a key");
     assert_eq!(
         app.keymap().chords_for(Command::Redo),
-        [chord("ctrl+y"), chord("alt+z"), chord("alt+x")]
+        [chord("ctrl+y"), chord("alt+z")]
     );
     let written = std::fs::read_to_string(&file).expect("the file");
     assert!(
-        written.contains("redo = [\"Ctrl+y\", \"Alt+z\", \"Alt+x\"]"),
-        "the file does not say every key:\n{written}"
+        written.contains("redo = [\"Ctrl+y\", \"Alt+z\"]"),
+        "the file does not say both keys:\n{written}"
     );
 
-    let foot = |app: &mut App| {
-        let dump = support::render(app, 80, 16);
-        support::text_block(&dump).to_string()
-    };
-    assert!(foot(&mut app).contains("Ctrl+Enter"), "{}", foot(&mut app));
-    let mut app = App::new(vec![support::open_fixture("sample.rs")]);
-    app.config_file_for_test(file.clone());
-    app.ctrl_enter_arrives(false);
-    support::lay_out(&mut app, 66, 12);
-    dispatch::dispatch(&mut app, Command::ConfigOpen);
+    enter_with(&mut app, KeyModifiers::ALT);
+    assert!(
+        app.settings()
+            .is_some_and(|settings| settings.binding().is_none()),
+        "alt+enter added a key as well"
+    );
+
+    // And on a command with no key, where enter would put one too.
+    support::press(&mut app, KeyCode::Esc);
+    let mut app = open(&file);
     support::press(&mut app, KeyCode::Tab);
-    support::type_text(&mut app, "redo");
-    let said = foot(&mut app);
-    assert!(said.contains("Alt+Enter"), "{said}");
-    assert!(!said.contains("Ctrl+Enter"), "{said}");
+    support::type_text(&mut app, "new-file");
+    let dump = support::render(&mut app, 80, 16);
+    let foot = support::text_block(&dump);
+    assert!(foot.contains("Ctrl+Enter"), "{foot}");
+    assert!(foot.contains("Change"), "{foot}");
 }
 
 /// Delete takes away the key on the row the reader is on, and only that

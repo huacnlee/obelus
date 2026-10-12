@@ -333,7 +333,7 @@ open-file = "Ctrl+o"
 show-change = "Alt+g"
 run-command = ["Ctrl+Shift+p", "Alt+Shift+p"]   # on both
 quit = ""            # taken away</code></pre>
-      <p>On the settings page, the Keys tab lists every key a command is on, one to a row. <kbd>Enter</kbd> on a key waits for the one to put in its place, and <kbd>Delete</kbd> while it waits takes that key away; on a command with no key, <kbd>Enter</kbd> gives it one. <kbd>Ctrl+Enter</kbd> or <kbd>Alt+Enter</kbd> on any of a command's rows adds one more key (a terminal without the keyboard protocol sends <kbd>Ctrl+Enter</kbd> as <kbd>Enter</kbd>, so there it is <kbd>Alt+Enter</kbd>).</p>
+      <p>On the settings page, the Keys tab lists every key a command is on, one to a row. <kbd>Enter</kbd> changes a key: it waits for the one to put in its place, and <kbd>Delete</kbd> while it waits takes that key away. <kbd>Ctrl+Enter</kbd> on any of a command's rows adds one more key. A terminal without the keyboard protocol sends <kbd>Ctrl+Enter</kbd> as <kbd>Enter</kbd>; there, write a second key in the file.</p>
 
       <h3>Themes</h3>
       <p><code>dark</code>, <code>light</code> and a shelf of well-known palettes are built in; <code>choose-theme</code> switches between themes instantly. Any <code>.toml</code> file in <code>~/.config/obelus/themes/</code> is also a theme, named after the file (<code>mine.toml</code> → <code>mine</code>), and so is a directory there holding a <code>theme.toml</code>, named after the directory — which is how a theme keeps a picture beside its colours. A theme of yours by a built-in name comes first. Every colour is optional: anything you leave out comes from the built-in theme yours is based on, so an old theme file keeps working when Obelus adds a colour.</p>

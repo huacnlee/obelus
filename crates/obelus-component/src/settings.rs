@@ -601,10 +601,6 @@ pub struct Settings {
     /// until the reader says "the next thing I press is this command's",
     /// and from then until they press it every key belongs to that row.
     binding: Option<Binding>,
-    /// Whether `ctrl+enter` arrives as itself, which decides which of the
-    /// two keys that add a key the foot names: a terminal without the
-    /// keyboard protocol sends it as enter, and there it is `alt+enter`.
-    ctrl_enter: bool,
     /// The keys each command is on, as the table was when it was last
     /// heard ([`Settings::hear_keymap`]).
     ///
@@ -653,7 +649,6 @@ impl Settings {
         Self {
             query: Field::new(),
             binding: None,
-            ctrl_enter: true,
             held: Vec::new(),
             refused: None,
             whose: Whose::Reader,
@@ -669,7 +664,6 @@ impl Settings {
         Self {
             query: Field::new(),
             binding: None,
-            ctrl_enter: true,
             held: Vec::new(),
             refused: None,
             whose: Whose::Project,
@@ -1024,21 +1018,6 @@ impl Settings {
     #[must_use]
     pub const fn binding_at(&self) -> Option<Binding> {
         self.binding
-    }
-
-    /// Says whether `ctrl+enter` arrives as itself here.
-    pub const fn ctrl_enter_arrives(&mut self, arrives: bool) {
-        self.ctrl_enter = arrives;
-    }
-
-    /// The key the foot names for adding one: `ctrl+enter` where it
-    /// arrives, and `alt+enter` where it would arrive as enter. Both add.
-    #[must_use]
-    pub const fn adds_with(&self) -> KeyModifiers {
-        match self.ctrl_enter {
-            true => KeyModifiers::CONTROL,
-            false => KeyModifiers::ALT,
-        }
     }
 
     /// The key that would not do, and why.
@@ -1528,12 +1507,11 @@ impl Settings {
         }
 
         // One more key for the command the reader is on, whichever of its
-        // rows. `ctrl+enter` and `alt+enter` both, every time: the first is
-        // plain enter on a terminal without the keyboard protocol, which
-        // would be changing the key rather than adding one, and alt is the
-        // escape prefix and arrives everywhere.
-        let adding = key.code == KeyCode::Enter
-            && (key.modifiers == KeyModifiers::CONTROL || key.modifiers == KeyModifiers::ALT);
+        // rows: `ctrl+enter`, and only that, so enter always changes a key
+        // and control always adds one. A terminal without the keyboard
+        // protocol sends it as enter, and there a second key is written in
+        // the file.
+        let adding = key.code == KeyCode::Enter && key.modifiers == KeyModifiers::CONTROL;
         if adding && self.on_keys() {
             if let Some(KeyRow::Key { command, slot }) = self.key_rows().get(self.window.focus()) {
                 self.binding = Some(Binding {

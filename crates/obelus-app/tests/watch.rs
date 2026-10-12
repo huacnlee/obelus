@@ -837,20 +837,17 @@ fn a_tree_that_has_gone(name: &str) -> (Scratch, obelus_app::app::App) {
 }
 
 /// What the front end can do outlives the project going: a terminal
-/// whose `ctrl+enter` arrives as enter is still offered the key that does.
+/// whose `ctrl+enter` arrives as enter is not offered it afterwards, in
+/// the box a message is written in.
 ///
 /// Broken deliberately by not keeping `ctrl_enter_arrives` in
-/// `let_go_of_the_project`: the keys page named `ctrl+enter` again.
+/// `let_go_of_the_project`: it was back to arriving.
 #[test]
 fn what_the_front_end_can_do_outlives_the_project() {
     let (_scratch, mut app) = a_tree_that_has_gone("tree-gone-keys");
     app.ctrl_enter_arrives(false);
     support::press(&mut app, crossterm::event::KeyCode::Enter);
-    obelus_app::app::dispatch::dispatch(&mut app, Command::ConfigOpen);
-    assert_eq!(
-        app.settings().expect("the settings").adds_with(),
-        crossterm::event::KeyModifiers::ALT
-    );
+    assert!(!app.ctrl_enter_does_arrive());
 }
 
 /// A tree that goes from under Obelus is said over the whole screen, on

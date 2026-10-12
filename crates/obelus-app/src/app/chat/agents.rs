@@ -336,6 +336,12 @@ impl App {
         self.ctrl_enter_arrives = arrives;
     }
 
+    /// And what it was told: whether `ctrl+enter` arrives as itself.
+    #[must_use]
+    pub const fn ctrl_enter_does_arrive(&self) -> bool {
+        self.ctrl_enter_arrives
+    }
+
     /// Says what is drawing Obelus, so that it can be told the settings it
     /// is the only one that can act on.
     ///
