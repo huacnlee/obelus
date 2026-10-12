@@ -107,7 +107,7 @@
         </tbody>
       </table>
       </div>
-      <p class="quiet small">字母上的 Shift 会明写出来：<kbd>Ctrl+Shift+p</kbd>。多数终端发不出字母上的 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>，只会发普通的 <kbd>Ctrl+p</kbd>，所以这些键旁边都另有一个每个终端都能发的 <kbd>Alt</kbd> 键。<code>obg</code> 收到的就是按下的键本身。在 Mac 上的 <code>obg</code> 里，每套方案的 <kbd>Ctrl</kbd> 都是 <kbd>Cmd</kbd>：本页写 <kbd>Ctrl+p</kbd> 的地方按 <kbd>Cmd+p</kbd>，屏幕上也写 <kbd>Cmd</kbd>。<kbd>Ctrl</kbd> 本身在那里照样能用；设置文件里仍写 <code>Ctrl</code>，因为终端里的 <code>ob</code> 读的是同一个文件，而终端会把 <kbd>Cmd</kbd> 留给自己。别的系统上 Super 键（Windows 键）从不当作 <kbd>Ctrl</kbd>，它是桌面的。</p>
+      <p class="quiet small">字母上的 Shift 会明写出来：<kbd>Ctrl+Shift+p</kbd>。多数终端发不出字母上的 <kbd>Ctrl</kbd>+<kbd>Shift</kbd>，只会发普通的 <kbd>Ctrl+p</kbd>，所以这些键旁边都另有一个每个终端都能发的 <kbd>Alt</kbd> 键，在这样的终端里 <code>ob</code> 显示的就是这个 <kbd>Alt</kbd> 键。<code>obg</code> 收到的就是按下的键本身。在 Mac 上的 <code>obg</code> 里，每套方案的 <kbd>Ctrl</kbd> 都是 <kbd>Cmd</kbd>：本页写 <kbd>Ctrl+p</kbd> 的地方按 <kbd>Cmd+p</kbd>，屏幕上也写 <kbd>Cmd</kbd>。<kbd>Ctrl</kbd> 本身在那里照样能用；设置文件里仍写 <code>Ctrl</code>，因为终端里的 <code>ob</code> 读的是同一个文件，而终端会把 <kbd>Cmd</kbd> 留给自己。别的系统上 Super 键（Windows 键）从不当作 <kbd>Ctrl</kbd>，它是桌面的。</p>
       <p>切换方案在命令面板里运行 <code>choose-keymap</code>。每一行都写着这套方案把打开文件和命令面板放在哪个键上。没有设置文件时第一次启动 Obelus，会问一次；<kbd>Esc</kbd> 保留 <code>obelus</code>，下次启动还会再问；选了任何一套（包括 <code>obelus</code>）都马上写进设置，以后不再问。你在 <code>[keys]</code> 里写的键叠在方案之上，所以换方案不会丢掉你自己的键。</p>
       <p>在 shell 里，<code>ob keymap</code> 告诉你当前用的是哪套并列出其他几套，<code>ob keymap set vscode</code> 不打开任何东西直接选定（<code>obg keymap</code> 也一样）。已经开着的 Obelus 窗口都会跟着换。要打开一个名叫 <code>keymap</code> 的文件，写 <code>ob ./keymap</code> 或 <code>ob -- keymap</code>。</p>
 
