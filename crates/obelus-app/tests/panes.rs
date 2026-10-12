@@ -20,8 +20,9 @@ use ratatui::{buffer::Cell, layout::Rect, style::Color};
 #[derive(Default)]
 struct Heard {
     /// The mark the light runs across, and the two colours it runs
-    /// between.
-    marks: Mutex<Vec<(Rect, Color, Color)>>,
+    /// between, with the thread that said it: the welcome screen is under
+    /// the settings in another test's frames too.
+    marks: Mutex<Vec<(ThreadId, Rect, Color, Color)>>,
     /// And where one thing was said to stop and the next to begin, with
     /// the thread that said it: a second test here opens the notes too.
     partings: Mutex<Vec<(ThreadId, Rect)>>,
@@ -40,11 +41,12 @@ struct Heard {
 /// A pane, what was under it, and the thread that said it.
 type Under = (ThreadId, Rect, Joined, Vec<Cell>);
 
-/// A band or a pane, as it was said.
+/// A band, a pane or a rule, as it was said.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Told {
     Band(Rect),
     Pane(Rect, Joined),
+    Rule(Rect),
 }
 
 impl Heard {
@@ -71,7 +73,9 @@ impl obelus_ui::shapes::Shapes for Heard {
 
     fn spun(&self, _area: Rect) {}
 
-    fn ruled(&self, _area: Rect) {}
+    fn ruled(&self, area: Rect) {
+        self.told(Told::Rule(area));
+    }
 
     fn capped(&self, _keys: &str, _area: Rect, _cap: Color, _page: Color, _edge: Color) {}
 
@@ -87,7 +91,7 @@ impl obelus_ui::shapes::Shapes for Heard {
 
     fn sheened(&self, area: Rect, from: Color, to: Color) {
         if let Ok(mut marks) = self.marks.lock() {
-            marks.push((area, from, to));
+            marks.push((std::thread::current().id(), area, from, to));
         }
     }
     fn stroked(&self, stroke: obelus_ui::shapes::Stroke) {
@@ -229,7 +233,7 @@ fn either_side_of_the_pane(told: &[Told]) -> (Rect, Joined, Vec<Rect>, Vec<Rect>
         told.iter()
             .filter_map(|told| match told {
                 Told::Band(area) => Some(*area),
-                Told::Pane(..) => None,
+                Told::Pane(..) | Told::Rule(..) => None,
             })
             .collect()
     };
@@ -313,6 +317,81 @@ fn a_band_under_the_settings_is_said_before_them() {
     assert_eq!(joined, Joined::Screen, "the settings are the whole screen");
 }
 
+/// The status row's rule is said again after a pane that takes its row in,
+/// over the pane, and only where the pane is.
+///
+/// It is said once at the top of the frame, before anything is put over
+/// the page, and a window takes whatever is said before a pane and inside
+/// it to be under it (`Page::layer` in `obelus-gui`): the line under the
+/// settings went back to the font's glyph, and the names' glass ran on past
+/// the line they stand on. The settings draw nothing on that row and the
+/// names end at it, so the rule after each pane is this one and no other.
+///
+/// Deliberate break: take `shapes::ruled` out of `laid_over`, and neither
+/// pane has a rule said after it.
+#[test]
+fn the_status_row_s_rule_is_said_again_over_a_pane_on_its_row() {
+    let edge = 22;
+    let rule_after = |app: &mut App| {
+        let since = told_so_far();
+        let _ = support::cells_of(app, 60, 24);
+        let told = told_since(since);
+        let at = told
+            .iter()
+            .rposition(|told| matches!(told, Told::Pane(..)))
+            .unwrap_or_else(|| panic!("a pane: {told:?}"));
+        let Told::Pane(pane, _) = told[at] else {
+            unreachable!("found as a pane")
+        };
+        let rule = told[at + 1..].iter().find_map(|told| match told {
+            Told::Rule(area) if area.y == edge => Some(*area),
+            _ => None,
+        });
+        (pane, rule, told)
+    };
+
+    let mut app = App::new(vec![support::open_fixture("long.rs")]);
+    app.statuses_for_test(std::collections::HashMap::new());
+    app.config_file_for_test(
+        std::env::temp_dir()
+            .join(format!("obelus-panes-rule-{}", std::process::id()))
+            .join("config.toml"),
+    );
+    support::lay_out(&mut app, 60, 24);
+    obelus_app::app::dispatch::dispatch(&mut app, obelus_command::Command::ConfigOpen);
+    let (pane, rule, told) = rule_after(&mut app);
+    assert_eq!(pane, Rect::new(0, 0, 60, 24), "the settings: {told:?}");
+    assert_eq!(
+        rule,
+        Some(Rect::new(0, edge, 60, 1)),
+        "under the settings: {told:?}"
+    );
+
+    let mut app = App::new(vec![support::open_fixture("long.rs")]);
+    app.statuses_for_test(std::collections::HashMap::new());
+    support::lay_out(&mut app, 60, 24);
+    app.handle(obelus_app::event::Event::Fonts {
+        here: vec!["Iosevka".to_string()],
+        otherwise: None,
+    });
+    app.open_names("fonts");
+    let (pane, rule, told) = rule_after(&mut app);
+    assert_eq!(
+        pane.bottom() - 1,
+        edge,
+        "the names stand on the rule: {pane:?}"
+    );
+    assert_eq!(
+        rule,
+        Some(Rect {
+            y: edge,
+            height: 1,
+            ..pane
+        }),
+        "under the names: {told:?}"
+    );
+}
+
 /// The status row under the settings is the page's colour before the glass
 /// is laid over it, while a setting's words are being typed into that row
 /// as much as while the page's filter is.
@@ -341,6 +420,96 @@ fn the_row_a_setting_is_typed_on_is_there_under_the_glass() {
     support::type_text(&mut app, "speaks");
     support::press(&mut app, crossterm::event::KeyCode::Enter);
     the_status_row_is_under_the_glass(&mut app, "Speaks as", Joined::Screen);
+}
+
+/// The welcome screen is under the settings opened from it: a dialog is
+/// glass, and what is behind it is the screen the reader was looking at.
+/// And it is drawn and not seen in a terminal, where the dialog is over
+/// every cell of it.
+///
+/// Deliberate break: draw the welcome screen only where nothing fills the
+/// region (`!layers.filling()`), which is what it was. What the settings
+/// were put over is then a blank page, and the glass shows nothing.
+#[test]
+fn the_welcome_screen_is_under_the_settings() {
+    let mut app = App::new(Vec::new());
+    app.working_directory_for_test(std::path::PathBuf::from("/tmp/obelus"));
+    app.config_file_for_test(
+        std::env::temp_dir()
+            .join(format!("obelus-panes-welcome-{}", std::process::id()))
+            .join("config.toml"),
+    );
+    support::lay_out(&mut app, 60, 24);
+    obelus_app::app::dispatch::dispatch(&mut app, obelus_command::Command::ConfigOpen);
+    let since = heard_under_so_far();
+    let cells = support::cells_of(&mut app, 60, 24);
+    let me = std::thread::current().id();
+    let under = heard().under.lock().expect("nothing poisoned it");
+    let (pane, behind) = under
+        .iter()
+        .filter(|(whose, ..)| *whose == me)
+        .skip(since)
+        .filter(|(_, _, joined, _)| *joined == Joined::Screen)
+        .map(|(_, pane, _, cells)| (*pane, cells))
+        .last()
+        .expect("the settings were said as a pane");
+    let width = usize::from(pane.width);
+    let text = |rows: Vec<String>| rows.join("\n");
+    let behind = text(
+        behind
+            .chunks(width)
+            .map(|row| row.iter().map(ratatui::buffer::Cell::symbol).collect())
+            .collect(),
+    );
+    assert!(
+        behind.contains("Open a file"),
+        "the settings were put over a blank page:\n{behind}"
+    );
+    let shown = text(
+        (0..24)
+            .map(|y| (0..60).map(|x| cells[(x, y)].symbol()).collect())
+            .collect(),
+    );
+    assert!(
+        !shown.contains("Open a file"),
+        "the welcome screen shows through the settings in a terminal:\n{shown}"
+    );
+    drop(under);
+
+    // And the counts, the other dialog that takes the whole screen.
+    let mut app = App::new(Vec::new());
+    app.working_directory_for_test(std::path::PathBuf::from("/tmp/obelus"));
+    support::lay_out(&mut app, 60, 24);
+    obelus_app::app::dispatch::dispatch(&mut app, obelus_command::Command::CountLines);
+    let tally = |code| obelus_search::counts::Tally {
+        code,
+        comments: 0,
+        blanks: 0,
+    };
+    app.handle(obelus_app::event::Event::Counted(Box::new(
+        obelus_search::counts::Counted {
+            languages: vec![obelus_search::counts::Language {
+                name: "Rust",
+                files: 4,
+                extension: Some("rs"),
+                tally: tally(400),
+                children: Vec::new(),
+            }],
+            files: Vec::new(),
+            total: tally(400),
+        },
+    )));
+    let cells = support::cells_of(&mut app, 60, 24);
+    let shown = text(
+        (0..24)
+            .map(|y| (0..60).map(|x| cells[(x, y)].symbol()).collect())
+            .collect(),
+    );
+    assert!(shown.contains("Rust"), "the counts are not up:\n{shown}");
+    assert!(
+        !shown.contains("Open a file"),
+        "the welcome screen shows through the counts in a terminal:\n{shown}"
+    );
 }
 
 /// And the same under a list, which a question on the status row opens
@@ -536,13 +705,20 @@ fn a_band_under_the_names_is_said_before_them() {
 #[test]
 fn the_mark_says_where_it_is_and_what_the_light_runs_between() {
     let heard = heard();
-    heard.marks.lock().expect("the marks").clear();
 
     let mut app = App::new(Vec::new());
     app.working_directory_for_test(std::path::PathBuf::from("/tmp/obelus"));
     let cells = support::cells_of(&mut app, 64, 20);
 
-    let marks = heard.marks.lock().expect("the marks").clone();
+    let me = std::thread::current().id();
+    let marks: Vec<(Rect, Color, Color)> = heard
+        .marks
+        .lock()
+        .expect("the marks")
+        .iter()
+        .filter(|(whose, ..)| *whose == me)
+        .map(|&(_, area, from, to)| (area, from, to))
+        .collect();
     assert_eq!(marks.len(), 1, "not one mark: {marks:?}");
     let (area, from, to) = marks[0];
 

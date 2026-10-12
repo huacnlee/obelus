@@ -278,9 +278,10 @@ impl Painter {
         }
 
         // Everything the frame says has been said. What is left is
-        // putting it back on the screen in two pieces, where a pane is on
-        // its way in -- see `paint.wgsl`.
+        // putting it back on the screen in pieces, where a pane is on its
+        // way in -- see `paint.wgsl` and `Painter::lifted`.
         self.placed.drawn = self.quads.len();
+        let mut so_far = None;
         if let (Some(top), Some(pane), Some(along)) = (top, pane, moving.pane) {
             let height = pane[3] - pane[1];
             // A pane comes from the side it is joined to, which is the
@@ -290,12 +291,34 @@ impl Painter {
                 _ => -1.0,
             };
             let shift = away * (1.0 - along) * height * TRAVEL;
+            // The glass where the pane has got to, reading what is behind
+            // it there -- which stands where it is while the slab goes over
+            // it -- and cut off at the seam it comes out of, which is the
+            // rectangle it was given and keeps.
+            //
+            // A copy, drawn in the frame in the place of the glass, and the
+            // glass itself left where the pane is going: a box over the
+            // pane is what is written on it and comes in with it, so what
+            // its own glass reads is the pane as it will be.
+            let glass = self.quads[self.placed.levels[top].glass];
+            let [left, top_edge, wide, tall] = glass.rect;
+            so_far = Some(Quad {
+                rect: [left, top_edge + shift, wide, tall],
+                ..glass
+            });
+            self.placed.arriving = Some(top);
             self.placed.composed = true;
             self.covering(&[pane]);
             // Under the one arriving, which comes over it: the files come
             // down over the palette going.
             self.going(moving.leaving);
+            // The glass coming up where it has reached, over what stands
+            // under it in the frame -- and then what is written on it,
+            // slid in out of its own picture.
+            self.slid_piece(reached(pane, shift), pane, 0.0, along);
+            let lifting = self.quads.len();
             self.slid(pane, shift, along);
+            self.placed.lifting = Some(lifting..self.quads.len());
             // And the shadow, here rather than in the frame -- see
             // `shadows`. It falls from the edge the pane has *reached*,
             // which is the only edge of it that has moved: the other is
@@ -337,6 +360,10 @@ impl Painter {
             && let Some(first) = first
         {
             self.sliding_under(page, first, said.bands, fonts);
+        }
+        if let Some(glass) = so_far {
+            self.placed.glass_so_far = Some(self.quads.len());
+            self.quads.push(glass);
         }
         // After the last glyph has been placed and before anything is drawn:
         // a glyph that found no room made the texture again, and every

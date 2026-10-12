@@ -320,18 +320,53 @@ impl Painter {
         let Some(along) = along else {
             return;
         };
+        let shifts: Vec<([f32; 4], f32)> = self
+            .gone
+            .iter()
+            .map(|&(pane, joined)| {
+                let toward = match joined {
+                    Joined::Below => 1.0,
+                    _ => -1.0,
+                };
+                (pane, toward * along * (pane[3] - pane[1]) * TRAVEL)
+            })
+            .collect();
         let start = self.quads.len();
-        for at in 0..self.gone.len() {
-            let (pane, joined) = self.gone[at];
-            let toward = match joined {
-                Joined::Below => 1.0,
-                _ => -1.0,
-            };
-            let height = pane[3] - pane[1];
-            self.slid(pane, toward * along * height * TRAVEL, 1.0 - along);
+        match self.left_lifted {
+            // The glass stands where it was, over what it showed, and only
+            // as much of it as the pane still covers: the slab goes and
+            // what was behind it does not. Then what was written on it,
+            // which goes with the slab.
+            //
+            // The glass was drawn once, as it stood, so the edge that moves
+            // is cut straight rather than rounded and lit -- for the fifth
+            // of a second it takes to fade.
+            Some(_) => {
+                for &(pane, shift) in &shifts {
+                    self.slid_piece(reached(pane, shift), pane, 0.0, 1.0 - along);
+                }
+                let lifted = self.quads.len();
+                for &(pane, shift) in &shifts {
+                    self.slid(pane, shift, 1.0 - along);
+                }
+                self.placed.going_lifted = Some(lifted..self.quads.len());
+                self.placed.going = Some(start..lifted);
+            }
+            None => {
+                for &(pane, shift) in &shifts {
+                    self.slid(pane, shift, 1.0 - along);
+                }
+                self.placed.going = Some(start..self.quads.len());
+            }
         }
-        if self.quads.len() > start {
-            self.placed.going = Some(start..self.quads.len());
+        if self
+            .placed
+            .going
+            .as_ref()
+            .is_some_and(|going| going.is_empty())
+        {
+            self.placed.going = None;
+            self.placed.going_lifted = None;
         }
     }
 
@@ -355,7 +390,7 @@ impl Painter {
     /// must not take the inner one with it: what it puts back is the
     /// region less the rooms of the bands inside it, and each of those
     /// puts back its own.
-    fn slid_piece(&mut self, piece: [f32; 4], room: [f32; 4], shift: f32, fade: f32) {
+    pub(super) fn slid_piece(&mut self, piece: [f32; 4], room: [f32; 4], shift: f32, fade: f32) {
         let [left, top, far, low] = piece;
         self.quads.push(Quad {
             rect: [left, top, (far - left).max(1.0), (low - top).max(1.0)],
@@ -540,7 +575,7 @@ impl Painter {
     ///
     /// Not the pane's while it is still arriving, which is drawn where
     /// the frame is put back together instead. The frame is drawn once
-    /// and put back in two pieces, the pane's own slid up from where it
+    /// and put back in pieces, what is on the pane slid in from where it
     /// set out -- and a shadow is the one part of a pane that falls
     /// *outside* the pane's own room, so it is in the other piece: drawn
     /// here it would stand still at the edge the pane is going to have
