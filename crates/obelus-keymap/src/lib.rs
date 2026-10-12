@@ -105,29 +105,6 @@ pub fn control_drawn_as_command() -> bool {
     COMMAND.load(Ordering::Relaxed)
 }
 
-/// Whether control and shift on a letter arrive as themselves.
-///
-/// A global for the reason [`COMMAND`] is one: it is a fact about the front
-/// end, decided once, and asked by every place that shows a key. On unless
-/// `ob` finds a terminal that does not speak the keyboard protocol, where
-/// `ctrl+shift+p` arrives as `ctrl+p` -- and there a command with another
-/// key is shown on that one ([`Keymap::chord_for`]), which is why the
-/// editors' layouts give each such chord an alt chord beside it.
-static SHIFTED_CONTROL: AtomicBool = AtomicBool::new(true);
-
-/// Says whether control and shift on a letter arrive as themselves.
-pub fn shifted_control_arrives(arrives: bool) {
-    SHIFTED_CONTROL.store(arrives, Ordering::Relaxed);
-}
-
-/// Whether a chord can be pressed here: all of them can but control and
-/// shift on a letter, where the front end has said it cannot send those.
-fn arrives(chord: KeyChord) -> bool {
-    let shifted_control = chord.modifiers.contains(KeyModifiers::CONTROL)
-        && matches!(chord.code, KeyCode::Char(character) if character.is_ascii_uppercase());
-    !shifted_control || SHIFTED_CONTROL.load(Ordering::Relaxed)
-}
-
 /// A key plus its modifiers, in a form two equivalent presses agree on.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct KeyChord {
@@ -799,28 +776,13 @@ impl Keymap {
         (keymap, unbound)
     }
 
-    /// The key bound to a command, if one is: the one every place that
-    /// shows a key shows.
-    ///
-    /// The first that can be pressed here ([`shifted_control_arrives`]), so
-    /// a terminal that sends `ctrl+shift+p` as `ctrl+p` is shown the alt
-    /// chord beside it rather than a key it cannot press. And the first of
-    /// all where none can: a reader whose own key does nothing here is owed
-    /// the key they wrote, which is what says why.
+    /// The key bound to a command, if one is.
     #[must_use]
     pub fn chord_for(&self, command: Command) -> Option<KeyChord> {
-        let mut chords = self
-            .bindings
+        self.bindings
             .iter()
-            .filter(|binding| binding.command == command)
-            .map(|binding| binding.chord);
-        let first = chords.next()?;
-        Some(
-            std::iter::once(first)
-                .chain(chords)
-                .find(|chord| arrives(*chord))
-                .unwrap_or(first),
-        )
+            .find(|binding| binding.command == command)
+            .map(|binding| binding.chord)
     }
 
     /// Every binding, for tests and for showing keys next to command names.

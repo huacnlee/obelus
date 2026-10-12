@@ -96,10 +96,6 @@ fn main() -> Result<ExitCode> {
     // And whether `ctrl+enter` will arrive as itself, which the box offers
     // only where it will.
     let ctrl_enter = ctrl_enter_arrives();
-    // The same answer says whether control and shift on a letter arrive as
-    // themselves, and where they do not, a key is shown on the chord beside
-    // it that does.
-    obelus_keymap::shifted_control_arrives(ctrl_enter);
 
     // `ratatui::try_init` enters the alternate screen, turns on raw mode, and
     // chains a panic hook that undoes both before the previous hook runs.

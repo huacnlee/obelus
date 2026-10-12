@@ -4472,7 +4472,6 @@ dependencies = [
  "crossterm",
  "image",
  "obelus-app",
- "obelus-keymap",
  "obelus-logging",
  "obelus-ui",
  "ratatui",
