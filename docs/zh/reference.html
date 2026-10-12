@@ -333,7 +333,7 @@ open-file = "Ctrl+o"
 show-change = "Alt+g"
 run-command = ["Ctrl+Shift+p", "Alt+Shift+p"]   # 两个键都行
 quit = ""            # 把这个绑定拿掉</code></pre>
-      <p>设置页的 Keys 标签里，一个命令绑的每个键各占一行。在某一行按 <kbd>Enter</kbd>，再按一个键，就给这个命令多加一个键；等键的时候按 <kbd>Delete</kbd>，去掉这一行的键。</p>
+      <p>设置页的 Keys 标签里，一个命令绑的每个键各占一行。在某个键上按 <kbd>Enter</kbd>，再按一个键就把它换掉；等键的时候按 <kbd>Delete</kbd>，去掉这个键。命令还没有键时，按 <kbd>Enter</kbd> 就是给它加一个。在命令的任何一行上按 <kbd>Ctrl+Enter</kbd> 或 <kbd>Alt+Enter</kbd>，给它再加一个键（不支持键盘协议的终端会把 <kbd>Ctrl+Enter</kbd> 当成 <kbd>Enter</kbd> 发出来，所以在那里用 <kbd>Alt+Enter</kbd>）。</p>
 
       <h3>主题</h3>
       <p>内置 <code>dark</code>、<code>light</code> 和一排常见配色，<code>choose-theme</code> 切换，马上生效。另外，<code>~/.config/obelus/themes/</code> 下的每个 <code>.toml</code> 文件都是一个主题，名字就是文件名（<code>mine.toml</code> → <code>mine</code>）；那里的一个目录只要放了 <code>theme.toml</code>，也是一个主题，名字就是目录名——主题就是这样把一张图片和配色放在一起的。你自己的主题和内置的同名时，用你的。每个颜色都可以不写，没写的沿用它所基于的内置主题——所以以后 Obelus 多了新颜色，你的旧主题文件不用改也能用。</p>

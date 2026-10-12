@@ -2365,19 +2365,20 @@ fn every_key_of_a_command_is_a_row_of_its_own() {
     );
 }
 
-/// Enter on a key, then another key, puts the command on that one as well,
-/// after the ones it had; and the file says them all.
+/// Enter on a key changes that key: the one pressed takes its place, and
+/// the command's other keys stay.
 ///
-/// Broken deliberately by replacing the command's keys with the one pressed,
-/// as the page did: `ctrl+y` went.
+/// Broken deliberately by adding the key pressed rather than putting it in
+/// the row's place, as the page did: `ctrl+y` stayed.
 #[test]
-fn a_key_pressed_on_a_row_is_added() {
+fn enter_on_a_key_changes_it() {
     use obelus_command::Command;
     use obelus_keymap::KeyChord;
 
     let _taken = SETTINGS.lock().expect("the lock");
-    let scratch = temporary("add-a-key");
+    let scratch = temporary("change-a-key");
     let file = settings_file(&scratch);
+    std::fs::write(&file, "[keys]\nredo = [\"ctrl+y\", \"alt+y\"]\n").expect("the file");
     let mut app = open(&file);
     support::press(&mut app, KeyCode::Tab);
     support::type_text(&mut app, "redo");
@@ -2387,13 +2388,71 @@ fn a_key_pressed_on_a_row_is_added() {
     let chord = |key: &str| KeyChord::parse(key).expect("a key");
     assert_eq!(
         app.keymap().chords_for(Command::Redo),
-        [chord("ctrl+y"), chord("alt+z")]
+        [chord("alt+z"), chord("alt+y")]
     );
     let written = std::fs::read_to_string(&file).expect("the file");
     assert!(
-        written.contains("redo = [\"Ctrl+y\", \"Alt+z\"]"),
-        "the file does not say both keys:\n{written}"
+        written.contains("redo = [\"Alt+z\", \"Alt+y\"]"),
+        "the file does not say the keys:\n{written}"
     );
+}
+
+/// `ctrl+enter` or `alt+enter` on a command's row puts it on one more key,
+/// after the ones it has; and the foot names the one that arrives here.
+///
+/// Both, because a terminal without the keyboard protocol sends
+/// `ctrl+enter` as enter, which would change the key rather than add one.
+///
+/// Broken deliberately twice: by taking `alt+enter` out of what adds (the
+/// second press changed nothing), and by naming `ctrl+enter` at the foot
+/// whatever arrives (the foot said `Ctrl+Enter` where it cannot).
+#[test]
+fn control_or_alt_and_enter_add_a_key() {
+    use crossterm::event::{KeyEvent, KeyModifiers};
+    use obelus_app::event::Event;
+    use obelus_command::Command;
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("add-a-key");
+    let file = settings_file(&scratch);
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    let enter_with = |app: &mut App, modifiers| {
+        app.handle(Event::Key(KeyEvent::new(KeyCode::Enter, modifiers)));
+    };
+    enter_with(&mut app, KeyModifiers::CONTROL);
+    support::press_alt(&mut app, 'z');
+    enter_with(&mut app, KeyModifiers::ALT);
+    support::press_alt(&mut app, 'x');
+
+    let chord = |key: &str| KeyChord::parse(key).expect("a key");
+    assert_eq!(
+        app.keymap().chords_for(Command::Redo),
+        [chord("ctrl+y"), chord("alt+z"), chord("alt+x")]
+    );
+    let written = std::fs::read_to_string(&file).expect("the file");
+    assert!(
+        written.contains("redo = [\"Ctrl+y\", \"Alt+z\", \"Alt+x\"]"),
+        "the file does not say every key:\n{written}"
+    );
+
+    let foot = |app: &mut App| {
+        let dump = support::render(app, 80, 16);
+        support::text_block(&dump).to_string()
+    };
+    assert!(foot(&mut app).contains("Ctrl+Enter"), "{}", foot(&mut app));
+    let mut app = App::new(vec![support::open_fixture("sample.rs")]);
+    app.config_file_for_test(file.clone());
+    app.ctrl_enter_arrives(false);
+    support::lay_out(&mut app, 66, 12);
+    dispatch::dispatch(&mut app, Command::ConfigOpen);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    let said = foot(&mut app);
+    assert!(said.contains("Alt+Enter"), "{said}");
+    assert!(!said.contains("Ctrl+Enter"), "{said}");
 }
 
 /// Delete takes away the key on the row the reader is on, and only that

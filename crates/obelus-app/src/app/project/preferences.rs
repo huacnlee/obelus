@@ -248,6 +248,7 @@ impl App {
         self.ask_what_the_agent_offers();
         let mut settings = Settings::new();
         settings.hear_keymap(&self.keymap);
+        settings.ctrl_enter_arrives(self.ctrl_enter_arrives);
         self.settings = Some(settings);
     }
 
@@ -263,6 +264,7 @@ impl App {
         // alone, and the project's page has no group for it.
         let mut settings = Settings::for_project();
         settings.hear_keymap(&self.keymap);
+        settings.ctrl_enter_arrives(self.ctrl_enter_arrives);
         self.settings = Some(settings);
     }
 

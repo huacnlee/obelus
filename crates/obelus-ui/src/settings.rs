@@ -240,11 +240,19 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
             }
         },
         _ if adding => ("Add", "Add a variable to what the agent is started with"),
-        _ => match settings.key_rows().get(settings.focus()) {
-            Some(KeyRow::Key { .. }) => ("Add a key", "Put this command on one more key"),
-            Some(KeyRow::Setting(_)) | None => ("Change", "Change it, or open what it can be"),
+        _ => match settings.keys().get(settings.focus()) {
+            Some((KeyRow::Key { .. }, Some(_))) => ("Change", "Put this command on another key"),
+            Some((KeyRow::Key { .. }, None)) => ("Add a key", "Put this command on a key"),
+            Some((KeyRow::Setting(_), _)) | None => ("Change", "Change it, or open what it can be"),
         },
     };
+    // And one more key for a command that has one, on control or alt: see
+    // `Settings::adds_with`.
+    let adds = settings.on_keys()
+        && matches!(
+            settings.keys().get(settings.focus()),
+            Some((KeyRow::Key { .. }, Some(_)))
+        );
     // Pairing does nothing where the chat could not be reached, and a key
     // that does nothing is not offered at the foot.
     let pairing_waits = matches!(
@@ -263,15 +271,11 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
     // A row waiting for its key takes every key, so the foot says the two
     // that do something else there: taking this row's key away, where it
     // has one, and giving up.
-    if let Some((command, slot)) = settings.binding_at() {
-        let has_one = settings.keys().iter().any(|(row, chord)| {
-            matches!(row, KeyRow::Key { command: on, slot: at } if *on == command && *at == slot)
-                && chord.is_some()
-        });
+    if let Some(binding) = settings.binding_at() {
         return vec![
             Hint::common(bare(KeyCode::Delete), "Remove")
                 .saying("Take this key off the command")
-                .when(has_one),
+                .when(binding.replacing),
             Hint::common(bare(KeyCode::Esc), "Back").saying("Leave the key as it was"),
         ];
     }
@@ -285,6 +289,12 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
             // settings: the keys page has rows too, and enter does the same
             // sort of thing to one of them.
             .when(settings.row_count(offering) > 0 && !pairing_waits),
+        Hint::common(
+            obelus_keymap::KeyChord::new(KeyCode::Enter, settings.adds_with()),
+            "Add a key",
+        )
+        .saying("Put this command on one more key")
+        .when(adds),
         Hint::common(bare(KeyCode::Delete), "Forget")
             .saying("Take this out of the keyring, or out of the settings")
             .when(forgets && rows_delete),
@@ -1455,11 +1465,15 @@ impl SettingsView<'_> {
         slot: usize,
         has_a_key: bool,
     ) -> Option<(String, ratatui::style::Color)> {
-        if self.settings.binding_at() != Some((command, slot)) {
+        let Some(binding) = self
+            .settings
+            .binding_at()
+            .filter(|binding| binding.command == command && binding.slot == slot)
+        else {
             // What it does once, beside its name; the rows of its other
             // keys say nothing there.
             return (slot == 0).then(|| (command.spec().title.to_string(), self.theme.gutter));
-        }
+        };
         match self.settings.refused() {
             Some((chord, Refused::Taken(taken))) => Some((
                 format!("{} is {}", chord.label(), taken.name()),
@@ -1472,8 +1486,8 @@ impl SettingsView<'_> {
             // One line, because most commands have one key and so one row
             // to say it on.
             None => Some((
-                match has_a_key {
-                    true => "Press a key to add, or Delete it",
+                match binding.replacing && has_a_key {
+                    true => "Press the new key, or Delete it",
                     false => "Press a key to add it",
                 }
                 .to_string(),

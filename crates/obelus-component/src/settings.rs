@@ -548,6 +548,18 @@ fn narrowed_to(setting: &Setting, query: &str) -> bool {
     query.is_empty() || setting.name.to_lowercase().contains(query) || setting.key.contains(query)
 }
 
+/// A row of the keys page waiting for its key, and what that key will do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Binding {
+    /// The command.
+    pub command: Command,
+    /// The row it is waiting on, which is where it says so.
+    pub slot: usize,
+    /// Whether the key pressed takes the place of the one on that row, or
+    /// is one more key for the command.
+    pub replacing: bool,
+}
+
 /// One row of the keys page.
 #[derive(Clone, Copy, Debug)]
 pub enum KeyRow {
@@ -590,7 +602,11 @@ pub struct Settings {
     /// The page is in no mode otherwise: a key means what it means here
     /// until the reader says "the next thing I press is this command's",
     /// and from then until they press it every key belongs to that row.
-    binding: Option<(Command, usize)>,
+    binding: Option<Binding>,
+    /// Whether `ctrl+enter` arrives as itself, which decides which of the
+    /// two keys that add a key the foot names: a terminal without the
+    /// keyboard protocol sends it as enter, and there it is `alt+enter`.
+    ctrl_enter: bool,
     /// The keys each command is on, as the table was when it was last
     /// heard ([`Settings::hear_keymap`]).
     ///
@@ -640,6 +656,7 @@ impl Settings {
             keys_showing: false,
             query: Field::new(),
             binding: None,
+            ctrl_enter: true,
             held: Vec::new(),
             refused: None,
             whose: Whose::Reader,
@@ -656,6 +673,7 @@ impl Settings {
             keys_showing: false,
             query: Field::new(),
             binding: None,
+            ctrl_enter: true,
             held: Vec::new(),
             refused: None,
             whose: Whose::Project,
@@ -989,14 +1007,29 @@ impl Settings {
     /// Which command's key is being pressed, if one is.
     #[must_use]
     pub fn binding(&self) -> Option<Command> {
-        self.binding.map(|(command, _)| command)
+        self.binding.map(|binding| binding.command)
     }
 
-    /// And on which of its rows: the key the next press would sit beside,
-    /// or the one `delete` would take away.
+    /// And on which of its rows, and whether the key pressed will take the
+    /// place of the one there or be one more.
     #[must_use]
-    pub const fn binding_at(&self) -> Option<(Command, usize)> {
+    pub const fn binding_at(&self) -> Option<Binding> {
         self.binding
+    }
+
+    /// Says whether `ctrl+enter` arrives as itself here.
+    pub const fn ctrl_enter_arrives(&mut self, arrives: bool) {
+        self.ctrl_enter = arrives;
+    }
+
+    /// The key the foot names for adding one: `ctrl+enter` where it
+    /// arrives, and `alt+enter` where it would arrive as enter. Both add.
+    #[must_use]
+    pub const fn adds_with(&self) -> KeyModifiers {
+        match self.ctrl_enter {
+            true => KeyModifiers::CONTROL,
+            false => KeyModifiers::ALT,
+        }
     }
 
     /// The key that would not do, and why.
@@ -1413,19 +1446,25 @@ impl Settings {
         // out, because escape is the way out of everything -- and it gives
         // up on the nearest thing first, which is this row rather than the
         // page.
-        if let Some((command, slot)) = self.binding {
+        if let Some(Binding {
+            command,
+            slot,
+            replacing,
+        }) = self.binding
+        {
             if key.code == KeyCode::Esc && key.modifiers.is_empty() {
                 self.binding = None;
                 self.refused = None;
                 return SettingsOutcome::Consumed;
             }
             // Taking the key on this row away is a decision a reader can
-            // make, and there is nowhere else on the page to make it. A row
-            // with no key has nothing to take, and goes on waiting.
+            // make, and there is nowhere else on the page to make it. Only
+            // where the row is being changed: one waiting for a key to add
+            // has nothing of its own to take, and goes on waiting.
             let held = self.held(command).to_vec();
             if matches!(key.code, KeyCode::Delete | KeyCode::Backspace) && key.modifiers.is_empty()
             {
-                if slot >= held.len() {
+                if !replacing || slot >= held.len() {
                     return SettingsOutcome::Consumed;
                 }
                 let mut kept = held;
@@ -1460,18 +1499,21 @@ impl Settings {
                     self.refused = Some((chord, Refused::Taken(taken)));
                     return SettingsOutcome::Consumed;
                 }
-                // A key the command is already on is nothing to add.
+                // A key the command is already on changes nothing.
                 Some(_) => {
                     self.binding = None;
                     self.refused = None;
                     return SettingsOutcome::Consumed;
                 }
                 None => {
-                    let mut added = held;
-                    added.push(chord);
+                    let mut chords = held;
+                    match chords.get_mut(slot).filter(|_| replacing) {
+                        Some(on_the_row) => *on_the_row = chord,
+                        None => chords.push(chord),
+                    }
                     self.binding = None;
                     self.refused = None;
-                    return SettingsOutcome::Bind(command, added);
+                    return SettingsOutcome::Bind(command, chords);
                 }
             }
         }
@@ -1480,6 +1522,25 @@ impl Settings {
         // one: control is what every key below this refuses.
         if obelus_keymap::is_keys_card(key) {
             self.keys_showing = !self.keys_showing;
+            return SettingsOutcome::Consumed;
+        }
+
+        // One more key for the command the reader is on, whichever of its
+        // rows. `ctrl+enter` and `alt+enter` both, every time: the first is
+        // plain enter on a terminal without the keyboard protocol, which
+        // would be changing the key rather than adding one, and alt is the
+        // escape prefix and arrives everywhere.
+        let adding = key.code == KeyCode::Enter
+            && (key.modifiers == KeyModifiers::CONTROL || key.modifiers == KeyModifiers::ALT);
+        if adding && self.on_keys() {
+            if let Some(KeyRow::Key { command, slot }) = self.key_rows().get(self.window.focus()) {
+                self.binding = Some(Binding {
+                    command: *command,
+                    slot: *slot,
+                    replacing: false,
+                });
+                self.refused = None;
+            }
             return SettingsOutcome::Consumed;
         }
 
@@ -1632,13 +1693,17 @@ impl Settings {
                     _ => SettingsOutcome::Consumed,
                 }
             }
-            // On the keys page, enter is the reader saying "the next key I
-            // press is this command's as well" -- and, on a key, that
-            // `delete` would take that one away.
+            // On the keys page, enter on a key is the reader saying "the
+            // next key I press goes here instead", with `delete` to take it
+            // away -- and on a command with no key, that it goes here.
             KeyCode::Enter if bare && self.on_keys() => match keys.get(self.window.focus()) {
                 Some((KeyRow::Setting(setting), _)) => Self::change(setting, config),
-                Some((KeyRow::Key { command, slot }, _)) => {
-                    self.binding = Some((*command, *slot));
+                Some((KeyRow::Key { command, slot }, chord)) => {
+                    self.binding = Some(Binding {
+                        command: *command,
+                        slot: *slot,
+                        replacing: chord.is_some(),
+                    });
                     self.refused = None;
                     SettingsOutcome::Consumed
                 }
