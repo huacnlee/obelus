@@ -150,10 +150,6 @@
       <h4>Windows, in PowerShell</h4>
       <pre><code>irm https://raw.githubusercontent.com/obelus-editor/obelus/master/contrib/install.ps1 | iex</code></pre>
 
-      <h4>With mise, on any system</h4>
-      <pre><code>mise use -g github:obelus-editor/obelus</code></pre>
-      <p>This installs only <code>ob</code>, the terminal version, with no window version and no launcher entry. <code>mise upgrade</code> keeps it up to date.</p>
-
       <h4>With the terminal version too</h4>
       <p><code>ob</code>, the terminal version, is a separate program and you have to ask for it. On Windows you can't pass arguments through a pipe, so download the script first and then run it.</p>
 
@@ -167,6 +163,19 @@
         <li>On Windows the script adds its directory to your PATH and creates a Start menu entry (<code>-NoShortcut</code> skips it). On Linux it adds launcher entries and an icon under <code>~/.local/share</code> so any app launcher can find it, omarchy's <code>Apps</code> menu included (<code>--no-desktop</code> skips them). If the directory isn't on your PATH, the script tells you which line to add.</li>
         <li>To uninstall, use <code>-Uninstall</code> on Windows, or <code>--uninstall</code> on Linux and macOS. If you installed with <code>--dir</code>, pass it again. Your settings are left alone either way.</li>
         <li>There's no window version on musl: the window loads Vulkan, Wayland and X11 at runtime, which a static binary can't do. The script says so and installs <code>ob</code> instead.</li>
+      </ul>
+
+      <h4>With mise, on any system</h4>
+      <pre><code>mise tool-alias set obg 'github:obelus-editor/obelus[matching=obg-]'
+mise use -g obg</code></pre>
+
+      <pre><code>mise tool-alias set ob 'github:obelus-editor/obelus[matching=ob-]'
+mise use -g ob</code></pre>
+
+      <ul>
+        <li>The first pair installs <code>obg</code>, the window version, and the second <code>ob</code>, the terminal version. Run both for both.</li>
+        <li>Each gets a name of its own so the two can sit side by side: mise keeps one tool per name, so installing the bare repository twice replaces the first with the second. <code>matching</code> picks which archive to download. <code>mise upgrade</code> keeps them up to date.</li>
+        <li>There's no launcher or Start menu entry this way, so start <code>obg</code> by name. And there's no window version on musl, as above.</li>
       </ul>
 
       <h3>From source</h3>

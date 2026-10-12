@@ -37,15 +37,6 @@ Either one takes the latest release, checks what it downloaded against the
 release's own `SHA256SUMS`, and puts **`obg`** on your PATH — Obelus in a
 window of its own.
 
-With [mise](https://mise.jdx.dev), on any of the three:
-
-```
-mise use -g github:obelus-editor/obelus
-```
-
-That is `ob` alone — the terminal one, with no window and no desktop
-entry — and `mise upgrade` keeps it current.
-
 **`ob`, the same editor in a terminal**, is the other binary and is asked
 for by name. The two are gvim's relation to vim rather than two programs:
 the same grid, the same views and the same keys. What the window has is the
@@ -85,6 +76,25 @@ entries and their icon, and, on omarchy, the theme template and the link to
 what omarchy renders — and it leaves the PATH, which it never changed. Neither script touches your settings. And on musl
 there is no `obg` to install at all — the window finds Vulkan, Wayland and X11 by `dlopen`, which a static
 binary cannot do — so the script says so and installs `ob`.
+
+With [mise](https://mise.jdx.dev), on any of the three, each binary is a
+tool with a name of its own — the first pair is `obg`, the second `ob`, and
+both pairs are both:
+
+```
+mise tool-alias set obg 'github:obelus-editor/obelus[matching=obg-]'
+mise use -g obg
+mise tool-alias set ob 'github:obelus-editor/obelus[matching=ob-]'
+mise use -g ob
+```
+
+The names are what let the two sit side by side: mise keeps one tool per
+name, so two `mise use` of the bare repository are one tool and the second
+replaces the first. `matching` is what picks the archive, where mise left
+to itself takes whichever name is shorter. `mise upgrade` keeps them
+current. What mise does not make is the desktop entry or the Start menu
+entry, so `obg` from it is started by name — and on musl it has no `obg`
+to give, for the same reason the script has none.
 
 [The releases](https://github.com/obelus-editor/obelus/releases) carry an archive
 for every platform as well as a `.deb`, an `.rpm`, an AppImage, a macOS
