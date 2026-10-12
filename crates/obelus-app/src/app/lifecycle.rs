@@ -128,6 +128,10 @@ impl App {
         self.monospace_here = was.monospace_here;
         self.screen_area = was.screen_area;
         self.editor_area = was.editor_area;
+        // Whether `ctrl+enter` arrives, which `ob` asked the terminal once
+        // and nothing asks again: lost, a terminal without the protocol was
+        // offered a key it cannot send.
+        self.ctrl_enter_arrives = was.ctrl_enter_arrives;
         self.settled = was.settled;
         self.keymap = was.keymap;
         self.theme = was.theme;

@@ -258,14 +258,12 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
         Some(Shown::Remote { row: RemoteRow::Field(field), .. })
             if settings.reached().kept.contains_key(field.key)
     );
-    // A row waiting for its key takes every key, so the foot says the two
-    // that do something else there: taking this row's key away, where it
-    // has one, and giving up.
+    // A row waiting for its key takes every key, so the foot says the one
+    // that does something else there: taking this row's key away, where it
+    // has one. Not escape, which gives up on the nearest thing here as
+    // everywhere, and a foot does not spend itself saying so (`ui::foot`).
     if let Some(binding) = settings.binding_at() {
-        return vec![
-            Hint::new(bare(KeyCode::Delete), "Remove").when(binding.replacing),
-            Hint::new(bare(KeyCode::Esc), "Back"),
-        ];
+        return vec![Hint::new(bare(KeyCode::Delete), "Remove").when(binding.replacing)];
     }
     // Delete is the filter's while the filter has something for it, so
     // nothing below says what it does to a row until then.

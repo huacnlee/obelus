@@ -939,9 +939,10 @@ impl Settings {
     /// The commands this page lists, without the keys they are on.
     ///
     /// What the filter leaves, which is what the focus moves over and how
-    /// far the window can scroll. Split from [`Settings::keys`] because
-    /// counting the rows does not need the table and the callers that
-    /// count do not have it.
+    /// far the window can scroll: a row for each of a command's keys, as
+    /// the page last heard them ([`Settings::hear_keymap`]). Split from
+    /// [`Settings::keys`] because counting the rows does not need the keys
+    /// themselves, only how many each command has.
     #[must_use]
     pub fn key_rows(&self) -> Vec<KeyRow> {
         if !self.on_keys() {

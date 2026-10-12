@@ -642,11 +642,12 @@ impl Keymap {
         Self { bindings }
     }
 
-    /// Which command a chord runs, wherever it is bound.
+    /// Which command a chord runs, wherever it is bound: the first that has
+    /// it, in whatever context.
     ///
-    /// For the page that binds keys: what makes a chord unavailable is that
-    /// it already means something *somewhere*, whatever context that is.
-    /// One key, one meaning, is a rule a reader can hold in their head.
+    /// What a table put on a key, asked by tests of the shipped layouts.
+    /// The page that binds keys asks the same question of the keys it was
+    /// last told of (`obelus_component::settings::Settings::hear_keymap`).
     #[must_use]
     pub fn command_on(&self, chord: KeyChord) -> Option<Command> {
         self.bindings
@@ -719,11 +720,12 @@ impl Keymap {
     /// Taken off only where the reader's command is bound: a line putting a
     /// file's command on `ctrl+p` is no reason for a terminal, where that
     /// command cannot run, to lose its way to the palette.
-    #[must_use]
+    ///
     /// A line may name several keys, and the command is on those and no
     /// others; one that cannot be read or given is said, and the rest are
     /// bound. A line all of whose keys are wrong leaves the command where
     /// the layout put it, rather than on nothing.
+    #[must_use]
     pub fn with(
         layout: Layout,
         bindings: &std::collections::BTreeMap<String, Vec<String>>,

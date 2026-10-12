@@ -2368,8 +2368,13 @@ fn every_key_of_a_command_is_a_row_of_its_own() {
 /// Enter on a key changes that key: the one pressed takes its place, and
 /// the command's other keys stay.
 ///
+/// And while it waits the foot says the one key that does something
+/// else there, taking the key away, and not escape, which backs out here
+/// as everywhere.
+///
 /// Broken deliberately by adding the key pressed rather than putting it in
-/// the row's place, as the page did: `ctrl+y` stayed.
+/// the row's place, as the page did: `ctrl+y` stayed. And apart, by naming
+/// escape at the foot again: `Back` was there.
 #[test]
 fn enter_on_a_key_changes_it() {
     use obelus_command::Command;
@@ -2383,6 +2388,10 @@ fn enter_on_a_key_changes_it() {
     support::press(&mut app, KeyCode::Tab);
     support::type_text(&mut app, "redo");
     support::press(&mut app, KeyCode::Enter);
+    let dump = support::render(&mut app, 66, 12);
+    let foot = support::text_block(&dump);
+    assert!(foot.contains("Remove"), "{foot}");
+    assert!(!foot.contains("Back"), "{foot}");
     support::press_alt(&mut app, 'z');
 
     let chord = |key: &str| KeyChord::parse(key).expect("a key");
