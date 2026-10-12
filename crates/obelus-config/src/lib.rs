@@ -47,7 +47,10 @@
 //! somebody else's server. `remote` and `remotes` are the
 //! reader's for a reason of their own: they say who may talk to this machine
 //! from a chat, and a project that could name a person there could hand a
-//! stranger the agent.
+//! stranger the agent. And `theme` is the reader's because what it names is
+//! the reader's: the themes are the ones built in and the ones in the
+//! reader's own directory, a project has nowhere to keep one, and a name a
+//! project wrote would be a name it chose among somebody else's.
 //!
 //! The configuration file holds preferences, not state. This file is the
 //! whole of it — one table, `dirs` for where it lives, written the moment
@@ -699,7 +702,7 @@ pub const ALL: &[Setting] = &[
         // is about not having.
         about: "",
         group: Group::Appearance,
-        reach: Reach::Anywhere,
+        reach: Reach::ReaderOnly,
         kind: Kind::Choice(THEMES),
         drawn: Drawn::Anywhere,
     },
@@ -1146,11 +1149,11 @@ pub fn path() -> Option<PathBuf> {
 
 /// Where a project keeps settings of its own, if it keeps any.
 ///
-/// `.obelus/config.toml`, and only that. A project keeps more than settings for
-/// Obelus -- a theme of its own, whatever comes after it -- and one
-/// directory holding all of it is one thing to find, to copy between
-/// machines and to name in a `.gitignore`, where a dotfile per kind of thing
-/// is a row of them at the top of every listing of the project.
+/// `.obelus/config.toml`, and only that. A project may come to keep more
+/// than settings for Obelus, and one directory holding all of it is one
+/// thing to find, to copy between machines and to name in a `.gitignore`,
+/// where a dotfile per kind of thing is a row of them at the top of every
+/// listing of the project.
 ///
 /// The working directory itself, without walking up: Obelus has one answer
 /// to which project it is on -- the file list walks it, the counts count it,
@@ -2266,11 +2269,10 @@ pub fn write_project(path: &Path, key: &str, value: Option<&Value>) -> std::io::
 
 /// Where a project's settings *would* go, for a project that has none yet.
 ///
-/// The directory, always. A project keeps more than settings for Obelus -- a
-/// theme of its own, whatever comes after it -- and one directory holding
-/// all of it is one thing to find, to copy between machines and to put in a
-/// `.gitignore`, where a dotfile per kind of thing is a row of them at the
-/// top of every listing of the project.
+/// The directory, always. A project may come to keep more than settings for
+/// Obelus, and one directory holding all of it is one thing to find, to copy
+/// between machines and to put in a `.gitignore`, where a dotfile per kind
+/// of thing is a row of them at the top of every listing of the project.
 #[must_use]
 pub fn project_path_for(root: &Path) -> PathBuf {
     root.join(".obelus").join("config.toml")
@@ -2361,13 +2363,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("the project");
         let path = project_path_for(&root);
-        let theme = Value::Choice("light".to_string());
-        write_project(&path, "theme", Some(&theme)).expect("a project's first setting");
+        let wrapped = Value::Switch(true);
+        write_project(&path, "wrap", Some(&wrapped)).expect("a project's first setting");
         assert!(path.is_file(), "a project's first setting made no file");
 
         std::fs::remove_dir_all(&root).expect("the project going");
         assert!(
-            write_project(&path, "theme", Some(&theme)).is_err(),
+            write_project(&path, "wrap", Some(&wrapped)).is_err(),
             "a setting was written into a project that has gone"
         );
         assert!(!root.exists(), "the project was made again");
@@ -3288,8 +3290,8 @@ mod tests {
         let theirs = project.with_extension("toml.writing");
         std::fs::create_dir_all(theirs.parent().expect("a directory")).expect("the directory");
         std::fs::write(&theirs, "another Obelus is halfway through this").expect("theirs");
-        let theme = super::Value::Choice("light".to_string());
-        super::write_project(&project, "theme", Some(&theme)).expect("a project's setting");
+        let wrapped = super::Value::Switch(true);
+        super::write_project(&project, "wrap", Some(&wrapped)).expect("a project's setting");
         assert_eq!(
             std::fs::read_to_string(&theirs).ok().as_deref(),
             Some("another Obelus is halfway through this"),

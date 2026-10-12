@@ -39,7 +39,7 @@ ignores them, and mixing the two makes the formatting oscillate. **Always
 Clippy must be silent. The lints are the workspace's, in the root
 `Cargo.toml` -- `missing_docs`, `unreachable_pub`, `private_interfaces` --
 because a `#![deny(..)]` in one crate root would silently stop applying to
-the other thirty-four. Every member opts in with a `[lints] workspace = true`
+the other thirty-seven. Every member opts in with a `[lints] workspace = true`
 of its own, which Cargo does not inherit for it, and every public item needs
 a doc comment.
 
@@ -591,7 +591,9 @@ crates/
                       asked (app/hearing); what is typed in a terminal is the
                       program's (app/terminals); a
                       newer Obelus is asked about once a day, not once a start
-                      (app/project/releases); pull requests and issues are two tabs of
+                      (app/project/releases); a theme the registry no longer
+                      lists is still shown, if it is installed
+                      (app/project/themes); pull requests and issues are two tabs of
                       one errand, asked of `gh` and not of GitHub, a page
                       when the reader gets to the end of the last one,
                       choosing one opens the review or the answer and says
@@ -641,6 +643,18 @@ crates/
                     neither
   obelus-icons/     the Nerd Font switch and every glyph behind it
   obelus-theme/     colours, and only fields the renderer reads
+                    · a picture travels beside a theme's colours and not
+                      among them (wallpaper)
+  obelus-themes/    the themes registry: what its index lists, in its two
+                    groups, and where a theme taken from it is kept
+                    · fetched when the reader opens the page, and kept; read
+                      field by field, and an entry Obelus cannot use is left
+                      out (lib); a theme is installed whole or not at all,
+                      which commit it came from is written inside it, and one
+                      Obelus at a time installs a theme (install)
+  obelus-download/  what every fetch from somebody else's server shares:
+                    reading a body within a limit, fetching one with its
+                    progress, checking its hash and unpacking it
   obelus-config/    the settings, their file, and what each one is
                     · what a project may set is a property of the setting; the
                       file holds preferences, not state; a setting says where
@@ -820,6 +834,11 @@ crates/
   obelus-cli/       the `ob` binary: Obelus drawn on a terminal
                     · two keys need the terminal's permission, and nothing
                       else depends on the protocol (main)
+  obelus-check-theme/ whether Obelus can read a theme, for the themes
+                    registry, and in no release
+                    · the same reading the editor does and nothing of its
+                      own, only Obelus's own rules, a binary of its own and
+                      not in a release (main)
   obelus-gui/       the `obg` binary, and the window: what a screenful of
                     cells becomes when it is not a terminal -- the grid on
                     its way over, the glyphs, the quads, and the one clock
@@ -842,8 +861,12 @@ crates/
                       before it is a blur, a region of the frame is put
                       back somewhere else rather than drawn again, a pane
                       that has gone leaves out of a picture of the screen it
-                      went from, and every pane and every box is glass over
-                      everything said before it (paint); a
+                      went from, every pane and every box is glass over
+                      everything said before it, and the picture under the
+                      page stands still while what is written on it moves
+                      (paint); a picture is decoded on a thread of its own
+                      and only the newest is drawn, and is never drawn
+                      larger than it has to be (wallpaper); a
                       window owns the selection and hands the words
                       over on the way out (clipboard); a thread that borrows
                       somebody else's connection stops before the owner takes

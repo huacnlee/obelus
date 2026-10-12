@@ -1,0 +1,18 @@
+[package]
+name = "obelus-download"
+description = "Fetching something Obelus did not write, within a limit"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+# Cargo inherits nothing here on its own; every member says it.
+[lints]
+workspace = true
+
+[dependencies]
+flate2.workspace = true
+futures.workspace = true
+reqwest.workspace = true
+sha2.workspace = true
+tar.workspace = true
+zip.workspace = true

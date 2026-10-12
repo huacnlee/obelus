@@ -53,12 +53,17 @@ impl Painter {
             // back than the band by however much of the move is already
             // done.
             let offset = (band.behind - band.since) * cell.height;
+            let rows = self.quads.len();
             for y in room.top()..room.bottom() {
                 for x in room.left()..room.right() {
                     let look = band.before.look(x, y);
                     let left = f32::from(x) * cell.width;
                     let top = f32::from(y).mul_add(cell.height, offset);
-                    if glass.is_none_or(|level| look.background != stack[level].ground) {
+                    // Nor the page over a picture, which stands where it
+                    // is under the band -- see `encode`.
+                    if glass.is_none_or(|level| look.background != stack[level].ground)
+                        && !(glass.is_none() && self.on_the_picture(look.background))
+                    {
                         self.block(
                             left,
                             top,
@@ -73,12 +78,39 @@ impl Painter {
                     }
                 }
             }
+            // Over a picture, what covers these is not opaque: the frame
+            // is put back clear where it is the page, so these rows would
+            // show through it -- the same line twice inside the band, drawn
+            // by the old page and the new, and outside it rows the slide
+            // carried past the band's edge, standing on the file above or
+            // below the list until it arrived. So they are kept to what
+            // they are for: the rows scrolled past, inside the band.
+            if self.laid.is_some() {
+                let [_, top, _, bottom] = box_of(room, cell);
+                let (from, to) = scrolled_past(top, bottom, band.behind * cell.height);
+                for quad in &mut self.quads[rows..] {
+                    quad.flags |= ONLY_ROWS;
+                    quad.radius = from;
+                    quad.lower = to;
+                }
+            }
         }
         let rooms: Vec<[f32; 4]> = bands.iter().map(|band| box_of(band.room, cell)).collect();
+        // And each band's bar, over a picture: the frame's copy of it is
+        // clear where the column is the page, so the mark standing where it
+        // is going showed through the one on its way there -- two marks.
+        // Put back below, only where the moving one has run out.
+        let hung = self.laid.is_some();
         let moving: Vec<[f32; 4]> = bands
             .iter()
             .zip(&rooms)
             .flat_map(|(band, room)| sliding(*room, panes, band.under))
+            .chain(
+                bands
+                    .iter()
+                    .filter(|_| hung)
+                    .filter_map(|band| band.bar.map(|(bar, _)| box_of(bar, cell))),
+            )
             .collect();
         self.covering(&moving);
         for (at, (band, room)) in bands.iter().zip(&rooms).enumerate() {
@@ -110,11 +142,29 @@ impl Painter {
             // seeing through. Out of the picture it is whatever it was,
             // glass included, moved.
             if let Some((bar, to_come)) = band.bar {
-                self.slid(
-                    box_of(bar, cell),
-                    mark_behind(to_come, band.behind, band.since) * cell.height,
-                    1.0,
-                );
+                let column = box_of(bar, cell);
+                let shift = mark_behind(to_come, band.behind, band.since) * cell.height;
+                // Where the moving copy runs out, the frame's own -- which
+                // `covering` left out over a picture, and put back here only
+                // in that strip, for the mark not to be drawn twice.
+                if hung {
+                    let (from, to) = scrolled_past(column[1], column[3], shift);
+                    self.quads.push(Quad {
+                        rect: [
+                            column[0],
+                            column[1],
+                            column[2] - column[0],
+                            column[3] - column[1],
+                        ],
+                        uv: [0.0; 4],
+                        colour: [0.0, 0.0, 0.0, 1.0],
+                        flags: FRAME | ONLY_ROWS,
+                        radius: from,
+                        lower: to,
+                        layer: 0,
+                    });
+                }
+                self.slid(column, shift, 1.0);
             }
         }
     }
@@ -182,13 +232,17 @@ impl Painter {
                 for x in room.left()..room.right() {
                     let look = page.look(x, y);
                     let (left, top) = (f32::from(x) * cell.width, f32::from(y) * cell.height);
-                    self.block(
-                        left,
-                        top,
-                        cell.width,
-                        cell.height,
-                        rgba(look.background, Ink::Background),
-                    );
+                    // The page over a picture is what the backdrop is drawn
+                    // on before these are put back into it -- see `encode`.
+                    if !self.on_the_picture(look.background) {
+                        self.block(
+                            left,
+                            top,
+                            cell.width,
+                            cell.height,
+                            rgba(look.background, Ink::Background),
+                        );
+                    }
                     if !look.text.trim().is_empty() {
                         let ink = rgba(look.foreground, Ink::Foreground);
                         self.glyphs_at((left, top), look, ink, 0, fonts, Size::Cell);
@@ -198,7 +252,15 @@ impl Painter {
         }
         let above = start..self.quads.len();
         let start = self.quads.len();
-        self.covering(&[]);
+        // Less where the band is put back, over a picture: the frame is clear
+        // there where it is the page, and the rows standing still showed
+        // through the rows sliding -- every line twice, in the frost. Where
+        // the slide runs out, what shows is the picture, through the blur.
+        let pieces: Vec<[f32; 4]> = match self.laid {
+            Some(_) => under.iter().map(|(_, piece)| *piece).collect(),
+            None => Vec::new(),
+        };
+        self.covering(&pieces);
         for (band, piece) in &under {
             self.slid_piece(
                 *piece,
@@ -324,6 +386,11 @@ impl Painter {
             let ground = self.ground_colour();
             let (grounds, lettered) = behind_row(behind, barred, y);
             for (start, end, colour) in grounds {
+                // Straight after the picture under the page, which is the
+                // page here already -- see `backgrounds`.
+                if self.on_the_picture(colour) {
+                    continue;
+                }
                 // What a pane was put over is the page, so a hold in it
                 // is a plate on the page's own ground.
                 self.block(
@@ -565,14 +632,8 @@ impl Painter {
                 let top = f32::from(y) * cell.height;
                 if !seen_through(lower, x, y, under.background) {
                     let ground = self.under(lower, &[], x, y);
-                    self.block(
-                        left,
-                        top,
-                        cell.width,
-                        cell.height,
-                        as_held(under.background, self.holding, ground)
-                            .unwrap_or_else(|| rgba(under.background, Ink::Background)),
-                    );
+                    let held = as_held(under.background, self.holding, ground);
+                    self.ground_back([left, top, cell.width, cell.height], under.background, held);
                 }
                 if !under.text.trim().is_empty() {
                     let ink = rgba(under.foreground, Ink::Foreground);
@@ -740,6 +801,22 @@ pub(super) fn mark_behind(to_come: f32, behind: f32, since: f32) -> f32 {
         return 0.0;
     }
     to_come * (behind / since).clamp(0.0, 1.0)
+}
+
+/// The rows of a band from `top` to `bottom` that its slide has scrolled
+/// past, as the top and bottom of them, in pixels.
+///
+/// The band is taken from `shift` further up the frame -- see `slid_piece`
+/// -- so it has nothing to show in the first `shift` of its rows, or the
+/// last where it slides the other way. That strip is what the page it
+/// scrolled off is drawn for, and nothing outside it is: the rest of the
+/// band is the band, and beyond its edges is somebody else's.
+pub(super) fn scrolled_past(top: f32, bottom: f32, shift: f32) -> (f32, f32) {
+    if shift >= 0.0 {
+        (top, (top + shift).min(bottom))
+    } else {
+        ((bottom + shift).max(top), bottom)
+    }
 }
 
 /// What of a band's room moves while it catches up, given the pane over

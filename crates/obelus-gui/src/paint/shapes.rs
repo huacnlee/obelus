@@ -186,13 +186,16 @@ impl Painter {
                 };
                 if card.ring_holds(page, x, y) && !seen_through(panes, x, y, under.background) {
                     let ground = self.under(panes, &[], x, y);
-                    self.block(
-                        f32::from(x) * cell.width,
-                        f32::from(y) * cell.height,
-                        cell.width,
-                        cell.height,
-                        as_held(under.background, self.holding, ground)
-                            .unwrap_or_else(|| rgba(under.background, Ink::Background)),
+                    let held = as_held(under.background, self.holding, ground);
+                    self.ground_back(
+                        [
+                            f32::from(x) * cell.width,
+                            f32::from(y) * cell.height,
+                            cell.width,
+                            cell.height,
+                        ],
+                        under.background,
+                        held,
                     );
                 }
             }
@@ -203,13 +206,16 @@ impl Painter {
             let look = page.look(x, y);
             if !seen_through(panes, x, y, look.background) {
                 let ground = self.under(panes, &[], x, y);
-                self.block(
-                    f32::from(x) * cell.width,
-                    f32::from(y) * cell.height,
-                    cell.width,
-                    cell.height,
-                    as_held(look.background, self.holding, ground)
-                        .unwrap_or_else(|| rgba(look.background, Ink::Background)),
+                let held = as_held(look.background, self.holding, ground);
+                self.ground_back(
+                    [
+                        f32::from(x) * cell.width,
+                        f32::from(y) * cell.height,
+                        cell.width,
+                        cell.height,
+                    ],
+                    look.background,
+                    held,
                 );
             }
         }
@@ -483,9 +489,8 @@ impl Painter {
             // screen is the plate's face rather than the colour the cell
             // wears -- see `held_face`.
             let look = page.look(tick.area.x, tick.area.y);
-            let ground = self
-                .held_face(page, tick.area, panes, framed, capped)
-                .unwrap_or_else(|| rgba(look.background, Ink::Background));
+            let held = self.held_face(page, tick.area, panes, framed, capped);
+            let ground = held.unwrap_or_else(|| rgba(look.background, Ink::Background));
             let side = (cell.width * BOX).round().max(3.0);
             // A shade above the middle of the cell, which is where the
             // middle of the writing is: letters sit on a baseline with
@@ -514,15 +519,15 @@ impl Painter {
                     layer: 0,
                     lower: 0.0,
                 }),
+                // The hollow is the cell's ground seen through the outline,
+                // which over a picture is the picture with the page on it.
                 false => {
                     let edge = (side * BOX_EDGE).round().max(1.0);
-                    self.rounded(
-                        at + edge,
-                        over + edge,
-                        side - edge * 2.0,
-                        side - edge * 2.0,
+                    self.rounded_back(
+                        [at + edge, over + edge, side - edge * 2.0, side - edge * 2.0],
                         (radius - edge).max(0.0),
-                        ground,
+                        look.background,
+                        held,
                     );
                 }
             }
@@ -630,14 +635,11 @@ impl Painter {
         let lip = (cell.height * LIP).round().max(1.0);
         let height = (cell.height - inset * 2.0).max(1.0);
         let radius = (height * ROUNDING).min(cell.width);
+        // As the page looks there, which over a picture is the picture with
+        // the page laid on it: a block of the page's own colour was a dark
+        // square behind every cap at the foot.
         if put_back {
-            self.block(
-                left,
-                top,
-                width,
-                cell.height,
-                rgba(cap.page, Ink::Background),
-            );
+            self.ground_back([left, top, width, cell.height], cap.page, None);
         }
         // Held off the cells either side, which the ground above is
         // not: what was put back is every cell the cap was said

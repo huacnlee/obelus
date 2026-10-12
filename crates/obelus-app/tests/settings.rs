@@ -69,7 +69,8 @@ fn the_row_under_a_list_is_not_marked() {
     let scratch = temporary("under-a-list");
     let mut app = open(&settings_file(&scratch));
     let dump = support::render(&mut app, 66, 12);
-    let lit = support::drawn_in(&dump, "Theme");
+    // With the space, which the tab of themes has not got after its word.
+    let lit = support::drawn_in(&dump, "Theme ");
     // And the tab, which is the same mark across a row: the page's own name
     // is the first word on the screen.
     let tab = support::drawn_in(&dump, "Settings");
@@ -82,7 +83,7 @@ fn the_row_under_a_list_is_not_marked() {
     let dump = support::render(&mut app, 66, 12);
     assert!(app.picker().is_some(), "the choices did not open:\n{dump}");
     assert_ne!(
-        support::drawn_in(&dump, "Theme"),
+        support::drawn_in(&dump, "Theme "),
         lit,
         "the page's row is lit under the list:\n{dump}"
     );
@@ -95,7 +96,7 @@ fn the_row_under_a_list_is_not_marked() {
     support::press(&mut app, KeyCode::Esc);
     let dump = support::render(&mut app, 66, 12);
     assert_eq!(
-        support::drawn_in(&dump, "Theme"),
+        support::drawn_in(&dump, "Theme "),
         lit,
         "the row did not take the mark back:\n{dump}"
     );
@@ -214,6 +215,8 @@ fn a_choice_opens_the_list_every_other_choice_uses() {
         obelus_theme::builtin::ALL
             .iter()
             .map(|(name, _)| (*name).to_string())
+            // And the row that goes for more of them, at the foot.
+            .chain(std::iter::once("More themes".to_string()))
             .collect::<Vec<_>>(),
         "not the theme's choices"
     );
@@ -441,22 +444,31 @@ fn every_setting_is_on_one_page_under_a_heading() {
     );
 
     // And the tabs are the pages: the settings, the keys, the chat this
-    // machine can be reached from, the agents -- the agents last, so that
-    // shift and tab from the settings is still the way to them.
+    // machine can be reached from, the themes, the agents -- the agents
+    // last, so that shift and tab from the settings is still the way to
+    // them.
     assert_eq!(
         app.settings().expect("the settings").tabs(),
-        ["Settings", "Keys", "Remote", "Agents"]
+        ["Settings", "Keys", "Remote", "Themes", "Agents"]
     );
     support::press(&mut app, KeyCode::Tab);
     assert!(app.settings().expect("the settings").on_keys());
     support::press(&mut app, KeyCode::Tab);
     assert!(app.settings().expect("the settings").on_remote());
     support::press(&mut app, KeyCode::Tab);
+    assert!(app.settings().expect("the settings").on_themes());
+    assert!(
+        rows(&app).is_empty(),
+        "the themes page has settings rows on it"
+    );
+    support::press(&mut app, KeyCode::Tab);
     assert!(app.settings().expect("the settings").on_agents());
     assert!(
         rows(&app).is_empty(),
         "the agents page has settings rows on it"
     );
+    support::press(&mut app, KeyCode::BackTab);
+    assert!(app.settings().expect("the settings").on_themes());
     support::press(&mut app, KeyCode::BackTab);
     assert!(app.settings().expect("the settings").on_remote());
     support::press(&mut app, KeyCode::BackTab);
@@ -513,6 +525,53 @@ fn a_setting_with_no_gloss_keeps_the_blank_under_it() {
     );
 }
 
+/// A setting's choices open as a compact list over the settings, and the
+/// file behind the settings stays where it is: the list is over the page,
+/// not over the file, so there is no caret to keep clear of it. The page
+/// itself still has only the rows above the list, which is how a setting
+/// low on it keeps its row in sight while its choices are open.
+///
+/// Deliberate breaks: the file scrolled into view whatever covers it (its
+/// top line moves while a theme is chosen), and `editor_room` handing the
+/// whole region over whenever a page is open, which was the first fix for
+/// that (the page then has no room kept above the list).
+#[test]
+fn a_list_over_the_settings_leaves_the_file_where_it_is() {
+    let _turn = SETTINGS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let scratch = temporary("room-behind");
+    let mut app = App::new(vec![support::open_fixture("many_lines.rs")]);
+    app.config_file_for_test(settings_file(&scratch));
+    let screen = ratatui::layout::Rect::new(0, 0, 66, 12);
+    support::lay_out(&mut app, screen.width, screen.height);
+    // Low on the screen, where a list's room would have to scroll it.
+    for _ in 0..8 {
+        support::press(&mut app, KeyCode::Down);
+    }
+    let _ = support::render(&mut app, screen.width, screen.height);
+    let top = app.current_buffer().expect("the file").viewport().top;
+
+    dispatch::dispatch(&mut app, Command::ConfigOpen);
+    // The theme is the first row, and enter opens its choices.
+    support::press(&mut app, KeyCode::Enter);
+    let _ = support::render(&mut app, screen.width, screen.height);
+    assert!(
+        app.picker()
+            .is_some_and(|list| list.layout() != obelus_component::picker::PickerLayout::FullArea),
+        "the theme's choices are not a compact list"
+    );
+    assert_eq!(
+        app.current_buffer().expect("the file").viewport().top,
+        top,
+        "the file behind the settings scrolled for a list over the settings"
+    );
+    assert!(
+        obelus_ui::editor_room(screen, &app).height < obelus_ui::regions(screen).editor.height,
+        "the settings page lost the room above its own list"
+    );
+}
+
 /// Typing narrows the rows, and the count on the status bar says how many
 /// are left. Plainly by substring, because a reader typing "the" means the
 /// word.
@@ -554,7 +613,8 @@ fn typing_narrows_the_settings() {
     let row = support::text_block(&dump)
         .lines()
         .filter(|row| !row.is_empty())
-        .position(|row| row.contains("Theme"))
+        // With the space, which the tab of themes has not got.
+        .position(|row| row.contains("Theme "))
         .expect("the row that matched");
     // The "T" of "Theme" is the first cell of the name: past the
     // `NN|` the dump writes down its side, past the row's own left-hand
@@ -2618,9 +2678,9 @@ fn a_press_on_a_tab_goes_to_it() {
     let dump = support::render(&mut app, 66, 12);
 
     // The tabs are the page's first row, and the third of them is two away
-    // -- which the shorter way round makes one step, because they wrap.
+    // -- and three the other way, because they wrap.
     let names = app.settings().expect("the page").tabs();
-    assert_eq!(names.len(), 4, "the page does not have the four tabs");
+    assert_eq!(names.len(), 5, "the page does not have the five tabs");
     assert_eq!(app.settings().expect("the page").tab(), 0);
     let row = support::text_block(&dump)
         .lines()
@@ -3260,10 +3320,10 @@ fn the_projects_page_has_one_tab() {
         failure: None,
     }));
 
-    // The reader's own page has four.
+    // The reader's own page has five.
     assert_eq!(
         app.settings().expect("the settings").tabs(),
-        ["Settings", "Keys", "Remote", "Agents"]
+        ["Settings", "Keys", "Remote", "Themes", "Agents"]
     );
 
     dispatch::dispatch(&mut app, Command::ConfigProject);
@@ -3761,6 +3821,9 @@ impl obelus_app::app::Drawing for Told {
     /// Nor this: which faces a window draws with is its own business, and
     /// what is under test here is the size.
     fn use_fonts(&self, _: &[String]) {}
+
+    /// Nor this, which has a test of its own in `themes`.
+    fn hang(&self, _: Option<&obelus_theme::Wallpaper>) {}
 }
 
 impl Told {
@@ -4099,7 +4162,7 @@ fn a_line_that_did_nothing_is_a_warning_on_that_line() {
 #[test]
 fn what_a_project_may_not_set_is_marked_on_the_projects_file() {
     let _taken = SETTINGS.lock().expect("the lock");
-    let scratch = project("not-allowed", "theme = \"dark\"\nagent = \"copilot\"\n");
+    let scratch = project("not-allowed", "wrap = true\nagent = \"copilot\"\n");
     let theirs = scratch.path().join(".obelus").join("config.toml");
 
     let mut app = App::new(vec![

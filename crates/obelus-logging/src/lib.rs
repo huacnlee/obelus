@@ -85,11 +85,13 @@ pub const OURS: &[&str] = &[
     "obelus_agent",
     "obelus_app",
     "obelus_buffer",
+    "obelus_check_theme",
     "obelus_claim",
     "obelus_clipboard",
     "obelus_command",
     "obelus_component",
     "obelus_config",
+    "obelus_download",
     "obelus_editing",
     "obelus_font",
     "obelus_git",
@@ -112,6 +114,7 @@ pub const OURS: &[&str] = &[
     "obelus_terminal",
     "obelus_text",
     "obelus_theme",
+    "obelus_themes",
     "obelus_todo",
     "obelus_ui",
     "obelus_watch",
@@ -538,14 +541,15 @@ mod tests {
                 continue;
             };
             // A binary logs under the binary's name, and a library under its
-            // own, with the underscores a module path has.
+            // own -- both with the underscores a module path has, which is
+            // what Rust makes of a hyphen in either.
             let target = match manifest.split_once("[[bin]]") {
                 Some((_, bin)) => bin
                     .lines()
                     .find_map(|line| line.trim().strip_prefix("name = "))
                     .expect("a binary has a name")
                     .trim_matches('"')
-                    .to_string(),
+                    .replace('-', "_"),
                 None => path
                     .file_name()
                     .expect("a crate has a name")

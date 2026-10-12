@@ -103,6 +103,19 @@ pub(crate) enum Update {
         /// Behind the row their keys are on.
         row: Color,
     },
+    /// The picture under the page, decoded, or that there is none.
+    ///
+    /// The same journey as the ground, a moment later: the application
+    /// says which file, and it arrives here once a thread has read it --
+    /// see `wallpaper`.
+    Wallpaper {
+        /// Which asking this answers. Only one newer than the last drawn
+        /// is drawn, so two pictures decoded in the wrong order cannot put
+        /// the older one back.
+        number: u64,
+        /// The picture, or nothing.
+        hung: Option<Arc<crate::wallpaper::Hung>>,
+    },
     /// What shape the caret is, and whose it is.
     ///
     /// Which is a fact about the frame it arrives with -- both depend on
@@ -1000,6 +1013,8 @@ impl obelus_ui::image::Marks for Marking {
 pub(crate) struct Telling {
     updates: Sender<Update>,
     wake: Arc<dyn Fn() + Send + Sync>,
+    /// What decodes the picture under the page -- see `wallpaper`.
+    decoder: Arc<crate::wallpaper::Decoder>,
 }
 
 impl std::fmt::Debug for Telling {
@@ -1009,9 +1024,27 @@ impl std::fmt::Debug for Telling {
 }
 
 impl Telling {
-    /// Says where to send what the application works out about the window.
-    pub(crate) fn new(updates: Sender<Update>, wake: Arc<dyn Fn() + Send + Sync>) -> Self {
-        Self { updates, wake }
+    /// Says where to send what the application works out about the window,
+    /// and how large the screen it opened on is: as large as a picture
+    /// fitted to the window is ever drawn.
+    pub(crate) fn new(
+        updates: Sender<Update>,
+        wake: Arc<dyn Fn() + Send + Sync>,
+        screen: [u32; 2],
+    ) -> Self {
+        let decoder = {
+            let (updates, wake) = (updates.clone(), Arc::clone(&wake));
+            crate::wallpaper::Decoder::new(screen, move |number, hung| {
+                if updates.send(Update::Wallpaper { number, hung }).is_ok() {
+                    wake();
+                }
+            })
+        };
+        Self {
+            updates,
+            wake,
+            decoder,
+        }
     }
 }
 
@@ -1045,6 +1078,17 @@ impl obelus_app::app::Drawing for Telling {
     fn animates(&self, on: bool) {
         let _ = self.updates.send(Update::Animates(on));
         (self.wake)();
+    }
+
+    fn hang(&self, wallpaper: Option<&obelus_theme::Wallpaper>) {
+        // The page lets go of its picture at once where it is not the one
+        // wanted -- see `Decoder::ask` -- and that none is numbered like
+        // any picture, so one still decoding cannot arrive after it.
+        if let Some(number) = self.decoder.ask(wallpaper.cloned())
+            && (self.updates.send(Update::Wallpaper { number, hung: None })).is_ok()
+        {
+            (self.wake)();
+        }
     }
 
     fn caret_is(&self, caret: Caret, whose: Option<Layer>, typing: bool) {
@@ -1584,6 +1628,10 @@ impl Page {
             }
             Update::Holding { .. } => {
                 tracing::warn!("a hold's colours reached the page");
+                false
+            }
+            Update::Wallpaper { .. } => {
+                tracing::warn!("a wallpaper reached the page");
                 false
             }
         }
