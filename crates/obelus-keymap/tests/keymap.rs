@@ -929,14 +929,3 @@ fn a_chord_with_a_mark_or_a_name_reads_back() {
     );
     assert_eq!(KeyChord::parse("\u{2191}+"), None);
 }
-
-/// The default's old name names it still, so a settings file from before it
-/// was named after Obelus starts from the same keys.
-///
-/// Broken deliberately by taking the `classic` arm out of `Layout::named`.
-#[test]
-fn the_default_answers_to_its_old_name() {
-    assert_eq!(Layout::named("classic"), Some(Layout::Obelus));
-    assert_eq!(Layout::named("obelus"), Some(Layout::Obelus));
-    assert_eq!(Layout::Obelus.name(), "obelus");
-}

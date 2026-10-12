@@ -491,11 +491,6 @@ impl Layout {
     /// The layout the file's word names, if one does.
     #[must_use]
     pub fn named(name: &str) -> Option<Self> {
-        // What [`Self::Obelus`] was called before it was named after the
-        // program whose keys they are: a file that says it says the default.
-        if name == "classic" {
-            return Some(Self::Obelus);
-        }
         Self::ALL.into_iter().find(|layout| layout.name() == name)
     }
 }

@@ -1663,12 +1663,6 @@ pub fn apply(config: &mut Config, table: &toml::Table, whose: Whose) -> Applied 
     if let Some(word) = table.get("keys_from").and_then(toml::Value::as_str)
         && allowed("keys_from")
     {
-        // What the default was called before it was named after Obelus, read
-        // as the default -- and so left out of the file at the next save.
-        let word = match word {
-            "classic" => KEY_LAYOUTS[0],
-            word => word,
-        };
         if !KEY_LAYOUTS.contains(&word) {
             tracing::warn!(
                 word,
@@ -2708,25 +2702,6 @@ mod tests {
         let table: toml::Table = "keys_from = \"mnemonic\"".parse().expect("toml");
         apply(&mut config, &table, Whose::Reader);
         assert_eq!(config.keys_from, "mnemonic");
-    }
-
-    /// A file from before the default was named after Obelus still reads:
-    /// `classic` is the default under its old name, not a word nothing
-    /// answers to, and the next save leaves it out as it leaves any default.
-    ///
-    /// Broken deliberately by taking the `"classic"` arm out of the reading
-    /// of `keys_from`: the line came back ignored, as `NoSuchChoice`.
-    #[test]
-    fn the_default_is_read_under_its_old_name() {
-        let super::Reading::Settings {
-            config, ignored, ..
-        } = super::reading_of("keys_from = \"classic\"\n")
-        else {
-            panic!("did not read");
-        };
-        assert!(ignored.is_empty(), "{ignored:?}");
-        assert_eq!(config.keys_from, "obelus");
-        assert!(!to_toml(&config).contains("keys_from"));
     }
 
     /// The two editors' layouts are words the file can hold, and are
