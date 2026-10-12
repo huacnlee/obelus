@@ -383,6 +383,11 @@ command is gone and `App::blame` reads the setting.
   what the rule is about: they are the names a desktop already sends a
   terminal for paste and copy. Why Obelus answers them, and why copy still
   cannot work where a terminal keeps them, is argued in `keymap::why_not`.
+  The `vscode` and `textmate` layouts borrow those editors' `ctrl+shift`
+  chords, which are their names and not Obelus's -- each with an alt chord
+  beside it, because a terminal without the keyboard protocol sends `ctrl`
+  and the letter. A reader may bind one too, and is not warned: where it
+  cannot arrive, it does not.
 
 **Escape always gives up on the nearest thing**, and everything else is
 reached from the palette: a chord for every command is how a key table stops

@@ -4487,10 +4487,15 @@ fn a_workflow_nothing_answers_to_is_said_on_the_welcome_screen() {
 /// fires is the thing the whole `why_not` judgement exists to prevent, and
 /// until now the file was the one place it could still happen.
 ///
+/// And `ctrl+shift` on a letter is not one of them: it binds, as the
+/// editors' layouts do, and a terminal that cannot send it sends `ctrl` and
+/// the letter -- which is said nowhere, by the reader's choice.
+///
 /// Deliberate break: `Keymap::with` skipping quietly, which is what it did
 /// -- the count drops to zero. And `keys_that_bound_nothing` looking the
 /// span up under the bare name rather than under `keys.`, which leaves
-/// three problems with nowhere to be.
+/// three problems with nowhere to be. And refusing control with a capital
+/// in `why_not` again: `ctrl+shift+u` was a fourth.
 #[test]
 fn a_key_that_bound_nothing_is_a_warning_on_that_line() {
     let _taken = SETTINGS.lock().expect("the lock");
@@ -4499,7 +4504,8 @@ fn a_key_that_bound_nothing_is_a_warning_on_that_line() {
     std::fs::write(
         &file,
         "theme = \"dark\"\n\n[keys]\nopen-file = \"f1\"\nopen-fiel = \"f2\"\n\
-         save-file = \"ctrl+shiftier+s\"\nclose-document = \"ctrl+shift+e\"\n",
+         save-file = \"ctrl+shiftier+s\"\nclose-document = \"ctrl+alt+e\"\n\
+         redo = \"ctrl+shift+u\"\n",
     )
     .expect("writing a settings file");
 
@@ -4514,8 +4520,11 @@ fn a_key_that_bound_nothing_is_a_warning_on_that_line() {
         .map(|problem| (problem.span.line.get(), problem.message.clone()))
         .collect();
     assert_eq!(said.len(), 3, "{said:?}");
-    // The line that binds is not one of them.
-    assert!(!said.iter().any(|(line, _)| *line == 3), "{said:?}");
+    // The lines that bind are not among them.
+    assert!(
+        !said.iter().any(|(line, _)| *line == 3 || *line == 7),
+        "{said:?}"
+    );
     assert_eq!(said[0], (4, "No command is called `open-fiel`".to_string()));
     assert_eq!(
         said[1],
