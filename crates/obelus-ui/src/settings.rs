@@ -223,27 +223,17 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
     let on_row = settings.rows(offering).get(settings.focus()).copied();
     let adding = matches!(on_row, Some(Shown::AddVariable { .. }));
     let removes = matches!(on_row, Some(Shown::Variable { .. }));
-    let (enter, saying) = match remote {
+    let enter = match remote {
         Some(Shown::Remote { row, .. }) => match row {
-            RemoteRow::Pair => (
-                "Pair",
-                "Make a code to send in the group you put the bot in",
-            ),
-            RemoteRow::Setup(obelus_remote::platform::Setup::Copy { .. }) => {
-                ("Copy", "Copy it, to paste where the app is made")
-            }
-            RemoteRow::Setup(obelus_remote::platform::Setup::Steps { .. }) => {
-                ("Open", "Open the steps in the browser")
-            }
-            RemoteRow::Platform | RemoteRow::Field(_) | RemoteRow::People => {
-                ("Change", "Change it, or open what it can be")
-            }
+            RemoteRow::Pair => "Pair",
+            RemoteRow::Setup(obelus_remote::platform::Setup::Copy { .. }) => "Copy",
+            RemoteRow::Setup(obelus_remote::platform::Setup::Steps { .. }) => "Open",
+            RemoteRow::Platform | RemoteRow::Field(_) | RemoteRow::People => "Change",
         },
-        _ if adding => ("Add", "Add a variable to what the agent is started with"),
+        _ if adding => "Add",
         _ => match settings.keys().get(settings.focus()) {
-            Some((KeyRow::Key { .. }, Some(_))) => ("Change", "Put this command on another key"),
-            Some((KeyRow::Key { .. }, None)) => ("Add a key", "Put this command on a key"),
-            Some((KeyRow::Setting(_), _)) | None => ("Change", "Change it, or open what it can be"),
+            Some((KeyRow::Key { .. }, None)) => "Add a key",
+            Some((KeyRow::Key { .. }, Some(_)) | (KeyRow::Setting(_), _)) | None => "Change",
         },
     };
     // And one more key for a command that has one, on control or alt: see
@@ -273,47 +263,33 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
     // has one, and giving up.
     if let Some(binding) = settings.binding_at() {
         return vec![
-            Hint::common(bare(KeyCode::Delete), "Remove")
-                .saying("Take this key off the command")
-                .when(binding.replacing),
-            Hint::common(bare(KeyCode::Esc), "Back").saying("Leave the key as it was"),
+            Hint::new(bare(KeyCode::Delete), "Remove").when(binding.replacing),
+            Hint::new(bare(KeyCode::Esc), "Back"),
         ];
     }
     // Delete is the filter's while the filter has something for it, so
     // nothing below says what it does to a row until then.
     let rows_delete = !settings.delete_is_the_filters();
     vec![
-        Hint::common(bare(KeyCode::Enter), enter)
-            .saying(saying)
+        Hint::new(bare(KeyCode::Enter), enter)
             // Asked of whichever page is showing rather than of the
             // settings: the keys page has rows too, and enter does the same
             // sort of thing to one of them.
             .when(settings.row_count(offering) > 0 && !pairing_waits),
-        Hint::common(
+        Hint::new(
             obelus_keymap::KeyChord::new(KeyCode::Enter, settings.adds_with()),
             "Add a key",
         )
-        .saying("Put this command on one more key")
         .when(adds),
-        Hint::common(bare(KeyCode::Delete), "Forget")
-            .saying("Take this out of the keyring, or out of the settings")
-            .when(forgets && rows_delete),
+        Hint::new(bare(KeyCode::Delete), "Forget").when(forgets && rows_delete),
         // On an agent's row, and only while there is something to undo:
         // what `delete` leaves there is not a default of Obelus's but the
         // agent's own answer.
-        Hint::common(bare(KeyCode::Delete), AGENTS_OWN)
-            .saying("Stop saying what this one starts on, and leave it to the agent")
-            .when(focused.is_some() && rows_delete),
-        Hint::common(bare(KeyCode::Delete), "Remove")
-            .saying("Stop starting the agent with this one")
-            .when(removes && rows_delete),
-        Hint::common(bare(KeyCode::Delete), "Unset")
-            .saying("Take this setting out of the project's file")
-            .when(
-                rows_delete && settings.on_project() && !settings.on_keys() && !settings.on_cards(),
-            ),
-        // The card's, not the foot's: see `crate::foot`.
-        Hint::rare(bare(KeyCode::Esc), "Leave").saying("Leave the settings"),
+        Hint::new(bare(KeyCode::Delete), AGENTS_OWN).when(focused.is_some() && rows_delete),
+        Hint::new(bare(KeyCode::Delete), "Remove").when(removes && rows_delete),
+        Hint::new(bare(KeyCode::Delete), "Unset").when(
+            rows_delete && settings.on_project() && !settings.on_keys() && !settings.on_cards(),
+        ),
     ]
 }
 
@@ -325,19 +301,15 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
 fn theme_hints(settings: &Settings, card: Option<&ThemeCard>) -> Vec<Hint> {
     use crossterm::event::{KeyCode, KeyModifiers};
     let bare = |code| obelus_keymap::KeyChord::new(code, KeyModifiers::NONE);
-    let (enter, saying) = match card {
-        Some(card) if card.installed => ("Update", "Fetch the newer version of this theme"),
-        _ => ("Install", "Fetch this theme, to choose among your own"),
+    let enter = match card {
+        Some(card) if card.installed => "Update",
+        _ => "Install",
     };
     vec![
-        Hint::common(bare(KeyCode::Enter), enter)
-            .saying(saying)
-            .when(card.is_some_and(ThemeCard::may_be_installed)),
-        Hint::common(bare(KeyCode::Delete), "Remove")
-            .saying("Take this theme off this machine")
-            .when(
-                card.is_some_and(ThemeCard::may_be_taken_away) && !settings.delete_is_the_filters(),
-            ),
+        Hint::new(bare(KeyCode::Enter), enter).when(card.is_some_and(ThemeCard::may_be_installed)),
+        Hint::new(bare(KeyCode::Delete), "Remove").when(
+            card.is_some_and(ThemeCard::may_be_taken_away) && !settings.delete_is_the_filters(),
+        ),
     ]
 }
 
@@ -565,14 +537,12 @@ impl Widget for SettingsView<'_> {
         // and a row of a table has nowhere to say what one is.
         if self.settings.on_agents() {
             self.agents(cells, region);
-            self.keys_card(cells, area, &hints);
             return;
         }
         // And so are the themes, for the same reason and one more: there is
         // no picture of one on its card, so its words are all there is.
         if self.settings.on_themes() {
             self.themes(cells, region);
-            self.keys_card(cells, area, &hints);
             return;
         }
 
@@ -618,13 +588,11 @@ impl Widget for SettingsView<'_> {
                 })
                 .collect();
             self.column(cells, region, &rows, "No command by that name");
-            self.keys_card(cells, area, &hints);
             return;
         }
 
         let rows = self.rows(region);
         self.column(cells, region, &rows, "No setting by that name");
-        self.keys_card(cells, area, &hints);
     }
 }
 
@@ -941,16 +909,6 @@ enum Aside {
 }
 
 impl SettingsView<'_> {
-    /// Every key this page answers to, where the reader asked for them.
-    ///
-    /// Above the foot, which says how to close it: a card that covered the
-    /// way out would be a card with no way out on screen.
-    fn keys_card(&self, cells: &mut CellBuffer, area: Rect, hints: &[Hint]) {
-        if self.settings.showing_keys() {
-            crate::keys_card(cells, crate::footed(area, hints), hints, self.theme);
-        }
-    }
-
     /// A page's rows, drawn one to a row.
     ///
     /// One loop for the settings and for the keys, because they are the

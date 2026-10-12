@@ -961,8 +961,6 @@ fn list_over(
         }
     }
 
-    // Last, because the card it can put up goes over everything this list is
-    // showing -- the preview included, which is drawn after the rows and
-    // would otherwise be drawn over the bottom half of it.
+    // Under the rows and the preview both: see `picker::foot_of`.
     picker::foot_of(cells, list, room, app.theme());
 }

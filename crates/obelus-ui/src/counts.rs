@@ -122,7 +122,7 @@ pub fn hints(counts: &Counts) -> Vec<Hint> {
     let on = counts.rows().get(counts.window().focus());
     let folds = on.and_then(|row| row.open);
     vec![
-        Hint::common(
+        Hint::new(
             bare(KeyCode::Enter),
             match folds {
                 Some(true) => "Close",
@@ -130,16 +130,7 @@ pub fn hints(counts: &Counts) -> Vec<Hint> {
                 None => "Read it",
             },
         )
-        .saying(match folds {
-            Some(_) => "Show what is in it, or stop",
-            None => "Read the file this row names",
-        })
         .when(on.is_some_and(|row| row.go.is_some())),
-        // The card's, not the foot's: see `crate::foot`. What earns it a card
-        // row rather than nothing at all is the *other* thing escape does
-        // here -- one press drops the language a tab is narrowed to, and
-        // only the next leaves.
-        Hint::rare(bare(KeyCode::Esc), "Leave").saying("Leave, or drop the language first"),
     ]
 }
 
@@ -338,12 +329,6 @@ impl Widget for CountsView<'_> {
         }
 
         crate::foot(cells, area, &hints, self.theme);
-        // Over everything, because it is what the reader asked for and the
-        // table is what they asked about. Above the foot, which says how to
-        // close it.
-        if self.counts.showing_keys() {
-            crate::keys_card(cells, crate::footed(area, &hints), &hints, self.theme);
-        }
     }
 }
 

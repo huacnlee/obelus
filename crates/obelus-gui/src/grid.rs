@@ -847,8 +847,8 @@ impl Marked {
     /// a picture drawn writes nothing in the cells it goes in -- that is
     /// what `Images::draw` answering `true` means -- so there is no glyph
     /// of its own to look for, and anything in them at all is somebody
-    /// else's writing. The card of every key, opened over the agents page,
-    /// had two agents' marks sitting on its frame.
+    /// else's writing. A box opened over the agents page had two agents'
+    /// marks sitting on its frame.
     pub(crate) fn still_said(&self, page: &Page) -> bool {
         let slot = obelus_ui::image::SLOT;
         (self.y..self.y.saturating_add(slot.height)).all(|y| {
@@ -1879,14 +1879,13 @@ mod tests {
 
     /// And a mark is drawn only where the cells are still nobody's.
     ///
-    /// Deliberate break: answer `true`. The card of every key, opened over
-    /// the agents page, then has two agents' marks sitting on its frame.
-    /// Or ask about the first cell alone: a mark is two cells wide, and a
-    /// card whose edge lands in the second of them is a picture over a
-    /// line.
+    /// Deliberate break: answer `true`. A box opened over the agents page
+    /// then has two agents' marks sitting on its frame. Or ask about the
+    /// first cell alone: a mark is two cells wide, and a box whose edge
+    /// lands in the second of them is a picture over a line.
     #[test]
     fn a_mark_is_drawn_only_where_the_cells_are_still_nobody_s() {
-        // A row the card's frame reached the third cell of, and a row it
+        // A row a box's frame reached the third cell of, and a row it
         // did not reach at all.
         let page = written(&["  \u{2502}", "   "]);
         let mark = |x: u16, y: u16| Marked {

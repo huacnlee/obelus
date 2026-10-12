@@ -751,8 +751,7 @@ fn the_list_moves_only_when_the_cursor_reaches_an_edge() {
     );
 }
 
-/// The file list says at its foot that it has a key of its own, and
-/// `ctrl+k` says the rest.
+/// The file list says at its foot that it has a key of its own.
 ///
 /// Only that list: every other one answers to the arrows, enter and escape,
 /// and a row saying so would be a row spent on what the reader just did.
@@ -764,13 +763,6 @@ fn the_file_list_says_what_its_own_key_does() {
     assert!(
         support::text_block(&dump).contains("Ignored files"),
         "the file list has no foot:\n{dump}"
-    );
-
-    press_control(&mut app, 'k');
-    let card = support::render(&mut app, 72, 24);
-    assert!(
-        support::text_block(&card).contains("Offer the files the project ignores"),
-        "ctrl+k said nothing:\n{card}"
     );
 }
 
@@ -860,10 +852,20 @@ fn the_foot_says_which_way_the_key_is_set() {
 ///
 /// Nor does the foot, which has nothing left to say: every key it has is
 /// the tree's. Deliberate break: answer `every_hint` from `hints` whatever
-/// it holds, and the changed tab's foot is back -- a rule, and `Keys` at
-/// the end of it pointing at a card of grey.
+/// it holds, and the changed tab's foot is back -- a rule over a row with
+/// nothing on it.
 #[test]
 fn the_key_is_not_offered_where_it_would_do_nothing() {
+    // Whether there is a rule over a row of keys: the foot's two rows sit
+    // over the rule and the box typed into, so its rule is the fourth row
+    // from the bottom. Without a foot that row is the preview's.
+    let footed = |dump: &str| {
+        let text = support::text_block(dump);
+        let rows: Vec<&str> = text.lines().collect();
+        rows[rows.len() - 4]
+            .split_once('|')
+            .is_some_and(|(_, row)| !row.is_empty() && row.chars().all(|c| c == '\u{2500}'))
+    };
     let mut app = App::new(vec![support::open_fixture("sample.rs")]);
     app.statuses_for_test(
         [(
@@ -881,7 +883,7 @@ fn the_key_is_not_offered_where_it_would_do_nothing() {
         "the key is not offered on the tab it works on:\n{all}"
     );
     assert!(
-        support::text_block(&all).contains("Keys"),
+        footed(&all),
         "the tab it works on has no foot, so the one below proves nothing:\n{all}"
     );
 
@@ -892,7 +894,7 @@ fn the_key_is_not_offered_where_it_would_do_nothing() {
         "the foot offers a key that would do nothing:\n{changed}"
     );
     assert!(
-        !support::text_block(&changed).contains("Keys"),
+        !footed(&changed),
         "a foot with nothing on it that can be pressed:\n{changed}"
     );
 }

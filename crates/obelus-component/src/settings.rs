@@ -592,8 +592,6 @@ impl KeyRow {
 /// The settings view.
 #[derive(Debug)]
 pub struct Settings {
-    /// Whether every key this page answers to is showing.
-    keys_showing: bool,
     /// What has been typed, which narrows the rows.
     query: Field,
     /// Which command's key is being pressed, while one is, and on which of
@@ -653,7 +651,6 @@ impl Settings {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            keys_showing: false,
             query: Field::new(),
             binding: None,
             ctrl_enter: true,
@@ -670,7 +667,6 @@ impl Settings {
     #[must_use]
     pub fn for_project() -> Self {
         Self {
-            keys_showing: false,
             query: Field::new(),
             binding: None,
             ctrl_enter: true,
@@ -711,12 +707,6 @@ impl Settings {
             .get(self.page)
             .copied()
             .unwrap_or(Page::Settings)
-    }
-
-    /// Whether the list of every key is showing.
-    #[must_use]
-    pub const fn showing_keys(&self) -> bool {
-        self.keys_showing
     }
 
     /// What typing into this page narrows, for the row before anything
@@ -1518,13 +1508,6 @@ impl Settings {
             }
         }
 
-        // The card's key before the modifiers are judged, because it has
-        // one: control is what every key below this refuses.
-        if obelus_keymap::is_keys_card(key) {
-            self.keys_showing = !self.keys_showing;
-            return SettingsOutcome::Consumed;
-        }
-
         // One more key for the command the reader is on, whichever of its
         // rows. `ctrl+enter` and `alt+enter` both, every time: the first is
         // plain enter on a terminal without the keyboard protocol, which
@@ -1604,12 +1587,7 @@ impl Settings {
         }
 
         match key.code {
-            // The card first: a key that opens a thing closes that thing.
-            KeyCode::Esc if bare && self.keys_showing => {
-                self.keys_showing = false;
-                SettingsOutcome::Consumed
-            }
-            // Then what is held in the filter, which is nearer than the
+            // What is held in the filter first, which is nearer than the
             // page it is on.
             KeyCode::Esc if bare && self.query.let_go() => SettingsOutcome::Consumed,
             KeyCode::Esc if bare => SettingsOutcome::Cancelled,

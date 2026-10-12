@@ -13,10 +13,7 @@ use obelus_component::todo::{Row, Talked, TodoView as Notes};
 use obelus_theme::Theme;
 use ratatui::{buffer::Buffer as CellBuffer, layout::Rect, style::Style, widgets::Widget};
 
-use crate::{
-    Hint, Marked, Screen, editor::SCROLLBAR_WIDTH, fill, foot_without_a_card, footed, put,
-    write_marked,
-};
+use crate::{Hint, Marked, Screen, editor::SCROLLBAR_WIDTH, fill, foot, footed, put, write_marked};
 
 /// Where the notes go, inside a region this size.
 ///
@@ -37,10 +34,9 @@ pub fn list_region(area: Rect, hints: &[Hint]) -> Rect {
 
 /// What the keys do here, and which of them do anything at the moment.
 ///
-/// One list, all of it common: what the foot draws is the whole of what
-/// this view says about itself. Which of them are on varies with what is
-/// selected, so the row is what can be pressed right now rather than a
-/// standing notice.
+/// One list: what the foot draws is the whole of what this view says about
+/// itself. Which of them are on varies with what is selected, so the row is
+/// what can be pressed right now rather than a standing notice.
 #[must_use]
 pub fn hints(notes: &Notes) -> Vec<Hint> {
     // Which keys would change the note the caret is in, and so which the
@@ -52,11 +48,8 @@ pub fn hints(notes: &Notes) -> Vec<Hint> {
     let bare = |code| chord(code, KeyModifiers::NONE);
     let alt = |code| chord(code, KeyModifiers::ALT);
     let on = notes.selected_note();
-    // All of them at the foot, and none of them held back. A card of every
-    // key is what a dialog has -- a thing opened over what the reader was
-    // doing, which owns the keyboard while it is up and has to be able to
-    // say so. This is a document, and a document's keys are either worth a
-    // row here or not worth saying at all.
+    // A key here is worth a row of the reader's screen or not worth saying
+    // at all: nothing else on the page lists them.
     //
     // Nothing about typing, the arrows or the line break: this is a page
     // being written, and what a page being written does with a letter is
@@ -64,17 +57,12 @@ pub fn hints(notes: &Notes) -> Vec<Hint> {
     // text box does *not* do with it, because `shift+enter` and `alt+enter`
     // are the line break and `enter` starts another note.
     //
-    // Nothing about copy, cut and paste either, which were on the card
-    // because "can I paste in here?" is a question a dialog has to answer.
-    // Here they are what they are everywhere else.
+    // Nothing about copy, cut and paste either: here they are what they are
+    // everywhere else.
     vec![
-        Hint::common(bare(KeyCode::Enter), "Another").saying("Start another note"),
-        Hint::common(alt(KeyCode::Char(' ')), "Done")
-            .saying("Done, or not")
-            .when(on.is_some() && !elsewhere),
-        Hint::common(alt(KeyCode::Char('o')), "Go there")
-            .saying("Go to what it is about")
-            .when(notes.can_go()),
+        Hint::new(bare(KeyCode::Enter), "Another"),
+        Hint::new(alt(KeyCode::Char(' ')), "Done").when(on.is_some() && !elsewhere),
+        Hint::new(alt(KeyCode::Char('o')), "Go there").when(notes.can_go()),
         // Not where another Obelus has that conversation open: a
         // conversation is not a thing two of them may have at once, so the
         // key does nothing there and a foot offering it would be the page
@@ -82,29 +70,20 @@ pub fn hints(notes: &Notes) -> Vec<Hint> {
         // and below that would *change* such a note is held back too: the
         // caret still sits in it, so the foot is the only thing that can
         // say what the next key will do.
-        Hint::common(alt(KeyCode::Char('a')), "Talk")
-            .saying("Talk to an agent about this one")
-            .when(on.is_some() && !elsewhere),
+        Hint::new(alt(KeyCode::Char('a')), "Talk").when(on.is_some() && !elsewhere),
         // Taking a whole note away is the one thing here a reader will go
         // looking for and not find, because backspace on its own is a
         // letter.
-        Hint::common(alt(KeyCode::Backspace), "Drop")
-            .saying("Take the whole note away")
-            .when(on.is_some() && notes.can_drop()),
-        Hint::common(alt(KeyCode::Up), "Move")
-            .saying("Move it up or down")
+        Hint::new(alt(KeyCode::Backspace), "Drop").when(on.is_some() && notes.can_drop()),
+        Hint::new(alt(KeyCode::Up), "Move")
             .or(alt(KeyCode::Down))
             .when(notes.rows().len() > 1 && !elsewhere),
         // One key each, because they are offered separately: a note at the
         // top can only go in, and one as deep as it may go can only come
         // out. A single row for both would be on whenever either was, and
         // would be saying a key works when it does not.
-        Hint::common(bare(KeyCode::Tab), "Under")
-            .saying("Put it under the one above")
-            .when(notes.can_shift(false)),
-        Hint::common(chord(KeyCode::BackTab, KeyModifiers::SHIFT), "Out")
-            .saying("Bring it back out a level")
-            .when(notes.can_shift(true)),
+        Hint::new(bare(KeyCode::Tab), "Under").when(notes.can_shift(false)),
+        Hint::new(chord(KeyCode::BackTab, KeyModifiers::SHIFT), "Out").when(notes.can_shift(true)),
     ]
 }
 
@@ -122,12 +101,6 @@ pub fn text_width_in(area: Rect) -> u16 {
 /// Worked out from the same rows the drawing lays out, so the caret is in
 /// the row the reader can see their typing in rather than a row the view
 /// happens to agree about.
-///
-/// Nowhere while the list of every key is up. That card is drawn in the
-/// middle of the list, which is where this caret lives, so it sat blinking
-/// on the card -- claiming a box on a page that has none. The picker and
-/// the settings keep theirs through their own card because theirs is on
-/// the status row, which no card covers.
 #[must_use]
 pub fn caret(area: Rect, notes: &Notes) -> Option<ratatui::layout::Position> {
     let composer = notes.writing()?;
@@ -419,7 +392,7 @@ impl Widget for TodoUi<'_> {
                 .bg(self.theme.background),
         );
         let hints = hints(self.notes);
-        foot_without_a_card(cells, area, &hints, self.theme);
+        foot(cells, area, &hints, self.theme);
 
         let list = list_region(area, &hints);
         if list.height == 0 {

@@ -17,9 +17,7 @@
       //
       // Reached from inside a view as well as from a file: a key
       // that opens a view goes straight to it from another one --
-      // see `App::switch_view`. Which is why the card of every key
-      // is not `f1` any more, and has a key of its own:
-      // [`keys_card`].
+      // see `App::switch_view`.
       { "command": "open-file", "context": "normal", "key": "f1" },
       { "command": "switch-document", "context": "normal", "key": "f2" },
       { "command": "open-changed-file", "context": "normal", "key": "f3" },

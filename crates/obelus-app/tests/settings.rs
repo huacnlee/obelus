@@ -2682,9 +2682,12 @@ fn writing_the_settings_keeps_what_obelus_does_not_recognise() {
 /// to draw -- and the row it goes into already says what it narrows,
 /// before anything has been typed there.
 ///
+/// Nor is escape, which means the same thing in every view Obelus has.
+///
 /// Deliberate breaks: put a "To filter" hint back on the foot, and it
 /// carries a cap nobody presses; let `what_is_filtered` say nothing, and
-/// the page no longer says anywhere that it can be typed at.
+/// the page no longer says anywhere that it can be typed at; put a
+/// `Leave` on escape back at the end of the foot, and it is said here.
 #[test]
 fn the_settings_say_what_their_keys_do() {
     let _turn = SETTINGS
@@ -2697,11 +2700,13 @@ fn the_settings_say_what_their_keys_do() {
     dispatch::dispatch(&mut app, Command::ConfigProject);
 
     let text = support::text_block(&support::render(&mut app, 76, 16)).to_string();
-    // Escape is not here at all: it is on the card, because it means the
-    // same thing in every view Obelus has.
-    for word in ["Change", "Unset", "Keys"] {
+    for word in ["Change", "Unset"] {
         assert!(word_on(&text, word), "{word:?} is not at the foot:\n{text}");
     }
+    assert!(
+        !word_on(&text, "Leave"),
+        "the foot is spending itself on escape:\n{text}"
+    );
     assert!(
         !word_on(&text, "To filter"),
         "typing is a cap at the foot:\n{text}"
@@ -2710,20 +2715,6 @@ fn the_settings_say_what_their_keys_do() {
         word_on(&text, "Filter settings"),
         "the row typing goes into does not say what it narrows:\n{text}"
     );
-
-    // `ctrl+k` says all of them, at length.
-    support::press_control(&mut app, 'k');
-    let dump = support::render(&mut app, 76, 16);
-    let text = support::text_block(&dump);
-    assert!(text.contains("The keys here"), "no card:\n{dump}");
-    assert!(
-        text.contains("Take this setting out of the project's file"),
-        "the card only has the foot's word for it:\n{dump}"
-    );
-
-    // And escape closes the card before it leaves the page.
-    support::press(&mut app, KeyCode::Esc);
-    assert!(app.settings().is_some(), "escape left the settings");
 }
 
 /// `unset` is on the project's page and nowhere else, because the reader's own

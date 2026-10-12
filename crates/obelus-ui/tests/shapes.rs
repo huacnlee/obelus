@@ -122,7 +122,7 @@ fn heard() -> &'static Arc<Heard> {
 fn a_switch_says_which_cell_it_is_in_and_which_way_it_is_set() {
     let heard = heard();
     let mut hint =
-        obelus_ui::Hint::common(KeyChord::parse("alt+i").expect("alt+i is a key"), "Ignored");
+        obelus_ui::Hint::new(KeyChord::parse("alt+i").expect("alt+i is a key"), "Ignored");
     hint.switched = Some(true);
     // Its own row again, so that another test's foot is not taken for
     // this one: the recorder is shared by everything in this binary.
@@ -134,7 +134,7 @@ fn a_switch_says_which_cell_it_is_in_and_which_way_it_is_set() {
         height: rows,
     };
     let mut cells = CellBuffer::empty(area);
-    obelus_ui::foot_without_a_card(&mut cells, area, &[hint], &DARK);
+    obelus_ui::foot(&mut cells, area, &[hint], &DARK);
 
     let said = heard.switches.lock().expect("nothing poisoned it").clone();
     let mine: Vec<(Rect, bool)> = said
@@ -222,7 +222,7 @@ fn a_frame_of_the_turn_says_how_far_round_it_is() {
 /// Tall enough for the rule and the row under it, and wide enough that the
 /// key is not the one that ran out of room.
 fn a_foot(rows: u16) -> CellBuffer {
-    let hints = [obelus_ui::Hint::common(
+    let hints = [obelus_ui::Hint::new(
         KeyChord::parse("f1").expect("f1 is a key"),
         "Read it",
     )];
@@ -233,7 +233,7 @@ fn a_foot(rows: u16) -> CellBuffer {
         height: rows,
     };
     let mut cells = CellBuffer::empty(area);
-    obelus_ui::foot_without_a_card(&mut cells, area, &hints, &DARK);
+    obelus_ui::foot(&mut cells, area, &hints, &DARK);
     cells
 }
 
@@ -280,43 +280,6 @@ fn the_cells_are_the_cap_a_terminal_draws() {
     assert_eq!(inside, " F1 ");
 }
 
-/// Break: drop the `cap_around` beside the card's `write`, and the one
-/// place in Obelus that is nothing but a list of keys is the one place a
-/// key is not drawn as one.
-#[test]
-fn the_card_of_every_key_says_a_cap_round_each() {
-    assert!(
-        !obelus_icons::enabled(),
-        "a test that turned the glyphs on would change what a key is spelled as"
-    );
-    let heard = heard();
-    let hints = [obelus_ui::Hint::common(
-        KeyChord::parse("alt+m").expect("alt+m is a key"),
-        "Go",
-    )];
-    // Twenty rows, so the card is centred where no foot of this binary's
-    // is: the recorder is shared, and a test that took somebody else's cap
-    // for its own would pass with this one broken.
-    let area = Rect {
-        x: 0,
-        y: 0,
-        width: 60,
-        height: 20,
-    };
-    let mut cells = CellBuffer::empty(area);
-    obelus_ui::keys_card(&mut cells, area, &hints, &DARK);
-
-    let said = heard.caps.lock().expect("nothing poisoned it").clone();
-    let mine: Vec<Said> = said.into_iter().filter(|said| said.area.y == 10).collect();
-    assert_eq!(mine.len(), 1, "one key, one cap: {mine:?}");
-    // `alt+m` with the blank either side that the card leaves it, which is
-    // the page's rather than the cap's: the cells are untouched.
-    assert_eq!(mine[0].area.width, 7, "{:?}", mine[0]);
-    assert_eq!(mine[0].keys, "Alt+m");
-    assert_eq!(mine[0].cap, DARK.background, "the panel's own ground");
-    assert_eq!(mine[0].page, DARK.background);
-}
-
 /// Break: drop the `shapes::ruled` at the end of `rule`, and a window has
 /// a row of `─` with nothing saying it is a line -- so it spells it in the
 /// font, half a row from the edge of any pane the line is the edge of.
@@ -342,19 +305,14 @@ fn a_rule_says_which_row_it_is_on() {
 /// shows outside the line.
 ///
 /// Break: move the `shapes::behind` in `panel` below its `fill`, and what
-/// a window is told is under the card of every key is the card itself --
-/// the glass inside its frame shows a blurred copy of the panel instead
-/// of the list it was opened over. Break again by dropping it, and the
-/// card is spelled in `╭─╮` on a square of its own ground, an opaque box
-/// whatever the window can do.
+/// a window is told is under a hover is the hover itself -- the glass
+/// inside its frame shows a blurred copy of the panel instead of the code
+/// it was opened over. Break again by dropping it, and the panel is
+/// spelled in `╭─╮` on a square of its own ground, an opaque box whatever
+/// the window can do.
 #[test]
 fn a_panel_says_what_it_was_put_over() {
     let heard = heard();
-    let hints = [obelus_ui::Hint::common(
-        KeyChord::parse("alt+w").expect("alt+w is a key"),
-        "Go",
-    )];
-    // Forty rows, so the card is centred where no other test's is.
     let area = Rect {
         x: 0,
         y: 0,
@@ -368,24 +326,34 @@ fn a_panel_says_what_it_was_put_over() {
             cells[(x, y)].set_symbol("z");
         }
     }
-    obelus_ui::keys_card(&mut cells, area, &hints, &DARK);
+    // On a row no other test's pane is: the recorder is shared, and a test
+    // that took somebody else's pane for its own would pass with this one
+    // broken.
+    let panel = Rect {
+        x: 20,
+        y: 17,
+        width: 20,
+        height: 5,
+    };
+    obelus_ui::panel(&mut cells, panel, &DARK);
 
     let panes = heard.panes.lock().expect("nothing poisoned it").clone();
     let mine: Vec<_> = panes
         .into_iter()
         .filter(|(pane, ..)| pane.y == 17)
         .collect();
-    assert_eq!(mine.len(), 1, "one card, one pane: {mine:?}");
+    assert_eq!(mine.len(), 1, "one panel, one pane: {mine:?}");
     let (frame, joined, ground, under) = &mine[0];
+    assert_eq!(*frame, panel, "the whole of it, frame and all");
     assert_eq!(
         *joined,
         obelus_ui::shapes::Joined::Nowhere,
         "edges all round"
     );
-    assert_eq!(*ground, DARK.background, "the card's own ground");
+    assert_eq!(*ground, DARK.background, "the panel's own ground");
     assert!(
         under.chars().all(|letter| letter == 'z'),
-        "what was there before the card: {under:?}"
+        "what was there before the panel: {under:?}"
     );
     // The frame is the pane's outermost ring, which is what the window
     // checks the pane against.

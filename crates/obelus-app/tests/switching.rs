@@ -35,8 +35,7 @@ fn showing(app: &App) -> Option<(Vec<String>, usize)> {
 /// The key of another view goes to that view, and escape then goes back to
 /// the file rather than to the view that was left.
 ///
-/// From the search to the files, which is also the key the card used to be
-/// on: `f1` inside a view is the files now, and the card is `ctrl+k`.
+/// From the search to the files: `f1` inside a view is the files.
 ///
 /// Broken deliberately by taking the switch out of `App::handle_key`: `f1`
 /// is refused inside a view, as it always was, and the search stays.

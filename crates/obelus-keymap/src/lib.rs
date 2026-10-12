@@ -965,30 +965,6 @@ pub fn function(number: u8) -> KeyChord {
     KeyChord::new(KeyCode::F(number), KeyModifiers::NONE)
 }
 
-/// The key that opens the card of every key, in every view that has one.
-///
-/// `ctrl+k`, on the letter of the word like the rest of the control family.
-/// It was `f1`, which has meant help for longer than any of this -- until a
-/// function key in a view went to the view it names, and `f1` names the
-/// files. `?` cannot be it: the notes, the settings and every picker take
-/// each character typed.
-///
-/// One definition, because it is answered in four places -- each view that
-/// has a card, and the foot that says which key opens it -- and a foot
-/// naming one key while the view listens for another is a card nobody can
-/// open.
-#[must_use]
-pub fn keys_card() -> KeyChord {
-    control('k')
-}
-
-/// Whether a key is [`keys_card`], for a view deciding whether to open its
-/// card.
-#[must_use]
-pub fn is_keys_card(event: &KeyEvent) -> bool {
-    KeyChord::from_event(event) == Some(keys_card())
-}
-
 /// A chord for `ctrl` plus a character.
 #[must_use]
 pub fn control(character: char) -> KeyChord {
