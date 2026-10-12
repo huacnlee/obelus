@@ -12,10 +12,10 @@
 // are another editor's chords, borrowed whole (`ctrl+shift+p`), and a
 // control byte cannot carry the case of a letter -- so each of them has an
 // alt chord as well, which every terminal can send. Without the keyboard
-// protocol `ctrl+shift+p` arrives as `ctrl+p`, which is the files rather than
-// the palette: the nearer of the two wrong answers, and the alt chord is the
-// right one. The first key of each is the one shown; the rest are the ones a
-// terminal without the protocol can send.
+// protocol `ctrl+shift+p` arrives as `ctrl+p`, which is nothing here -- the
+// files are on `ctrl+t` -- so the press does nothing, and the alt chord is the
+// one that works. The first key of each is the one shown; the rest are the
+// ones a terminal without the protocol can send.
 //
 // A command in `move` loses every key the obelus table gave it and takes
 // these, in each context it was bound in -- and a key it takes is taken off

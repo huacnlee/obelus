@@ -4977,7 +4977,7 @@ fn the_keys_page_chooses_where_the_keys_start() {
 /// each a different one: a word with no table behind it would be a choice
 /// that silently starts from the default keys.
 ///
-/// Broken deliberately by adding a third word to `KEY_LAYOUTS`.
+/// Broken deliberately by adding a fifth word to `KEY_LAYOUTS`.
 #[test]
 fn every_layout_offered_is_a_table() {
     let named: Vec<_> = obelus_config::KEY_LAYOUTS
@@ -5034,9 +5034,9 @@ fn a_layout_nothing_answers_to_stays_in_the_file() {
 /// Every layout is offered under a name of its own and with what it is:
 /// a name the reader can say, and a line that says which keys it means.
 ///
-/// Broken deliberately by giving a third word to `KEY_LAYOUTS`, which has
-/// neither, by taking `mnemonic` out of `called`, and by giving `obelus`
-/// nothing to say in the list.
+/// Broken deliberately by giving a fifth word to `KEY_LAYOUTS`, which has
+/// neither, and by taking `mnemonic` out of `KEY_LAYOUT_CHOICES`, which
+/// both `called` and the list read.
 #[test]
 fn every_layout_is_offered_with_a_name_and_what_it_is() {
     let _turn = SETTINGS

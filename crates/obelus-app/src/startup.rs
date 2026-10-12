@@ -56,8 +56,7 @@ pub fn start_headless(paths: &[PathBuf], built: &'static str) -> Result<App> {
 }
 
 fn build(paths: &[PathBuf], built: &'static str, headless: bool) -> Result<App> {
-    // What the paths mean: which project, which files, and whether the
-    // question left over is "which file".
+    // What the paths mean: which project, and which files.
     let opening = app::opening(paths);
 
     // The first line of every session, and the one a reader of the log

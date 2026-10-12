@@ -195,8 +195,8 @@ pub(in crate::app) struct Settled {
     /// which keys Obelus starts from.
     ///
     /// Written down where the file is read and asked once the loop has
-    /// started (`App::ask_for_a_keymap`): a list opened while the settings
-    /// are read is a list `start` would put the file list over.
+    /// started (`App::ask_for_a_keymap`): a list needs the loop's channel,
+    /// and what went wrong on the way up is told first.
     pub unchosen: bool,
 }
 
@@ -608,7 +608,8 @@ impl App {
         // Read whole, the way the list of conversations is, because what
         // is under each workflow is a few sentences rather than a word --
         // and all of them, because they are Obelus's own. A layout's is
-        // one, and its last words are the ones about a terminal.
+        // one, and its last words are the keys it puts the files and the
+        // palette on.
         if matches!(key, "workflow" | "keys_from") {
             picker.wraps(None);
             picker.details_whole();
