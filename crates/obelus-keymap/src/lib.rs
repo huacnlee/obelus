@@ -22,11 +22,12 @@
 //!   negotiable, and it is the one default a reader cannot move.
 //!
 //! What Obelus *ships* is held to more than that, by the families below and
-//! by reasons argued where each key is bound: nothing with two modifiers, a
-//! function key bare, and `ctrl+shift` on a letter only where another
-//! editor's layout borrows it -- with an alt chord beside it, because a
-//! terminal without the keyboard protocol sends `ctrl` and the letter, and
-//! one with it often keeps the chord for itself.
+//! by reasons argued where each key is bound -- and by a test, because
+//! `why_not` no longer says it (`what_obelus_ships_keeps_to_the_families`):
+//! nothing with two modifiers, a function key bare, and `ctrl+shift` on a
+//! letter only where another editor's layout borrows it -- with an alt chord
+//! beside it, because a terminal without the keyboard protocol sends `ctrl` and
+//! the letter, and one with it often keeps the chord for itself.
 //!
 //! `ctrl+b` belongs to tmux, so Obelus does not ship it -- a reader outside
 //! tmux may still have it. `ctrl+a` is screen's prefix and is shipped anyway,
@@ -976,6 +977,70 @@ mod tests {
     use crossterm::event::{KeyCode, KeyModifiers};
 
     use super::{Context, KeyChord, Keymap, Layout};
+
+    /// What Obelus ships is held to more than what a reader may bind: the
+    /// families, on keys every terminal sends as themselves.
+    ///
+    /// `why_not` lets a reader have a chord the next terminal cannot send,
+    /// because which terminal is theirs to know; a default cannot know it.
+    /// So a shipped key has at most one modifier -- shift only on `Insert`,
+    /// where it is the desktop's paste -- a function key is bare, control
+    /// is never on one of the six letters the wire cannot tell from another
+    /// key, and control with a capital is only the editors' layouts', each
+    /// with an alt chord beside it (`every_shifted_chord_has_one_every_
+    /// terminal_can_send`).
+    ///
+    /// Broken deliberately by giving redo `shift+f5` in vscode.json, and
+    /// apart by giving it `ctrl+i`: each failed here and passed
+    /// `why_not`.
+    #[test]
+    fn what_obelus_ships_keeps_to_the_families() {
+        for layout in Layout::ALL {
+            for binding in Keymap::laid_out(layout).bindings() {
+                let chord = binding.chord;
+                let (code, modifiers) = (chord.code, chord.modifiers);
+                let name = || {
+                    format!(
+                        "{} on {} in {layout:?}",
+                        binding.command.name(),
+                        chord.label_in(false)
+                    )
+                };
+                let one = modifiers.is_empty()
+                    || modifiers == KeyModifiers::CONTROL
+                    || modifiers == KeyModifiers::ALT
+                    || (modifiers == KeyModifiers::SHIFT && code == KeyCode::Insert);
+                assert!(
+                    one,
+                    "{}: two modifiers, or shift on a key it names nothing on",
+                    name()
+                );
+                if let KeyCode::F(_) = code {
+                    assert!(
+                        modifiers.is_empty(),
+                        "{}: a function key with something held",
+                        name()
+                    );
+                }
+                if let KeyCode::Char(character) = code
+                    && modifiers == KeyModifiers::CONTROL
+                {
+                    assert!(
+                        !"imjh[ 2".contains(character),
+                        "{}: the wire sends another key for it",
+                        name()
+                    );
+                    if character.is_ascii_uppercase() {
+                        assert!(
+                            matches!(layout, Layout::VsCode | Layout::TextMate),
+                            "{}: control with a capital, outside another editor's layout",
+                            name()
+                        );
+                    }
+                }
+            }
+        }
+    }
 
     /// Every binding Obelus ships with is one a reader could have made.
     ///
