@@ -239,6 +239,11 @@ fn escape_keeps_the_defaults_and_writes_nothing() {
 /// Choosing the default is written down as well, so the next start does
 /// not ask -- and a start after that is a start with settings.
 ///
+/// The default is not a line in the file, so what is kept is the file
+/// itself: asked for by whether it is there, which is the question a start
+/// asks, rather than by its words -- the template's commented-out
+/// `# keys_from = "obelus"` would answer for a line that was never written.
+///
 /// Deliberate break: `PickerValue::Setting` skipping `change_setting` when
 /// the word is the one in force -- nothing is written, and the second start
 /// asks again.
@@ -249,8 +254,10 @@ fn choosing_obelus_is_kept_and_not_asked_again() {
     start(&mut app);
     // Opened on the one in force, which is the default.
     press(&mut app, KeyCode::Enter);
-    let written = std::fs::read_to_string(settings(&scratch)).expect("the settings");
-    assert!(written.contains("keys_from = \"obelus\""), "{written}");
+    assert!(
+        settings(&scratch).exists(),
+        "choosing the default wrote nothing"
+    );
 
     let mut again = on(&scratch, None);
     start(&mut again);
