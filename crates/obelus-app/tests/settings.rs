@@ -2513,6 +2513,121 @@ fn delete_takes_away_the_key_on_its_row() {
     );
 }
 
+/// A key bound on the page goes into the reader's own file, and nothing of
+/// the project's goes with it.
+///
+/// Broken deliberately by saving the layered settings rather than the
+/// reader's, as the page did: the project's `wrap = true` was written into
+/// the reader's file.
+#[test]
+fn a_key_bound_writes_the_readers_file_and_nothing_of_the_projects() {
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = project("keys-layers", "wrap = true\n");
+    let mine = temporary("keys-layers-mine");
+    let file = settings_file(&mine);
+    let mut app = App::new(vec![support::open_fixture("sample.rs")]);
+    app.working_directory_for_test(scratch.path().to_path_buf());
+    app.config_file_for_test(file.clone());
+    support::lay_out(&mut app, 66, 12);
+    dispatch::dispatch(&mut app, Command::ConfigOpen);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    support::press(&mut app, KeyCode::Enter);
+    support::press_alt(&mut app, 'z');
+    let written = std::fs::read_to_string(&file).expect("the file");
+    assert!(
+        !written.contains("wrap = true"),
+        "the project's setting was written: {written}"
+    );
+    assert!(written.contains("redo = \"Alt+z\""), "{written}");
+}
+
+/// A key bound on the page is still bound after another setting changes,
+/// because the table is built again from the reader's layer.
+///
+/// Broken deliberately by putting the key into the layered settings rather
+/// than the reader's own: flipping the blame margin built the table again
+/// from the reader's, and redo went back to `ctrl+y`.
+#[test]
+fn a_key_bound_outlives_the_next_setting() {
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("keys-outlive");
+    let file = settings_file(&scratch);
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    support::press(&mut app, KeyCode::Enter);
+    support::press_alt(&mut app, 'z');
+    dispatch::dispatch(&mut app, Command::ConfigOpen);
+    support::type_text(&mut app, "blame");
+    let before = app.config().blame_margin;
+    support::press(&mut app, KeyCode::Enter);
+    assert_ne!(app.config().blame_margin, before, "no setting was changed");
+    assert_eq!(
+        app.keymap().chords_for(Command::Redo),
+        [KeyChord::parse("alt+z").expect("a key")]
+    );
+}
+
+/// A file that will not read is not written over by a key bound on the
+/// page, and the page says the key was not kept.
+///
+/// Broken deliberately by taking the `readable` guard out of `rebind`: the
+/// file became nothing but the new key.
+#[test]
+fn a_key_bound_does_not_write_over_a_file_that_will_not_read() {
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("keys-unreadable");
+    let file = settings_file(&scratch);
+    let before = "theme = \"light\"\nwrap = [\n";
+    std::fs::write(&file, before).expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    support::press(&mut app, KeyCode::Enter);
+    support::press_alt(&mut app, 'z');
+    assert_eq!(std::fs::read_to_string(&file).expect("the file"), before);
+    assert!(
+        app.note().is_some_and(|note| note.starts_with("Not saved")),
+        "nothing said the key was not kept: {:?}",
+        app.note()
+    );
+}
+
+/// A command whose keys were all taken away, then given one, has it in
+/// every context the layout had the command in -- a terminal's palette
+/// included.
+///
+/// Broken deliberately by patching the table as the page did: the key the
+/// palette got back was the file's alone, and in a terminal it did nothing.
+#[test]
+fn a_key_given_back_is_in_every_context_the_command_was() {
+    use crossterm::event::{KeyEvent, KeyModifiers};
+    use obelus_keymap::Context;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("given-back");
+    let file = settings_file(&scratch);
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "run-command");
+    support::press(&mut app, KeyCode::Enter);
+    support::press(&mut app, KeyCode::Delete);
+    assert!(app.keymap().chords_for(Command::CommandPalette).is_empty());
+    support::press(&mut app, KeyCode::Enter);
+    support::press_alt(&mut app, 'z');
+    let alt_z = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::ALT);
+    for context in [Context::Normal, Context::Terminal] {
+        assert_eq!(
+            app.keymap().lookup(&alt_z, context),
+            Some(Command::CommandPalette),
+            "{context:?}"
+        );
+    }
+}
+
 /// The settings file opens as a file, and is written first if it is not
 /// there yet.
 ///

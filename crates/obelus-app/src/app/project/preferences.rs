@@ -1319,11 +1319,19 @@ impl App {
     /// Puts a command on these keys and no others, or on none, and writes
     /// the file.
     ///
-    /// The same shape as changing a setting -- applied first, saved second
-    /// -- and through the same table: what is written down is the command's
-    /// name and the chord spelled out, because a table full of enum
-    /// spellings and keycodes would be Obelus's own business rather than
-    /// something a reader can edit.
+    /// The same shape as changing a setting, and through the same steps:
+    /// into the reader's own layer, the project's laid back over it, the
+    /// table built again from what the file says -- and not saved over a
+    /// file that will not read. What is written down is the command's name
+    /// and the chords spelled out, because a table full of enum spellings
+    /// and keycodes would be Obelus's own business rather than something a
+    /// reader can edit.
+    ///
+    /// Built again rather than patched, because a patched table and one
+    /// built from the file are two answers: patching wrote the project's
+    /// settings into the reader's file, lost the key at the next change of
+    /// any setting, and put a command's key back in only one of the
+    /// contexts the layout had it in.
     pub(in crate::app) fn rebind(
         &mut self,
         command: obelus_command::Command,
@@ -1331,16 +1339,20 @@ impl App {
     ) {
         let written = chords.iter().map(|chord| chord.label_in(false)).collect();
         self.settled
-            .config
+            .readers
             .keys
             .insert(command.name().to_string(), written);
-        let mut keymap = self.keymap.clone();
-        keymap.rebind(command, &chords);
-        self.set_keymap(keymap);
+        self.apply_project();
         let Some(path) = self.settled.path.clone() else {
             return;
         };
-        if let Err(error) = obelus_config::save_to(&path, &self.settled.config) {
+        if !self.settled.readable {
+            // Said here as a setting's change says it: this is the moment
+            // the reader finds out the key is not being kept.
+            self.wrong("Not saved: the settings will not read".to_string());
+            return;
+        }
+        if let Err(error) = obelus_config::save_to(&path, &self.settled.readers) {
             tracing::warn!(%error, "not saving the configuration");
             self.wrong(format!("Not saved: {error}"));
         }
