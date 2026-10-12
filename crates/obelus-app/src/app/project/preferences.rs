@@ -1383,6 +1383,9 @@ impl App {
         ];
         let mut picker = Picker::new(items, PickerLayout::Compact { rows: 2 });
         picker.ask(&format!("Put every key back to {layout}'s?"));
+        // A question, which a key that names another view does not swap
+        // away: it is waiting on the reader.
+        picker.will_not_give_way();
         self.show_list(picker);
     }
 

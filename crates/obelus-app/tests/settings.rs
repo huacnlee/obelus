@@ -2887,6 +2887,88 @@ fn alt_r_puts_a_command_back() {
     assert!(!written.contains("redo"), "the line stayed: {written}");
 }
 
+/// `alt+backspace` on a key the wheel took off the screen brings it back
+/// and takes nothing, as enter does: the next press takes it.
+///
+/// Broken deliberately by acting on the focus wherever it is, as the alt
+/// keys did: the first press took a key nobody could see.
+#[test]
+fn alt_backspace_on_a_row_scrolled_away_shows_it_first() {
+    use obelus_component::settings::KeyRow;
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("alt-off-screen");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "keys_from = \"vscode\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "-");
+    let rows = app.settings().expect("the settings").key_rows();
+    let second = rows
+        .iter()
+        .position(|row| {
+            matches!(
+                row,
+                KeyRow::Key {
+                    command: Command::CommandPalette,
+                    slot: 1
+                }
+            )
+        })
+        .expect("the second key's row");
+    while app.settings().expect("the settings").focus() < second {
+        support::press(&mut app, KeyCode::Down);
+    }
+    support::render(&mut app, 66, 12);
+    for _ in 0..6 {
+        app.handle(Event::Scroll(3));
+    }
+    support::render(&mut app, 66, 12);
+    let both = [
+        KeyChord::parse("ctrl+shift+p").expect("a key"),
+        KeyChord::parse("alt+shift+p").expect("a key"),
+    ];
+
+    support::press_alt_key(&mut app, KeyCode::Backspace);
+    assert_eq!(
+        app.keymap().chords_for(Command::CommandPalette),
+        both,
+        "a key went from a row off the screen"
+    );
+    support::render(&mut app, 66, 12);
+    support::press_alt_key(&mut app, KeyCode::Backspace);
+    assert_eq!(app.keymap().chords_for(Command::CommandPalette), both[..1]);
+}
+
+/// The question about putting every key back waits for its answer: a key
+/// that names another view does not swap it away.
+///
+/// Broken deliberately by letting it give way: `f1` put the files up in
+/// its place.
+#[test]
+fn the_question_about_every_key_does_not_give_way() {
+    use crossterm::event::{KeyEvent, KeyModifiers};
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("reset-all-stays");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "[keys]\nredo = \"alt+z\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    app.handle(Event::Key(KeyEvent::new(
+        KeyCode::Char('R'),
+        KeyModifiers::ALT | KeyModifiers::SHIFT,
+    )));
+    support::press_function(&mut app, 1);
+    assert!(
+        app.picker()
+            .and_then(|picker| picker.question())
+            .is_some_and(|question| question.starts_with("Put every key back")),
+        "the question gave way"
+    );
+}
+
 /// A command another's line took a key from is changed, but has no line
 /// of its own to take out: `alt+r` is not offered there, and does nothing.
 ///

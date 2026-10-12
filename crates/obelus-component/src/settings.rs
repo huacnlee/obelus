@@ -1592,6 +1592,16 @@ impl Settings {
                     KeyCode::Char('r'),
                     KeyModifiers::ALT | KeyModifiers::SHIFT,
                 ));
+            // The two that act on the row with the focus wait, as enter
+            // does, for the row to be on the screen: the first press brings
+            // back a row the wheel took away, and takes nothing from it.
+            if removing || resetting {
+                let count = self.key_rows().len();
+                self.window.set_count(count);
+                if count > 0 && self.window.reach_for_the_focus() {
+                    return SettingsOutcome::Consumed;
+                }
+            }
             match focused {
                 Some((KeyRow::Key { command, slot }, Some(_))) if removing => {
                     let mut kept = self.held(command).to_vec();
