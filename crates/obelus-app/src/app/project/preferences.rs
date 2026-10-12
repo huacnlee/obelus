@@ -656,13 +656,16 @@ impl App {
         Some(format!("{gloss}. {said}"))
     }
 
-    /// Offers the layouts the reader's keys start from.
+    /// Offers the layouts the reader's keys start from, on a first start.
     ///
     /// The setting's own list -- the one the settings page opens, rows,
-    /// filtering and all -- with a question over it, because from the
-    /// palette or a first start there is no settings row above it to say
-    /// what is being chosen. Choosing one writes it at once, as a row
-    /// of the settings page does.
+    /// filtering and all -- with a question over it, because a first start
+    /// has no settings row above it to say what is being chosen. Choosing
+    /// one writes it at once, as a row of the settings page does.
+    ///
+    /// No command opens it. Which keys these are is a preference, chosen
+    /// once, and a preference is a setting: after the first start the
+    /// settings page is the way to it, and `ob keymap set` from a shell.
     pub fn open_keymap_picker(&mut self) {
         let mut picker = self.choices(
             "keys_from",
@@ -670,7 +673,6 @@ impl App {
             &self.settled.readers.keys_from.clone(),
         );
         picker.ask("Which keys Obelus starts from");
-        picker.opened_by(Command::KeymapSelect);
         self.show_list(picker);
     }
 

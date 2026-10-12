@@ -144,8 +144,9 @@ has the command (`ctrl+p` for a file, `ctrl+shift+p` for the palette in
 `vscode`; `ctrl+t` for a file in `textmate`) and no function key at all.
 In `obg` on a Mac, `ctrl` is `cmd` in every layout.
 
-`choose-keymap`, from the palette, switches between them, and your own
-`[keys]` lines are kept on top of whichever you pick. From a shell:
+The Layout setting, under Keys in `open-settings`, switches between them,
+and your own `[keys]` lines are kept on top of whichever you pick. From a
+shell:
 
 ```
 ob keymap              # which layout, and the others

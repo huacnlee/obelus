@@ -275,8 +275,6 @@ pub fn for_command(command: obelus_command::Command) -> char {
         Command::ProjectClose => '\u{f0258}',
         Command::PreviewToggle => '\u{f0354}',
         Command::ThemeSelect => '\u{f03d8}',
-        // A keyboard, which is what choosing one is about.
-        Command::KeymapSelect => '\u{f030c}',
         Command::CommandPalette => '\u{f018d}',
         // The menu is the questions themselves; each question is what it
         // does. A definition is a place to land on, a type is a shape, an

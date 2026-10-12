@@ -108,7 +108,7 @@
       </table>
       </div>
       <p class="quiet small">Shift on a letter is written out: <kbd>Ctrl+Shift+p</kbd>. Most terminals can't send <kbd>Ctrl</kbd> with <kbd>Shift</kbd> on a letter, and send plain <kbd>Ctrl+p</kbd> instead, which is why each of those has an <kbd>Alt</kbd> key beside it that every terminal can send, and in such a terminal <code>ob</code> shows you the <kbd>Alt</kbd> one. <code>obg</code> gets them as they are. In <code>obg</code> on a Mac, <kbd>Ctrl</kbd> is <kbd>Cmd</kbd>, in every layout: press <kbd>Cmd+p</kbd> where this page says <kbd>Ctrl+p</kbd>, and the screen says <kbd>Cmd</kbd> too. <kbd>Ctrl</kbd> itself still works there, and the settings file still says <code>Ctrl</code>, because <code>ob</code> in a terminal reads the same file and a terminal keeps <kbd>Cmd</kbd> for itself. Elsewhere the Super or Windows key is never read as <kbd>Ctrl</kbd>; it belongs to the desktop.</p>
-      <p>To choose, run <code>choose-keymap</code> from the palette. Each row shows what that layout puts the files and the palette on. The very first time Obelus starts with no settings file, it asks; <kbd>Esc</kbd> keeps <code>obelus</code> and asks again next time, and any choice is saved straight away, <code>obelus</code> included, so it never asks again. Whatever you have under <code>[keys]</code> is laid over the layout, so switching layouts keeps your own keys.</p>
+      <p>To choose, open <code>open-settings</code> and pick <em>Layout</em> under Keys. Each row shows what that layout puts the files and the palette on. The very first time Obelus starts with no settings file, it asks; <kbd>Esc</kbd> keeps <code>obelus</code> and asks again next time, and any choice is saved straight away, <code>obelus</code> included, so it never asks again. Whatever you have under <code>[keys]</code> is laid over the layout, so switching layouts keeps your own keys.</p>
       <p>From a shell, <code>ob keymap</code> says which layout you're on and lists the others, and <code>ob keymap set vscode</code> chooses one without opening anything (<code>obg keymap</code> does the same). Every Obelus window that's open picks the change up. To open a file that is called <code>keymap</code>, write <code>ob ./keymap</code> or <code>ob -- keymap</code>.</p>
 
       <h3>Function keys open something to look at</h3>
@@ -243,7 +243,7 @@
           </tr>
           <tr>
             <td>Obelus</td>
-            <td><code>choose-theme</code> <code>choose-keymap</code> <code>new-conversation</code> <code>choose-conversation</code> <code>open-terminal</code> <code>open-settings</code> <code>connect-remote</code> <code>disconnect-remote</code> <code>open-project-settings</code> <code>open-settings-file</code> <code>open-log</code> <code>open-server-log</code> <code>restart-server</code> <code>stop-server</code> <code>quit</code></td>
+            <td><code>choose-theme</code> <code>new-conversation</code> <code>choose-conversation</code> <code>open-terminal</code> <code>open-settings</code> <code>connect-remote</code> <code>disconnect-remote</code> <code>open-project-settings</code> <code>open-settings-file</code> <code>open-log</code> <code>open-server-log</code> <code>restart-server</code> <code>stop-server</code> <code>quit</code></td>
           </tr>
         </tbody>
       </table>

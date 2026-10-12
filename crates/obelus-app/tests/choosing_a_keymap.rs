@@ -1,5 +1,5 @@
-//! Choosing which keys Obelus starts from: from the palette, and once on a
-//! first start.
+//! Choosing which keys Obelus starts from: the list a first start puts up,
+//! and what choosing from it does.
 //!
 //! Every settings file here is a temporary one, through
 //! `config_file_for_test`: a test that let Obelus find its own would be
@@ -59,30 +59,6 @@ fn pick(app: &mut App, called: &str) {
     press(app, KeyCode::Enter);
 }
 
-/// `choose-keymap` is found in the palette by its name, and can be run.
-///
-/// Deliberate break: renaming it `choose-keys` in `obelus-command`'s
-/// table -- the palette has no row by that name, and fails here.
-#[test]
-fn the_palette_finds_choose_keymap() {
-    let scratch = support::Scratch::new("keymap-palette");
-    let mut app = on(&scratch, Some("wrap = true\n"));
-    support::lay_out(&mut app, 100, 30);
-    support::press_control(&mut app, 'p');
-    support::type_text(&mut app, "choose-keymap");
-    let dump = support::render(&mut app, 100, 30);
-    assert!(
-        support::text_block(&dump).contains("choose-keymap"),
-        "the palette has no row for it:\n{dump}"
-    );
-    press(&mut app, KeyCode::Enter);
-    assert_eq!(
-        asked(&app).as_deref(),
-        Some(ASKED),
-        "it did not open the list"
-    );
-}
-
 /// Every layout is a row, called what it is called, with two keys it would
 /// give -- and the keys are that layout's, not the ones in force. What it
 /// is, is what `ob keymap` says it is.
@@ -127,11 +103,12 @@ fn the_list_says_what_each_layout_would_give() {
     }
 }
 
-/// Choosing a layout from the palette writes it, moves the keys at once,
-/// and moves what the welcome screen says they are.
+/// Choosing a layout writes it, moves the keys at once, and moves what the
+/// welcome screen says they are.
 ///
-/// Deliberate break: dispatching `KeymapSelect` to `open_theme_picker` --
-/// the list asks nothing, and no layout is written.
+/// Deliberate break: `PickerValue::Setting` returning before
+/// `change_setting` for `keys_from` -- nothing is written and the keys stay
+/// where they were.
 #[test]
 fn choosing_a_layout_moves_the_keys_and_the_welcome_screen() {
     let scratch = support::Scratch::new("keymap-choose");
@@ -143,14 +120,8 @@ fn choosing_a_layout_moves_the_keys_and_the_welcome_screen() {
     let opens = |keymap: &Keymap| keymap.chord_for(Command::FileOpen).expect("bound").label();
     assert!(support::text_block(&before).contains(&opens(&obelus)));
 
-    support::press_control(&mut app, 'p');
-    support::type_text(&mut app, "choose-keymap");
-    press(&mut app, KeyCode::Enter);
-    assert_eq!(
-        asked(&app).as_deref(),
-        Some(ASKED),
-        "the palette opened nothing"
-    );
+    app.open_keymap_picker();
+    assert_eq!(asked(&app).as_deref(), Some(ASKED));
     pick(&mut app, "VS Code");
 
     assert!(app.picker().is_none(), "the list stayed open");
