@@ -175,7 +175,8 @@ mise use -g ob</code></pre>
       <ul>
         <li>第一组装窗口版 <code>obg</code>，第二组装终端版 <code>ob</code>，两组都跑就两个都有。</li>
         <li>各起一个名字，两个才能并存：mise 一个名字只记一个工具，直接装两次同一个仓库，后一次会顶掉前一次。<code>matching</code> 决定下载哪个压缩包。用 <code>mise upgrade</code> 升级。</li>
-        <li>这样装没有启动项，也没有开始菜单入口，<code>obg</code> 要按名字启动。musl 系统上同样没有窗口版。</li>
+        <li>这样装没有启动项，也没有开始菜单入口，<code>obg</code> 要按名字启动。</li>
+        <li>musl 系统上只装 <code>ob</code>。mise 不会检查，装 <code>obg</code> 时会下载 glibc 版，在 musl 上跑不起来。</li>
       </ul>
 
       <h3>从源码</h3>
