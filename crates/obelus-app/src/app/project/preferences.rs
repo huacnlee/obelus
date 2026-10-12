@@ -680,8 +680,7 @@ impl App {
         self.show_list(picker);
     }
 
-    /// Asks which keys to start from, on a first start, and says whether
-    /// it did.
+    /// Asks which keys to start from, on a first start.
     ///
     /// A first start is one with no settings file, and nothing else: a
     /// reader with a file has been here before, whether or not it names a
@@ -694,13 +693,12 @@ impl App {
     /// Not where nobody is at the screen, and not over the page asking
     /// which project: that page is the whole screen and the more pressing
     /// question, so this waits for the answer (`App::settle_on`).
-    pub(in crate::app) fn ask_for_a_keymap(&mut self) -> bool {
+    pub(in crate::app) fn ask_for_a_keymap(&mut self) {
         if !self.settled.unchosen || self.is_headless() || self.which_project.chooser.is_some() {
-            return false;
+            return;
         }
         self.settled.unchosen = false;
         self.open_keymap_picker();
-        true
     }
 
     /// Offers one of the agent's settings, as the same compact list.

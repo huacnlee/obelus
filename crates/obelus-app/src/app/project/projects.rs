@@ -861,15 +861,8 @@ impl crate::app::App {
         self.which_project.naming_shut = false;
         self.settle(root, &opening.files);
         // A first start's question about the keys, held back while this
-        // page was the screen (`App::ask_for_a_keymap`) -- and in front of
-        // the file list, as at `start`, because its answer moves that key.
-        let asked = self.ask_for_a_keymap();
-        // A directory is a reader saying which project and asking which
-        // file, which is the list -- the same thing `ob some-directory`
-        // does, said in the same place.
-        if opening.list && !asked {
-            self.open_file_picker();
-        }
+        // page was the screen (`App::ask_for_a_keymap`).
+        self.ask_for_a_keymap();
     }
 
     /// Puts a window with no project on `root`, opening `files` in it.

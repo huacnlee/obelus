@@ -501,17 +501,10 @@ pub struct App {
     /// The other windows heard in that chat through this one, or the one
     /// this one is heard through.
     relaying: relaying::Relaying,
-    /// Whether to open on the file list.
-    ///
-    /// A directory on the command line is a reader saying which project
-    /// rather than which file, and "which file" is what the list answers.
-    /// A flag rather than a list opened on the spot, because the rows come
-    /// from a walk on the loop's own channel and there is no channel until
-    /// [`App::start`].
-    list_at_start: bool,
     /// Whether to connect to the chat once started, as `connect-remote`
-    /// would. A flag for the same reason as the one above: connecting
-    /// waits on the loop's channel.
+    /// would. A flag rather than a connection made on the spot, because
+    /// connecting waits on the loop's channel and there is no channel until
+    /// [`App::start`].
     remote_at_start: bool,
     /// Whether nobody is at the screen: `ob --headless` (`headless`).
     headless: bool,
@@ -645,7 +638,6 @@ impl App {
             remote: remote::Remote::default(),
             mirror: mirroring::Mirror::default(),
             relaying: relaying::Relaying::default(),
-            list_at_start: false,
             remote_at_start: false,
             headless: false,
             stopped_because: None,
@@ -872,11 +864,6 @@ impl App {
     #[must_use]
     pub fn working_directory(&self) -> &Path {
         &self.working_directory
-    }
-
-    /// Says to open on the file list rather than on a file.
-    pub fn list_at_start(&mut self) {
-        self.list_at_start = true;
     }
 
     /// Says to connect to the chat once started.
@@ -1665,8 +1652,6 @@ pub struct Opening {
     pub root: Option<PathBuf>,
     /// The files to open, in the order they were given.
     pub files: Vec<PathBuf>,
-    /// Whether to open on the file list.
-    pub list: bool,
 }
 
 /// What a set of command-line paths means.
@@ -1675,10 +1660,10 @@ pub struct Opening {
 /// what a reader means by the project, and the directory the file sits in
 /// only where git has never heard of it. A directory *is* the project --
 /// naming one is a reader saying where to work, so it is taken at its word
-/// and not widened to the repository over it -- and the question it leaves,
-/// which file, is the one the list answers. The first path decides the
-/// project, because a reader who names two has said which they meant
-/// first.
+/// and not widened to the repository over it -- and opens nothing: which
+/// file is the reader's to ask, from the welcome screen. The first path
+/// decides the project, because a reader who names two has said which they
+/// meant first.
 ///
 /// Absolute, and by the same rule [`obelus_buffer::Buffer::open`] uses on
 /// a file: made absolute rather than canonical, so a project reached through
@@ -1715,9 +1700,6 @@ pub fn opening(paths: &[PathBuf]) -> Opening {
     };
     Opening {
         root: Some(absolute(&root)),
-        // Nothing to open means the list is the whole answer: `ob src`
-        // is a reader saying which project and asking which file.
-        list: files.is_empty(),
         files,
     }
 }

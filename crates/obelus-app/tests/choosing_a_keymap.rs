@@ -313,14 +313,12 @@ fn headless_does_not_ask() {
 }
 
 /// A file named on the command line is still asked over, and escape is
-/// the way back to it; and a start that would open on the file list opens
-/// on the question instead, whose answer moves the key to that list.
+/// the way back to it.
 ///
-/// Deliberate breaks: asking only where `reading_nothing` -- the file
-/// start does not ask; and dropping `!asked` from the file list's
-/// condition in `start` -- the list of files is put over the question.
+/// Deliberate break: asking only where `reading_nothing` -- the file
+/// start does not ask.
 #[test]
-fn a_file_or_the_file_list_is_asked_over() {
+fn a_file_is_asked_over() {
     let scratch = support::Scratch::new("keymap-file");
     let path = scratch.join("one.rs");
     std::fs::write(&path, "fn main() {}\n").expect("the file");
@@ -331,16 +329,6 @@ fn a_file_or_the_file_list_is_asked_over() {
     assert_eq!(asked(&app).as_deref(), Some(ASKED), "not asked over a file");
     press(&mut app, KeyCode::Esc);
     assert!(app.current_buffer().is_some(), "the file went");
-
-    let listing = support::Scratch::new("keymap-listing");
-    let mut app = on(&listing, None);
-    app.list_at_start();
-    start(&mut app);
-    assert_eq!(
-        asked(&app).as_deref(),
-        Some(ASKED),
-        "the files went over it"
-    );
 }
 
 /// A file that cannot be written is said on the status row, and the keys

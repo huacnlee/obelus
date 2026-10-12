@@ -39,7 +39,6 @@ fn a_file_with_no_repository_says_which_directory_it_is_in() {
         "the project is not the directory the file is in"
     );
     assert_eq!(opening.files, vec![path], "the file was not opened");
-    assert!(!opening.list, "a named file left the question open");
 }
 
 /// Makes a repository where it is told to, with real git: what counts as
@@ -80,7 +79,6 @@ fn a_file_names_the_repository_it_is_in() {
         "the project is not the repository the file is in"
     );
     assert_eq!(opening.files, vec![path], "the file was not opened");
-    assert!(!opening.list, "a named file left the question open");
 }
 
 /// And a file in a linked worktree names *that* worktree.
@@ -140,10 +138,9 @@ fn a_file_in_a_worktree_names_that_worktree() {
     let _ = std::fs::remove_dir_all(&beside);
 }
 
-/// A directory is the project, and nothing in it is opened: which file is
-/// the question, and the list is the answer.
+/// A directory is the project, and nothing in it is opened.
 #[test]
-fn a_directory_is_the_tree_and_leaves_the_list() {
+fn a_directory_is_the_tree() {
     let scratch = support::Scratch::new("opening-tree");
     let path = scratch.path().to_path_buf();
     std::fs::write(path.join("one.rs"), "fn main() {}\n").expect("writing it");
@@ -154,10 +151,6 @@ fn a_directory_is_the_tree_and_leaves_the_list() {
         opening.files.is_empty(),
         "a directory was opened as a document"
     );
-    assert!(
-        opening.list,
-        "the question of which file was left unanswered"
-    );
 }
 
 /// Nothing on the command line changes nothing: the directory Obelus was
@@ -167,10 +160,6 @@ fn nothing_named_leaves_the_directory_alone() {
     let opening = app::opening(&[]);
     assert_eq!(opening.root, None);
     assert!(opening.files.is_empty());
-    assert!(
-        !opening.list,
-        "a list opened over a reader who asked for none"
-    );
 }
 
 /// The first path decides the project, and every file named is opened.
@@ -192,14 +181,12 @@ fn the_first_path_decides_and_the_rest_are_opened() {
         "the project is not the first path's"
     );
     assert_eq!(opening.files, vec![one, two.clone()]);
-    assert!(!opening.list);
 
     // A project named first, with a file after it: the project is the project,
-    // and the file is still opened, so there is nothing left for a list.
+    // and the file is still opened.
     let opening = app::opening(&[scratch.path().to_path_buf(), two.clone()]);
     assert_eq!(opening.root.as_deref(), Some(scratch.path()));
     assert_eq!(opening.files, vec![two]);
-    assert!(!opening.list, "a list opened over a file that was named");
 }
 
 /// A relative path becomes absolute, because every path Obelus shows is
@@ -262,32 +249,30 @@ fn the_application_works_in_the_tree_it_was_given() {
     assert_eq!(app.working_directory(), inner);
 }
 
-/// A directory on the command line opens Obelus on the list of what is
-/// in it: the reader said which project and asked which file.
+/// A directory on the command line opens Obelus on the welcome screen,
+/// with nothing over it: which file is the reader's to ask.
+///
+/// Broken deliberately by opening the file list at the end of
+/// `App::start`: a list was up.
 #[test]
-fn a_tree_opens_on_the_list() {
+fn a_tree_opens_on_nothing() {
     let scratch = support::Scratch::new("opening-list");
     std::fs::write(scratch.path().join("one.rs"), "fn main() {}\n").expect("writing it");
 
     let opening = app::opening(&[scratch.path().to_path_buf()]);
     let mut app = App::new(Vec::new());
     app.work_in(opening.root.expect("a project"));
-    assert!(opening.list, "a directory left nothing to answer");
-    app.list_at_start();
     support::lay_out(&mut app, 76, 18);
-
-    // Nothing yet: the rows come from a walk that sends on the loop's
-    // channel, and there is no channel until Obelus starts.
-    assert!(
-        app.picker().is_none(),
-        "a list opened before it could be filled"
-    );
 
     let (sender, _events) = obelus_app::event::channel();
     app.start(sender);
     assert!(
-        app.picker().is_some(),
-        "Obelus opened on nothing, with no file named and no list"
+        app.picker().is_none(),
+        "a list opened over the welcome screen"
+    );
+    assert!(
+        app.current_buffer().is_none(),
+        "a directory was opened as a document"
     );
 }
 
@@ -301,7 +286,6 @@ fn a_named_file_opens_on_the_file() {
     let opening = app::opening(std::slice::from_ref(&path));
     let mut app = App::new(vec![Buffer::open(&path).expect("opening it")]);
     app.work_in(opening.root.expect("a project"));
-    assert!(!opening.list);
     support::lay_out(&mut app, 76, 18);
 
     let (sender, _events) = obelus_app::event::channel();

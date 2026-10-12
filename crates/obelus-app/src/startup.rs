@@ -81,7 +81,6 @@ fn build(paths: &[PathBuf], built: &'static str, headless: bool) -> Result<App> 
         project = ?opening.root,
         paths = paths.len(),
         opens = opening.files.len(),
-        list = opening.list,
         "Obelus starting"
     );
 
@@ -124,9 +123,6 @@ fn build(paths: &[PathBuf], built: &'static str, headless: bool) -> Result<App> 
     match root {
         Some(root) => {
             app.work_in(root);
-            if opening.list {
-                app.list_at_start();
-            }
         }
         // Nothing to go on, so Obelus asks, and the asking is the whole
         // of the screen until it is answered. `work_in` is deliberately

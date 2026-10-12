@@ -230,26 +230,15 @@ impl App {
         // and last of all so that everything that could go wrong has.
         let told = self.tell_what_went_wrong();
         // Which keys to start from, on a first start, and not over what
-        // went wrong for the reason the file list is not: a list over a
-        // list hides the one the reader is owed. That start goes without
-        // the question, and with no file written the next one asks it.
+        // went wrong: a list over a list hides the one the reader is owed.
+        // That start goes without the question, and with no file written
+        // the next one asks it.
         //
         // Over a file the command line named, or one reopened, all the
-        // same: it is asked once ever, escape is one key back to the file,
-        // and every key the reader is about to press depends on it.
-        let asked = !told && self.ask_for_a_keymap();
-        // Last, and here rather than at the command line: the rows come
-        // from a walk that sends on this channel, so a list opened before
-        // there was one would be a list nothing ever fills. Not over what
-        // went wrong, though: a list opened over a list would put the one
-        // the reader is owed under the one they asked for, and the files
-        // are one key away once it has been read -- and not over which keys
-        // those are, whose answer moves that key.
-        //
-        // Nor where nobody is at the screen to choose from it: the walk
-        // that fills it is the whole project.
-        if self.list_at_start && !told && !asked && !self.headless {
-            self.open_file_picker();
+        // same: escape is one key back to the file, and every key the
+        // reader is about to press depends on it.
+        if !told {
+            self.ask_for_a_keymap();
         }
     }
 
