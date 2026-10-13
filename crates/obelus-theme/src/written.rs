@@ -469,7 +469,9 @@ fn over_noting(table: &toml::Table) -> (Theme, Noted) {
     // they were just read under.
     asked.borrow_mut().insert(("syntax", "italic"));
     if let Some(said) = syntax.and_then(|table| table.get("italic")) {
-        theme.syntax.italic = slanted(said, &named.borrow(), &mut noted.borrow_mut());
+        if let Some(kinds) = slanted(said, &named.borrow(), &mut noted.borrow_mut()) {
+            theme.syntax.italic = kinds;
+        }
     }
 
     // And what nobody asked for. A line that will not do is a line that did
@@ -519,16 +521,18 @@ fn over_noting(table: &toml::Table) -> (Theme, Noted) {
 /// for the reason `over_noting` gives: two lists of the names are two
 /// answers to what a kind is called. A word that names no kind is left out
 /// and the list is marked, for the same reason a colour that will not parse
-/// is: the rest of the list is still what the reader asked for.
-fn slanted(said: &toml::Value, named: &[(&str, SyntaxKind)], noted: &mut Noted) -> Kinds {
+/// is: the rest of the list is still what the reader asked for. And what is
+/// not a list at all is nothing, so the base's set stands -- as a colour
+/// that will not parse leaves the base's colour, rather than none.
+fn slanted(said: &toml::Value, named: &[(&str, SyntaxKind)], noted: &mut Noted) -> Option<Kinds> {
     let at = || vec!["syntax".to_string(), "italic".to_string()];
     let Some(words) = said.as_array() else {
         noted.push(Note {
             keys: at(),
-            why: "Not a list of kinds, so nothing is slanted\nA list is written [\"comment\"]",
+            why: "Not a list of kinds, so it slants what this builds on\nA list is written [\"comment\"]",
             name: false,
         });
-        return Kinds::NONE;
+        return None;
     };
     let mut astray = false;
     let kinds = words.iter().fold(Kinds::NONE, |kinds, word| {
@@ -550,7 +554,7 @@ fn slanted(said: &toml::Value, named: &[(&str, SyntaxKind)], noted: &mut Noted) 
             name: false,
         });
     }
-    kinds
+    Some(kinds)
 }
 
 /// What a kind's colour is called in a theme file, and so what a slant asks
@@ -696,8 +700,8 @@ mod tests {
 
     /// A slant is asked for by the names the colours have, and is not a
     /// misspelling of one; a word that names no kind is noted on the list
-    /// and the rest of it still slants, and a list that is not one slants
-    /// nothing and is noted too. A file that says nothing about it slants
+    /// and the rest of it still slants, and what is not a list leaves the
+    /// base's set and is noted too. A file that says nothing about it slants
     /// what its base does, and `[]` slants nothing, quietly.
     ///
     /// Deliberate breaks: `italic` not written down as asked (it is noted as
@@ -706,7 +710,8 @@ mod tests {
     /// `name_of` (types stay upright, and the list is noted), a file that
     /// says nothing slanting nothing in place of its base's set (the comment
     /// is upright), and the list read only when it has something in it (`[]`
-    /// keeps the base's comment).
+    /// keeps the base's comment), and what is not a list slanting nothing
+    /// (the base's comment is upright).
     #[test]
     fn a_slant_is_asked_for_by_the_names_the_colours_have() {
         let noted_at = |said: &str| {
@@ -741,9 +746,13 @@ mod tests {
         assert_eq!(at, ["syntax.italic"]);
         assert_eq!(italic, crate::Kinds::NONE.with(SyntaxKind::String));
 
-        let (italic, at) = noted_at("[syntax]\nitalic = \"comment\"\n");
+        let (italic, at) = noted_at("[syntax]\nitalic = \"keyword\"\n");
         assert_eq!(at, ["syntax.italic"]);
-        assert_eq!(italic, crate::Kinds::NONE);
+        assert_eq!(
+            italic,
+            crate::Kinds::COMMENT,
+            "what is not a list did not leave the base's"
+        );
     }
 
     /// A terminal colour a file names is the file's, and one it does not is
