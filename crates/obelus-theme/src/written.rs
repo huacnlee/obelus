@@ -468,10 +468,10 @@ fn over_noting(table: &toml::Table) -> (Theme, Noted) {
     // After the colours, because the names a slant asks for are the names
     // they were just read under.
     asked.borrow_mut().insert(("syntax", "italic"));
-    if let Some(said) = syntax.and_then(|table| table.get("italic")) {
-        if let Some(kinds) = slanted(said, &named.borrow(), &mut noted.borrow_mut()) {
-            theme.syntax.italic = kinds;
-        }
+    if let Some(said) = syntax.and_then(|table| table.get("italic"))
+        && let Some(kinds) = slanted(said, &named.borrow(), &mut noted.borrow_mut())
+    {
+        theme.syntax.italic = kinds;
     }
 
     // And what nobody asked for. A line that will not do is a line that did
