@@ -1620,6 +1620,11 @@ fn draw_row(
         // what the row is instead -- replaces both.
         let mut style = match painting.ink {
             Some(colour) => Style::new().fg(colour),
+            // A cell the file does not contain is not of the kind the
+            // character after it is: it is drawn in its own colour below,
+            // and a slant left on it from a comment would be the only thing
+            // about a hint that changed with what it stands in front of.
+            None if glyph.phantom.is_some() => Style::new(),
             None => painting
                 .theme
                 .style_for(painting.highlights.kind_at(glyph.first_byte)),
