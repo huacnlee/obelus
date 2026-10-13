@@ -697,12 +697,16 @@ mod tests {
     /// A slant is asked for by the names the colours have, and is not a
     /// misspelling of one; a word that names no kind is noted on the list
     /// and the rest of it still slants, and a list that is not one slants
-    /// nothing and is noted too.
+    /// nothing and is noted too. A file that says nothing about it slants
+    /// what its base does, and `[]` slants nothing, quietly.
     ///
     /// Deliberate breaks: `italic` not written down as asked (it is noted as
     /// a colour nobody has), a word that names nothing not noted (the list
-    /// with `keywrd` in it says nothing), and `type_name` named as `type` in
-    /// `name_of` (types stay upright, and the list is noted).
+    /// with `keywrd` in it says nothing), `type_name` named as `type` in
+    /// `name_of` (types stay upright, and the list is noted), a file that
+    /// says nothing slanting nothing in place of its base's set (the comment
+    /// is upright), and the list read only when it has something in it (`[]`
+    /// keeps the base's comment).
     #[test]
     fn a_slant_is_asked_for_by_the_names_the_colours_have() {
         let noted_at = |said: &str| {
@@ -719,6 +723,18 @@ mod tests {
         assert!(
             !italic.contains(SyntaxKind::Comment),
             "the base's set was kept"
+        );
+
+        let (italic, at) = noted_at("base = \"light\"\n[syntax]\nkeyword = \"#123456\"\n");
+        assert!(at.is_empty(), "a file that says nothing was noted: {at:?}");
+        assert_eq!(italic, crate::Kinds::COMMENT, "the base's set was not kept");
+
+        let (italic, at) = noted_at("[syntax]\nitalic = []\n");
+        assert!(at.is_empty(), "an empty list was noted: {at:?}");
+        assert_eq!(
+            italic,
+            crate::Kinds::NONE,
+            "an empty list slanted something"
         );
 
         let (italic, at) = noted_at("[syntax]\nitalic = [\"keywrd\", \"string\"]\n");

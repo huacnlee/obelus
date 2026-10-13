@@ -610,8 +610,7 @@ fn the_template_for_omarchy_names_colours_obelus_has() {
 /// kind's style, as painting the colour alone did (the comment is upright),
 /// `Kinds::with` ignoring its kind (the comment is upright), and `over`
 /// keeping the base's set whatever the file says (the comment stays
-/// slanted under `italic = []`, and the keyword stays upright under
-/// `italic = ["keyword"]`).
+/// slanted and the keyword stays upright under `italic = ["keyword"]`).
 #[test]
 fn a_comment_is_slanted_unless_the_theme_says_otherwise() {
     let scratch = reader("slant");
