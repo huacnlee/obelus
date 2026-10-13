@@ -96,6 +96,11 @@ pub struct SyntaxTheme {
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
 pub struct Kinds(u32);
 
+// A bit per kind, at the kind's place in the list: a kind past the
+// thirty-second would be a shift off the end, so it stops the build instead.
+// `Warning` because it is the last of them.
+const _: () = assert!((SyntaxKind::Warning as u32) < u32::BITS);
+
 impl Kinds {
     /// None of them.
     pub const NONE: Self = Self(0);
