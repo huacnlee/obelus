@@ -1,5 +1,5 @@
-//! The keys at the foot of a view, the card they can be drawn on, a panel,
-//! and what a list says when it has nothing in it.
+//! The keys at the foot of a view, a panel, and what a list says when it has
+//! nothing in it.
 
 use super::*;
 
@@ -19,19 +19,6 @@ pub struct Hint {
     pub and_also: Option<obelus_keymap::KeyChord>,
     /// What it does, in the one word the foot has room for.
     pub does: Option<&'static str>,
-    /// The same thing said properly, for the card, which has room for it.
-    ///
-    /// `None` where the word is the whole of it. Two forms rather than one
-    /// because the two places are not the same place: a foot is a row shared
-    /// by everything, and a card is a page about one thing.
-    pub said: Option<&'static str>,
-    /// Whether it goes at the foot, or waits in the list of them all.
-    ///
-    /// The foot is one row over the reader's work, so what goes there is
-    /// what they reach for without thinking. Everything else is a keypress
-    /// away and is not lost -- it is in the card, where there is room to say
-    /// what it does in words rather than in one.
-    pub common: bool,
     /// Which way it is set, for a key whose whole job is a switch.
     ///
     /// The word says what the key switches; this says what it is switched
@@ -46,9 +33,7 @@ pub struct Hint {
     /// Worked out per frame by whoever knows: a note about the project has
     /// nowhere to go, so there is no "go there" on the foot while the
     /// selection is on one. The foot draws what can be pressed, and what it
-    /// was told to keep ([`Hint::kept`]); the card draws all of them and
-    /// greys this one out, so what a reader learns is that the view has
-    /// eight keys rather than that its keys come and go.
+    /// was told to keep ([`Hint::kept`]).
     pub usable: bool,
     /// Whether the foot keeps it, greyed, where it does nothing.
     ///
@@ -59,35 +44,17 @@ pub struct Hint {
 }
 
 impl Hint {
-    /// A key that goes at the foot.
+    /// A key, and the word the foot says it with.
     #[must_use]
-    pub const fn common(chord: obelus_keymap::KeyChord, does: &'static str) -> Self {
+    pub const fn new(chord: obelus_keymap::KeyChord, does: &'static str) -> Self {
         Self {
             chord,
             and_also: None,
             does: Some(does),
-            said: None,
             switched: None,
-            common: true,
             usable: true,
             kept: false,
         }
-    }
-
-    /// One that waits in the card.
-    #[must_use]
-    pub const fn rare(chord: obelus_keymap::KeyChord, does: &'static str) -> Self {
-        Self {
-            common: false,
-            ..Self::common(chord, does)
-        }
-    }
-
-    /// What it does, at length, for the card.
-    #[must_use]
-    pub const fn saying(mut self, said: &'static str) -> Self {
-        self.said = Some(said);
-        self
     }
 
     /// The same act in the other direction, on a key of its own.
@@ -221,7 +188,7 @@ fn capped_in(cells: &mut CellBuffer, x: u16, y: u16, keys: &str, ink: Color, the
 /// The foot writes its own cap, because a run of cells a shade off the page
 /// is the only cap a terminal has and the foot is a row of keys among
 /// words. Everywhere else a key is shown it has no ground to give it and
-/// needs none: on the card and on the keys page the key is *a column*, and
+/// needs none: on the keys page the key is *a column*, and
 /// in a conversation it is a word set apart from the words beside it by
 /// the gaps either side. So the cells stay exactly as they are, and the
 /// shape is said around them -- over the blank either side, which is where
@@ -271,8 +238,8 @@ const BETWEEN: u16 = 3;
 
 /// How wide a cap is, with the key in it.
 ///
-/// Asked by the item that is about to be drawn and by the pointer at the
-/// far end, which were each carrying their own idea of how much a cap adds.
+/// Asked by every row that measures a key before drawing it, which were
+/// each carrying their own idea of how much a cap adds.
 pub(crate) fn cap_width(keys: &str) -> usize {
     text_width(keys) + 2
 }
@@ -291,10 +258,8 @@ fn width_of(hint: &Hint) -> usize {
 /// Marks a row that stopped before it had said everything.
 ///
 /// The mark Obelus cuts text with everywhere else, in the dim ink, in the
-/// blank the next item would have started in. Where the pointer to the card
-/// is up this says which of the two is the whole list; where there is no
-/// card -- a document's foot has none behind it -- it says on its own that
-/// the terminal is too narrow for all of this.
+/// blank the next item would have started in: the terminal is too narrow
+/// for all of this, and the row is not everything the view answers to.
 fn cut(cells: &mut CellBuffer, x: u16, y: u16, edge: u16, theme: &Theme) {
     if x >= edge {
         return;
@@ -319,9 +284,9 @@ pub const PANEL_INSET: u16 = 2;
 /// The frame round something Obelus floats over the reader's work.
 ///
 /// One shape for all of them: the completion list, the signature line, a
-/// hover, and the card of every key. They are the same kind of thing --
-/// something put over the page for a moment -- and four of them wearing two
-/// shapes was a screen where the shape said nothing.
+/// hover, and what is wrong with the line. They are the same kind of
+/// thing -- something put over the page for a moment -- and four of them
+/// wearing two shapes was a screen where the shape said nothing.
 ///
 /// Rounded, and on the page's own colour. The rounding is not decoration:
 /// what a hover holds is a *document*, and a document's own boxes -- a
@@ -402,37 +367,21 @@ pub fn footed(area: Rect, hints: &[Hint]) -> Rect {
 
 /// The keys a view answers to, along the bottom of it under a rule.
 ///
-/// The common ones that can be pressed at the moment, those a view keeps
-/// there greyed where they cannot ([`Hint::kept`]), and
-/// [`obelus_keymap::keys_card`] at the right-hand end saying there
-/// are more. At the foot rather than beside a
-/// title, because a key needs a word and words need room.
+/// The ones that can be pressed at the moment, and those a view keeps there
+/// greyed where they cannot ([`Hint::kept`]). At the foot rather than beside
+/// a title, because a key needs a word and words need room.
 ///
 /// What belongs here is what *this* view does. A key that means the same
 /// thing wherever the reader is does not: escape backs out of the nearest
 /// thing everywhere in Obelus -- `keymap::why_not` refuses to rebind it for
 /// that reason -- so a foot that spends a third of itself saying `Leave` is
 /// a row of the reader's screen saying what every other view already said.
-/// Those go on the card, which is every key here rather than the ones worth
-/// telling.
-pub fn foot(cells: &mut CellBuffer, area: Rect, hints: &[Hint], theme: &Theme) {
-    row_of_keys(cells, area, hints, theme, true);
-}
-
-/// The same row, for a view with no card behind it.
 ///
-/// A card of every key is a layer's: something opened over the reader's
-/// work, which owns the keyboard while it is up and has to be able to say
-/// so. A document is where the reader already was, the card's key over one
-/// is whatever that key means everywhere, and this row is the whole of what
-/// the view says about itself -- so it points at nothing, and gets the width
-/// the pointer would have taken.
-pub fn foot_without_a_card(cells: &mut CellBuffer, area: Rect, hints: &[Hint], theme: &Theme) {
-    row_of_keys(cells, area, hints, theme, false);
-}
-
-/// Draws that row, with or without the pointer at the end of it.
-fn row_of_keys(cells: &mut CellBuffer, area: Rect, hints: &[Hint], theme: &Theme, card: bool) {
+/// There is no list of every key behind this row. There was a card of them,
+/// on a key of its own, and nearly every line of it was this row said again
+/// at length: what it added was escape, keys that could not be pressed at
+/// the moment, and keys cut for width -- and the cut is said here.
+pub fn foot(cells: &mut CellBuffer, area: Rect, hints: &[Hint], theme: &Theme) {
     if hints.is_empty() || area.height < FOOT_ROWS {
         return;
     }
@@ -457,31 +406,9 @@ fn row_of_keys(cells: &mut CellBuffer, area: Rect, hints: &[Hint], theme: &Theme
         Style::new().bg(theme.background),
     );
 
-    // The one at the end first, because it is the one that must not be given
-    // up: a foot that ran out of room and dropped the way to the rest of the
-    // keys would be a foot that hides the thing it exists to point at.
-    let chord = obelus_keymap::keys_card().label();
-    let width = u16::try_from(cap_width(&chord) + 1 + text_width("Keys")).unwrap_or(0);
-    let edge = match area.width.checked_sub(width + 2).filter(|_| card) {
-        Some(offset) => {
-            let after = capped(cells, area.x + offset, y, &chord, theme);
-            write(
-                cells,
-                after + 1,
-                y,
-                "Keys",
-                Style::new().fg(theme.gutter).bg(theme.background),
-            );
-            area.x + offset
-        }
-        None => area.x + area.width,
-    };
-
+    let edge = area.x + area.width;
     let mut x = area.x + 2;
-    for hint in hints
-        .iter()
-        .filter(|hint| hint.common && (hint.usable || hint.kept))
-    {
+    for hint in hints.iter().filter(|hint| hint.usable || hint.kept) {
         let keys = hint.keys();
         // Saturating rather than refused: a hint wider than the screen can
         // hold is one that does not fit, which is the same answer the row
@@ -530,103 +457,6 @@ fn row_of_keys(cells: &mut CellBuffer, area: Rect, hints: &[Hint], theme: &Theme
             );
         }
         x += BETWEEN;
-    }
-}
-
-/// Every key a view answers to, on a card over it.
-///
-/// All of them, with what cannot be pressed at the moment greyed rather than
-/// left out: what a reader should come away with is that this view has these
-/// keys, not that its keys come and go. There is room here for a sentence,
-/// which is why the words can be words rather than the one the foot fits.
-pub fn keys_card(cells: &mut CellBuffer, area: Rect, hints: &[Hint], theme: &Theme) {
-    if hints.is_empty() {
-        return;
-    }
-    let column = u16::try_from(
-        hints
-            .iter()
-            .map(|hint| text_width(&hint.keys()))
-            .max()
-            .unwrap_or(0),
-    )
-    .unwrap_or(0)
-    .saturating_add(2);
-    let widest = u16::try_from(
-        hints
-            .iter()
-            .map(|hint| hint.said.or(hint.does).map_or(0, text_width))
-            .max()
-            .unwrap_or(0),
-    )
-    .unwrap_or(0);
-    // The edges, a margin inside them, the keys and what they do.
-    let width = column
-        .saturating_add(widest)
-        .saturating_add(4)
-        .min(area.width);
-    // The edges, the title, a blank under it, and a row per key.
-    let height = u16::try_from(hints.len())
-        .unwrap_or(u16::MAX)
-        .saturating_add(4)
-        .min(area.height);
-    if width < 4 || height < 4 {
-        return;
-    }
-    let card = Rect {
-        x: area.x + (area.width - width) / 2,
-        y: area.y + (area.height - height) / 2,
-        width,
-        height,
-    };
-
-    // The panel's own ground -- see `panel`.
-    let paper = theme.background;
-    panel(cells, card, theme);
-    let room = inside(card);
-
-    write(
-        cells,
-        room.x,
-        room.y,
-        "The keys here",
-        Style::new().fg(theme.status_foreground).bg(paper),
-    );
-    let ground = Style::new().fg(theme.foreground).bg(paper);
-    let off = Style::new().fg(theme.gutter).bg(paper);
-    for (at, hint) in hints.iter().enumerate() {
-        let Ok(offset) = u16::try_from(at) else { break };
-        let y = room.y + 2 + offset;
-        if y >= room.bottom() {
-            break;
-        }
-        let style = match hint.usable {
-            true => ground,
-            false => off,
-        };
-        let keys = hint.keys();
-        write(cells, room.x, y, &keys, style);
-        // The panel's own ground on both counts: what draws the cap here is
-        // its outline and the lip under it, the same as a key on a page
-        // that is already the colour the key is.
-        cap_around(
-            room.x,
-            y,
-            &keys,
-            text_width(&keys),
-            paper,
-            paper,
-            theme.gutter,
-        );
-        let x = room.x + column;
-        if let Some(does) = hint.said.or(hint.does) {
-            write(cells, x, y, does, style);
-        }
-        // What the key is set to is not on the card. A card is read to find
-        // out what a key *is* -- what to press for a thing -- and which way
-        // one of them happens to be switched right now is a different
-        // question, asked of the foot, where the key is offered rather than
-        // catalogued.
     }
 }
 

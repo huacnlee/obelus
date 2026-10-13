@@ -54,12 +54,12 @@ const SLIDE: Duration = Duration::from_millis(190);
 /// How long a box put over the page takes to arrive.
 ///
 /// A box is joined to nothing and travels nowhere, so what it does
-/// instead is come up: the card of every key, a hover, a completion list
-/// and the line that says what a call takes. Shorter than a pane's
-/// slide, because there is no distance to cover and the reader asked for
-/// this one with a key they have just pressed -- and not nothing, because
-/// a box that is simply there between two frames is a thing that appeared
-/// rather than a thing that opened.
+/// instead is come up: a hover, a completion list and the line that says
+/// what a call takes. Shorter than a pane's slide, because there is no
+/// distance to cover and the reader asked for this one with a key they
+/// have just pressed -- and not nothing, because a box that is simply
+/// there between two frames is a thing that appeared rather than a thing
+/// that opened.
 const FADE: Duration = Duration::from_millis(120);
 
 /// How long a band takes to catch up with where it has got to.
@@ -158,8 +158,14 @@ impl Bars {
     /// opens is a bar the reader can see: what is new is news, and the
     /// alternative is a control that fades in from nothing after the
     /// screen it belongs to has arrived.
-    fn drawn(&mut self, bars: &[Bar], pointer: Option<(u16, u16)>, now: Instant) {
-        for bar in bars {
+    fn drawn(
+        &mut self,
+        bars: impl IntoIterator<Item = Bar, IntoIter: Clone>,
+        pointer: Option<(u16, u16)>,
+        now: Instant,
+    ) {
+        let bars = bars.into_iter();
+        for bar in bars.clone() {
             // Its own column and the one before it. A bar is drawn thinner
             // than the cell it is in, so a reader aiming at it with a
             // pointer is aiming at something narrower than the thing they
@@ -200,7 +206,7 @@ impl Bars {
             }
         }
         self.seen
-            .retain(|seen| bars.iter().any(|bar| bar.area == seen.area));
+            .retain(|seen| bars.clone().any(|bar| bar.area == seen.area));
     }
 
     /// How strongly a bar is drawn at this moment, from nothing at all to
@@ -298,12 +304,16 @@ const TURN: Duration = Duration::from_millis(900);
 /// How often the mark that turns is drawn again.
 ///
 /// A moment and not a rate, though it is an animation, because of how
-/// long it lasts: a rate is `ControlFlow::Poll`, and a loop that polls
-/// runs flat out between the frames the screen paces -- which for the
-/// fifth of a second a pane slides is nothing, and for the minutes an
-/// agent works was a whole core, measured at a hundred per cent against
-/// six for this. Sixty a second is a turn the eye cannot count, which is
-/// all the braille could not be.
+/// long it lasts: a rate is every frame the screen will take, which is a
+/// hundred and forty-four a second on a screen that refreshes that fast
+/// -- nothing for the fifth of a second a pane slides, and the minutes an
+/// agent works drawn at whatever the screen can manage. Sixty a second is
+/// a turn the eye cannot count, which is all the braille could not be.
+///
+/// It was chosen when a rate was `ControlFlow::Poll`, which ran flat out
+/// between frames and held a whole core for those minutes, measured at a
+/// hundred per cent against six for this. A rate sleeps now
+/// (`window::control_flow`), so what is left of that reason is the cap.
 const TURN_STEP: Duration = Duration::from_micros(16_667);
 
 /// And how long the mark rests between passes.
@@ -1080,7 +1090,12 @@ impl Motion {
     /// Told rather than worked out from the page, for the reason the band
     /// is: a bar that scrolled and a bar redrawn where it was are the same
     /// handful of cells, and nothing in them says which happened.
-    pub(crate) fn bars_drawn(&mut self, bars: &[Bar], pointer: Option<(u16, u16)>, now: Instant) {
+    pub(crate) fn bars_drawn(
+        &mut self,
+        bars: impl IntoIterator<Item = Bar, IntoIter: Clone>,
+        pointer: Option<(u16, u16)>,
+        now: Instant,
+    ) {
         self.bars.drawn(bars, pointer, now);
     }
 
@@ -1248,11 +1263,11 @@ mod tests {
         let base = Instant::now();
         let mut motion = Motion::new(None);
         let bar = a_bar(99, 0);
-        motion.bars_drawn(&[bar], None, base);
+        motion.bars_drawn([bar], None, base);
 
         // Drawn again where it was, which is not news.
         let soon = base + Duration::from_millis(100);
-        motion.bars_drawn(&[bar], None, soon);
+        motion.bars_drawn([bar], None, soon);
         assert_eq!(motion.bar_shown(bar.area, soon), 1.0);
 
         // Still inside the hold.
@@ -1275,7 +1290,7 @@ mod tests {
         let base = Instant::now();
         let mut motion = Motion::new(None);
         let bar = a_bar(99, 0);
-        motion.bars_drawn(&[bar], None, base);
+        motion.bars_drawn([bar], None, base);
 
         // Half way through the settling, where it is dim but not out.
         let dim = base + BAR_RISE + BAR_HOLD + BAR_SETTLE / 2;
@@ -1284,7 +1299,7 @@ mod tests {
 
         // And the reader scrolls again. The next moment is brighter than
         // the one before it, all the way up.
-        motion.bars_drawn(&[a_bar(99, 9)], None, dim);
+        motion.bars_drawn([a_bar(99, 9)], None, dim);
         let mut last = was;
         for step in 1..=10 {
             let at = dim + BAR_RISE * step / 10;
@@ -1306,7 +1321,7 @@ mod tests {
         let base = Instant::now();
         let mut motion = Motion::new(None);
         let bar = a_bar(99, 0);
-        motion.bars_drawn(&[bar], None, base);
+        motion.bars_drawn([bar], None, base);
         assert_eq!(motion.bar_shown(bar.area, base), 1.0);
     }
 
@@ -1319,12 +1334,12 @@ mod tests {
         let base = Instant::now();
         let mut motion = Motion::new(None);
         let (list, preview) = (a_bar(40, 0), a_bar(99, 0));
-        motion.bars_drawn(&[list, preview], None, base);
+        motion.bars_drawn([list, preview], None, base);
 
         // Long enough that both would have settled, and then one moves.
         let later = base + BAR_ROUND;
         assert_eq!(motion.bar_shown(list.area, later), 0.0);
-        motion.bars_drawn(&[a_bar(40, 7), preview], None, later);
+        motion.bars_drawn([a_bar(40, 7), preview], None, later);
 
         assert_eq!(motion.bar_shown(list.area, later), 0.0, "setting out");
         let risen = later + BAR_RISE;
@@ -1349,15 +1364,15 @@ mod tests {
         let base = Instant::now();
         let mut motion = Motion::new(None);
         let list = a_bar(40, 0);
-        motion.bars_drawn(&[list], None, base);
+        motion.bars_drawn([list], None, base);
 
         let later = base + BAR_ROUND;
         assert_eq!(motion.bar_shown(list.area, later), 0.0);
 
         // The list closes, and opens again: what comes back is new, and
         // what is new is simply there.
-        motion.bars_drawn(&[], None, later);
-        motion.bars_drawn(&[list], None, later);
+        motion.bars_drawn([], None, later);
+        motion.bars_drawn([list], None, later);
         assert_eq!(motion.bar_shown(list.area, later), 1.0);
     }
 
@@ -1370,12 +1385,12 @@ mod tests {
         let base = Instant::now();
         let mut motion = Motion::new(None);
         let bar = a_bar(99, 0);
-        motion.bars_drawn(&[bar], None, base);
+        motion.bars_drawn([bar], None, base);
 
         // Settled, and then the pointer arrives on its column.
         let still = base + BAR_ROUND;
         assert_eq!(motion.bar_under(bar.area, still), 0.0);
-        motion.bars_drawn(&[bar], Some((99, 5)), still);
+        motion.bars_drawn([bar], Some((99, 5)), still);
 
         assert_eq!(motion.bar_under(bar.area, still), 0.0, "setting out");
         let part = motion.bar_under(bar.area, still + BAR_UNDER / 2);
@@ -1388,7 +1403,7 @@ mod tests {
         assert_eq!(motion.bar_shown(bar.area, ages), 1.0, "and holds it up");
 
         // Off again, the same way.
-        motion.bars_drawn(&[bar], None, ages);
+        motion.bars_drawn([bar], None, ages);
         let going = motion.bar_under(bar.area, ages + BAR_UNDER / 2);
         assert!(going > 0.0 && going < 1.0, "part of the way back: {going}");
         assert_eq!(motion.bar_under(bar.area, ages + BAR_UNDER), 0.0);
@@ -1401,12 +1416,12 @@ mod tests {
         let base = Instant::now();
         let mut motion = Motion::new(None);
         let bar = a_bar(99, 0);
-        motion.bars_drawn(&[bar], Some((98, 5)), base);
+        motion.bars_drawn([bar], Some((98, 5)), base);
         assert_eq!(motion.bar_under(bar.area, base + BAR_UNDER), 1.0);
 
         // And two columns off is somewhere else.
         let mut elsewhere = Motion::new(None);
-        elsewhere.bars_drawn(&[bar], Some((97, 5)), base);
+        elsewhere.bars_drawn([bar], Some((97, 5)), base);
         assert_eq!(elsewhere.bar_under(bar.area, base + BAR_UNDER), 0.0);
     }
 
@@ -1418,7 +1433,7 @@ mod tests {
         let base = Instant::now();
         let mut motion = Motion::new(None);
         let bar = a_bar(99, 0);
-        motion.bars_drawn(&[bar], None, base);
+        motion.bars_drawn([bar], None, base);
         motion.animates(false);
 
         let after = base + BAR_ROUND;
@@ -1436,7 +1451,7 @@ mod tests {
         let mut motion = Motion::new(None);
         let bar = a_bar(99, 0);
         motion.animates(false);
-        motion.bars_drawn(&[bar], Some((99, 5)), base);
+        motion.bars_drawn([bar], Some((99, 5)), base);
         assert_eq!(
             motion.bar_under(bar.area, base),
             1.0,
@@ -1453,7 +1468,7 @@ mod tests {
         let base = Instant::now();
         let mut motion = Motion::new(None);
         let bar = a_bar(99, 0);
-        motion.bars_drawn(&[bar], None, base);
+        motion.bars_drawn([bar], None, base);
 
         assert_eq!(motion.wake(base, false), Some(Wake::EveryFrame));
         assert_eq!(
@@ -2041,13 +2056,13 @@ mod tests {
     /// gone or the reader has turned animation off.
     ///
     /// Break: answer `Wake::EveryFrame` while it turns -- the first
-    /// assertion goes, and a window with an agent at work polls a core
-    /// flat out. Or drop `turned` from `advance`, and the third does: the
-    /// moment arrives and nothing is drawn for it. Or take the seconds
-    /// since the window opened as an `f32` in `turn`, and a week on the
-    /// mark is an eighth of a turn from where it should be. Or name
-    /// `next_turn` in `wake` once it has passed, and the loop is woken
-    /// twice for every step.
+    /// assertion goes, and a window with an agent at work draws at the
+    /// screen's rate rather than sixty a second. Or drop `turned` from
+    /// `advance`, and the third does: the moment arrives and nothing is
+    /// drawn for it. Or take the seconds since the window opened as an
+    /// `f32` in `turn`, and a week on the mark is an eighth of a turn from
+    /// where it should be. Or name `next_turn` in `wake` once it has
+    /// passed, and the loop is woken twice for every step.
     #[test]
     fn a_mark_that_turns_is_drawn_at_moments_and_only_while_it_is_there() {
         let mut motion = Motion::new(None);

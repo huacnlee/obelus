@@ -374,6 +374,199 @@ fn enter_puts_the_chosen_row_in_the_box() {
     );
 }
 
+/// A project chosen from the list is where the walk stops: no separator,
+/// no list of what is inside it, and enter opens it.
+///
+/// A frame between the two enters, because the frame is what builds the
+/// list again from the directory the box is in -- and that list offers
+/// the row just taken, in front of the enter that would open it.
+///
+/// Broken deliberately twice: going `into` every directory in
+/// `naming_list_key`, so the box takes a separator and the list is what
+/// is inside the project; and leaving `naming_shut` alone there, so the
+/// frame puts the list back and the second enter fills the box again.
+#[test]
+fn a_project_chosen_from_the_list_is_where_the_walk_stops() {
+    let _list = the_list();
+    let scratch = support::Scratch::new("choosing-stops-at-a-project");
+    let project = scratch.path().join("alpha");
+    std::fs::create_dir_all(project.join("inner")).expect("directories");
+    gix::init(&project).expect("a repository");
+    let mut app = asking();
+    open_another(&mut app);
+    for character in format!("{}/", scratch.path().display()).chars() {
+        press(&mut app, KeyCode::Char(character));
+    }
+
+    press(&mut app, KeyCode::Enter);
+    support::render(&mut app, 120, 20);
+
+    let typed = app.choosing().expect("asking").typed;
+    assert!(
+        typed.ends_with("alpha"),
+        "the box went on into the project: {typed:?}"
+    );
+    assert!(
+        app.naming_list().is_none(),
+        "a list is still in front of the enter that opens it"
+    );
+
+    press(&mut app, KeyCode::Enter);
+
+    assert!(app.choosing().is_none(), "it is still asking");
+    assert_eq!(
+        app.working_directory(),
+        project,
+        "it did not open the project"
+    );
+}
+
+/// And a file chosen from the list is the end of the walk too: enter
+/// opens it.
+///
+/// The frame builds the list again from the directory the file is in,
+/// which offers the one file just taken -- so before the list was kept
+/// shut there, the enter after it put the same file in the box again, and
+/// the one after that, and the reader had to know to press escape.
+///
+/// Broken deliberately by setting `naming_shut` to `false` in
+/// `naming_list_key`: the second enter fills the box rather than opening.
+#[test]
+fn a_file_chosen_from_the_list_opens_on_the_next_enter() {
+    let scratch = support::Scratch::new("choosing-a-file");
+    let file = scratch.write("notes.md", "# Notes\n");
+    let mut app = asking();
+    open_another(&mut app);
+    for character in format!("{}/", scratch.path().display()).chars() {
+        press(&mut app, KeyCode::Char(character));
+    }
+
+    press(&mut app, KeyCode::Enter);
+    support::render(&mut app, 120, 20);
+    assert!(
+        app.choosing().expect("asking").typed.ends_with("notes.md"),
+        "the file did not go into the box"
+    );
+
+    press(&mut app, KeyCode::Enter);
+
+    assert!(app.choosing().is_none(), "it is still asking");
+    // Resolved, because a temporary directory on macOS is reached
+    // through a link.
+    assert_eq!(
+        app.current_buffer()
+            .and_then(|buffer| buffer.path().canonicalize().ok()),
+        file.canonicalize().ok(),
+        "the file chosen is not the one open"
+    );
+}
+
+/// And a separator walks on from there, into what the project holds.
+///
+/// The box moves from `alpha` to `alpha/`, which is one path to a
+/// comparison, so nothing that asks whether the box moved will open the
+/// list the stop shut.
+///
+/// Broken deliberately by taking `naming_shut = false` out of `look_in`:
+/// the directory is read and nothing is offered from it.
+#[test]
+fn a_separator_after_a_project_walks_on_into_it() {
+    let scratch = support::Scratch::new("choosing-walks-on");
+    let project = scratch.path().join("alpha");
+    std::fs::create_dir_all(project.join("inner")).expect("directories");
+    gix::init(&project).expect("a repository");
+    let mut app = asking();
+    open_another(&mut app);
+    for character in format!("{}/", scratch.path().display()).chars() {
+        press(&mut app, KeyCode::Char(character));
+    }
+    press(&mut app, KeyCode::Enter);
+    support::render(&mut app, 120, 20);
+    assert!(
+        app.naming_list().is_none(),
+        "it did not stop at the project"
+    );
+
+    press(&mut app, KeyCode::Char('/'));
+    support::render(&mut app, 120, 20);
+
+    // No letter after it: a letter moves the box, and that alone would
+    // open the list. Two rows, `.git/` and `inner/`.
+    assert_eq!(
+        app.naming_list().map(Picker::match_count),
+        Some(2),
+        "the separator did not offer what is inside the project"
+    );
+}
+
+/// And a box that names a project says so in its ink, where enter would
+/// open it.
+///
+/// The green is the settings' `In use`, and it is on the path itself:
+/// what the reader is looking at when they decide to press.
+///
+/// Broken deliberately twice: answering `false` for `named_is_a_project`
+/// in `note_what_the_box_names`, so the path is drawn in the ordinary
+/// ink; and inking on `there` instead of `project` in `render_choosing`,
+/// so every directory that is there turns green.
+#[test]
+fn a_box_that_names_a_project_is_drawn_in_the_green() {
+    let scratch = support::Scratch::new("choosing-green");
+    let project = scratch.path().join("alpha");
+    std::fs::create_dir_all(&project).expect("a directory");
+    gix::init(&project).expect("a repository");
+    std::fs::create_dir_all(scratch.path().join("beta")).expect("a directory");
+    let mut app = asking();
+    open_another(&mut app);
+    for character in format!("{}/", scratch.path().display()).chars() {
+        press(&mut app, KeyCode::Char(character));
+    }
+
+    // The ink of the last letter of the box's row, found by what is in the
+    // box: a path worked out here would be spelled with this platform's
+    // separator, and the box holds the `/` that was typed into it -- which
+    // on Windows is not the same string.
+    let ink_of = |app: &mut App| {
+        let path = app.choosing().expect("asking").typed;
+        let cells = support::cells_of(app, 120, 20);
+        let area = cells.area;
+        (area.y..area.bottom())
+            .find_map(|y| {
+                let row: String = (area.x..area.right())
+                    .map(|x| cells[(x, y)].symbol().to_string())
+                    .collect();
+                let row = row.trim_end();
+                row.ends_with(&path).then(|| {
+                    let x = u16::try_from(row.chars().count() - 1).expect("narrow");
+                    cells[(area.x + x, y)].fg
+                })
+            })
+            .expect("the box")
+    };
+
+    press(&mut app, KeyCode::Enter);
+    assert_eq!(
+        ink_of(&mut app),
+        obelus_theme::builtin::DARK.change_added,
+        "a project in the box is not drawn as one"
+    );
+
+    // And a directory that is there and is not one is not: typed, and the
+    // list in front of it shut, so enter would open it all the same.
+    for _ in "alpha".chars() {
+        press(&mut app, KeyCode::Backspace);
+    }
+    for character in "beta".chars() {
+        press(&mut app, KeyCode::Char(character));
+    }
+    press(&mut app, KeyCode::Esc);
+    assert_ne!(
+        ink_of(&mut app),
+        obelus_theme::builtin::DARK.change_added,
+        "a directory that is not a project is drawn as one"
+    );
+}
+
 /// Escape shuts the list, and then enter opens what is in the box.
 ///
 /// The one place a path differs from the agent's commands: a command's
@@ -448,6 +641,74 @@ fn choosing_a_project_settles_it() {
     assert!(
         app.offers(Command::FileOpen),
         "the keys are still dim after a project was chosen"
+    );
+}
+
+/// Taken by every test here that writes the list of projects or asks
+/// what is on it.
+///
+/// One file for the whole binary, written read-modify-write and without a
+/// lock -- a choice `projects::remember` makes for Obelus -- so two tests
+/// writing it at once can each put back a list without the other's row:
+/// choosing a project remembers it, and asking which project forgets any
+/// scratch directory that has gone since. The unit tests beside the list
+/// take turns for the same reason.
+static THE_LIST: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// A turn at the list, held for as long as the test runs.
+fn the_list() -> std::sync::MutexGuard<'static, ()> {
+    THE_LIST
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+/// A project chosen on the page goes on the page's list.
+///
+/// The one way onto it: the list is of the answers this page was given.
+///
+/// Broken deliberately by taking the `remember` out of `settle_on`: the
+/// project is opened and the file never hears of it.
+#[test]
+fn choosing_a_project_remembers_it() {
+    let _list = the_list();
+    let scratch = support::Scratch::new("choosing-remembers");
+    gix::init(scratch.path()).expect("a repository");
+    let mut app = asking();
+    open_another(&mut app);
+    for character in scratch.path().display().to_string().chars() {
+        press(&mut app, KeyCode::Char(character));
+    }
+    press(&mut app, KeyCode::Esc);
+    press(&mut app, KeyCode::Enter);
+
+    assert!(app.choosing().is_none(), "it is still asking");
+    assert!(
+        support::remembered(scratch.path()),
+        "a project chosen on the page is not on its list"
+    );
+}
+
+/// And a project Obelus was put on any other way does not.
+///
+/// An argument, the directory Obelus was started in and going to another
+/// worktree all reach a project through `work_in`, which is what this
+/// goes through -- and where the remembering used to be.
+///
+/// Broken deliberately by putting `projects::remember` back in
+/// `App::work_in`: the project is on the list without the page having
+/// been asked.
+#[test]
+fn a_project_not_chosen_on_the_page_is_not_remembered() {
+    let _list = the_list();
+    let scratch = support::Scratch::new("started-in-it");
+    gix::init(scratch.path()).expect("a repository");
+    let mut app = App::new(Vec::new());
+    app.working_directory_for_test(scratch.path().to_path_buf());
+
+    assert_eq!(app.working_directory(), scratch.path(), "not put on it");
+    assert!(
+        !support::remembered(scratch.path()),
+        "a project nobody chose on the page is on its list"
     );
 }
 
@@ -968,6 +1229,7 @@ fn a_copy_a_cut_and_a_paste_work_in_the_page_that_asks() {
 /// the project, and the one after the write does).
 #[test]
 fn closing_the_project_asks_about_what_is_unwritten_and_then_which_project() {
+    let _list = the_list();
     let scratch = support::Scratch::new("closing-asks");
     let file = scratch.join("file.rs");
     std::fs::write(&file, "fn main() {}\n").expect("a file");
@@ -1017,6 +1279,7 @@ fn closing_the_project_asks_about_what_is_unwritten_and_then_which_project() {
 /// one there was in `App::leave_the_project`: the file is still open.
 #[test]
 fn closing_a_project_with_nothing_unwritten_goes_straight_to_asking() {
+    let _list = the_list();
     let scratch = support::Scratch::new("closing-clean");
     let file = scratch.join("file.rs");
     std::fs::write(&file, "fn main() {}\n").expect("a file");
@@ -1039,6 +1302,7 @@ fn closing_a_project_with_nothing_unwritten_goes_straight_to_asking() {
 /// `App::answered`: Obelus stays on the project.
 #[test]
 fn closing_without_saving_leaves_the_file_as_it_was() {
+    let _list = the_list();
     let scratch = support::Scratch::new("closing-discards");
     let file = scratch.join("file.rs");
     std::fs::write(&file, "fn main() {}\n").expect("a file");

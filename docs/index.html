@@ -165,6 +165,20 @@
         <li>There's no window version on musl: the window loads Vulkan, Wayland and X11 at runtime, which a static binary can't do. The script says so and installs <code>ob</code> instead.</li>
       </ul>
 
+      <h4>With mise, on any system</h4>
+      <pre><code>mise tool-alias set obg 'github:obelus-editor/obelus[matching=obg-]'
+mise use -g obg</code></pre>
+
+      <pre><code>mise tool-alias set ob 'github:obelus-editor/obelus[matching=ob-]'
+mise use -g ob</code></pre>
+
+      <ul>
+        <li>The first pair installs <code>obg</code>, the window version, and the second <code>ob</code>, the terminal version. Run both for both.</li>
+        <li>Each gets a name of its own so the two can sit side by side: mise keeps one tool per name, so installing the bare repository twice replaces the first with the second. <code>matching</code> picks which archive to download. <code>mise upgrade</code> keeps them up to date.</li>
+        <li>There's no launcher or Start menu entry this way, so start <code>obg</code> by name.</li>
+        <li>On musl, install only <code>ob</code>. mise doesn't check, and for <code>obg</code> it downloads the glibc build, which won't start there.</li>
+      </ul>
+
       <h3>From source</h3>
       <p>All you need is a stable Rust toolchain (edition 2024).</p>
 
@@ -196,7 +210,7 @@ ob src/main.rs       # the same file, in the terminal</code></pre>
       <h3>The first five minutes</h3>
       <ol>
         <li><kbd>F1</kbd> opens a file: type to filter, <kbd>↑</kbd><kbd>↓</kbd> to pick, <kbd>Enter</kbd> to open, <kbd>Esc</kbd> to cancel.</li>
-        <li>The row of keys at the bottom of a list only shows what works <em>right now</em>; <kbd>Ctrl+k</kbd> shows them all, with the unavailable ones greyed out.</li>
+        <li>The row of keys at the bottom of a list only shows what works <em>right now</em>, so it never offers a key that would do nothing.</li>
         <li><kbd>Ctrl+p</kbd> is the command palette. Anything you can't remember a key for, you can find by name.</li>
         <li>Put the cursor on a change and press <kbd>Alt+d</kbd>: what was there before opens up <em>in place</em>.</li>
         <li>See a line that looks wrong? Press <kbd>Alt+t</kbd> and write a sentence. Then <kbd>Ctrl+t</kbd> opens the notes: pick it and press <kbd>Alt+a</kbd> to talk it over with the agent. That's where the workflow below starts.</li>
@@ -372,7 +386,7 @@ ob src/main.rs       # the same file, in the terminal</code></pre>
       </div>
 
       <h3 id="modeless">No modes: every key does what it says</h3>
-      <p>There's no insert mode to get into before you can type. It works like VS Code or Emacs, not like vim or helix. The pattern is simple: function keys open something to look at, <kbd>Ctrl</kbd> does something to the current file, and <kbd>Alt</kbd> asks about what's under the cursor. Can't remember a key? <kbd>Ctrl+p</kbd> finds any command by name, and wherever a list has keys along the bottom, <kbd>Ctrl+k</kbd> shows all of them. The full table is in the <a href="reference.html#keys">reference</a>.</p>
+      <p>There's no insert mode to get into before you can type. It works like VS Code or Emacs, not like vim or helix. The pattern is simple: function keys open something to look at, <kbd>Ctrl</kbd> does something to the current file, and <kbd>Alt</kbd> asks about what's under the cursor. Can't remember a key? <kbd>Ctrl+p</kbd> finds any command by name, and wherever a list has keys of its own, the row along the bottom says what they do. The full table is in the <a href="reference.html#keys">reference</a>.</p>
     </section>
 
     <section id="all">

@@ -7226,6 +7226,291 @@ fn the_readers_own_words_come_back_from_the_agent() {
     );
 }
 
+/// A page Obelus kept of a conversation, written where `session`'s goes.
+///
+/// Made through the page itself rather than written out by hand, so that
+/// what is being tested is what becomes of a page, not how one is spelled.
+fn keep_a_page(root: &Path, session: &str) {
+    use obelus_component::{chat::Speaker, composer::Part};
+    let mut chat = obelus_component::chat::Chat::new();
+    chat.asked(&[Part::Words("what the page kept".to_string())]);
+    chat.chunk(Speaker::Agent, "as it was drawn");
+    chat.note("Stopped");
+    obelus_agent::acp::sessions::keep_page(root, session, &chat.to_keep());
+}
+
+/// A conversation whose page Obelus kept comes back as that page, and what
+/// the agent replays of it is not drawn over it.
+///
+/// What an agent replays is its own account: Obelus's words to it run into
+/// the reader's first message as if they had typed them, and Obelus's own
+/// remarks are not in it at all. The page is Obelus's, so it is put back
+/// from what Obelus kept.
+///
+/// Broken deliberately two ways. Taking out the check for
+/// `is_a_replay_nobody_wants` in `on_acp` drew the replay under the page,
+/// and the reader's question was on it twice over in two wordings. Not
+/// calling `bring_back_the_page` left the page empty but for the replay,
+/// and the kept words were missing.
+#[test]
+fn a_kept_page_comes_back_and_the_replay_is_not_drawn() {
+    let (_scratch, mut app, events) =
+        remembering_after("agent-kept-page", "0123456K", "s-old", &[], None, |root| {
+            keep_a_page(root, "s-old");
+        });
+    // Held, and not only asked for: the replay arrives before the answer
+    // that says the session is taken, so by then all of it has.
+    pump(&mut app, &events, "the conversation taken up", |app| {
+        app.agent_holds_for_test("s-old")
+    });
+
+    let text = screen(&mut app);
+    assert!(
+        text.contains("what the page kept") && text.contains("as it was drawn"),
+        "the kept page did not come back:\n{text}"
+    );
+    assert!(
+        text.contains("Stopped"),
+        "Obelus's own remark did not come back with the page:\n{text}"
+    );
+    assert!(
+        !text.contains("what did we settle on") && !text.contains("where we were"),
+        "the replay was drawn over the kept page:\n{text}"
+    );
+}
+
+/// A conversation whose page Obelus kept is resumed rather than replayed,
+/// by an agent that offers both.
+///
+/// A replay is the whole of a long conversation sent back to be thrown
+/// away; a resume takes up the agent's context and sends nothing. And the
+/// note saying the words could not be sent back is not said, because they
+/// were not asked for.
+///
+/// Broken deliberately by asking for the words whatever was kept (`true`
+/// for `words` in `ask_for_a_session`): the agent was sent `session/load`
+/// and the wait for the resume gave up.
+#[test]
+fn a_kept_page_is_resumed_and_not_replayed() {
+    let root = agents_root_for("kept-page-resumed");
+    std::fs::create_dir_all(&root).expect("the root");
+    let log = root.join("asked.log");
+    let _ = std::fs::remove_file(&log);
+    let logged = format!("log={}", log.display());
+    let (_scratch, mut app, events) = remembering_after(
+        "agent-kept-page-resumed",
+        "0123456R",
+        "s-old",
+        &["loads-and-resumes", &logged],
+        None,
+        |root| keep_a_page(root, "s-old"),
+    );
+    asked(&mut app, &events, &log, "session/resume s-old");
+    // Held, and not only asked for: the replay arrives before the answer
+    // that says the session is taken, so by then all of it has.
+    pump(&mut app, &events, "the conversation taken up", |app| {
+        app.agent_holds_for_test("s-old")
+    });
+
+    let asked = std::fs::read_to_string(&log).unwrap_or_default();
+    assert!(
+        !asked.contains("session/load"),
+        "a conversation with a kept page was replayed:\n{asked}"
+    );
+    let text = screen(&mut app);
+    assert!(
+        !text.contains("cannot send back"),
+        "said the words could not come back, when they were never asked for:\n{text}"
+    );
+    assert!(
+        text.contains("what the page kept"),
+        "the kept page did not come back:\n{text}"
+    );
+}
+
+/// A conversation that will not resume is loaded instead, by an agent that
+/// offers both, before it is given up for lost.
+///
+/// What failed was the lighter way of taking it up and not the agent's
+/// memory of it. Given up, the reader's row went with it and the agent
+/// started a conversation that knew nothing.
+///
+/// Broken deliberately by taking out the load after a refused resume in
+/// `link.rs`: the conversation started again, and said so.
+#[test]
+fn a_conversation_that_will_not_resume_is_loaded() {
+    let root = agents_root_for("kept-page-resume-fails");
+    std::fs::create_dir_all(&root).expect("the root");
+    let log = root.join("asked.log");
+    let _ = std::fs::remove_file(&log);
+    let logged = format!("log={}", log.display());
+    let (_scratch, mut app, events) = remembering_after(
+        "agent-kept-page-resume-fails",
+        "0123456F",
+        "s-old",
+        &["loads-and-resumes", "resume-fails", &logged],
+        None,
+        |root| keep_a_page(root, "s-old"),
+    );
+    asked(&mut app, &events, &log, "session/load s-old");
+    pump(&mut app, &events, "the conversation taken up", |app| {
+        app.agent_holds_for_test("s-old")
+    });
+
+    let text = screen(&mut app);
+    assert!(
+        !text.contains("Starting again"),
+        "the conversation was given up rather than loaded:\n{text}"
+    );
+    assert!(
+        text.contains("what the page kept") && !text.contains("where we were"),
+        "the page is not the one kept:\n{text}"
+    );
+}
+
+/// A turn that ends leaves its page kept, with what the reader said and
+/// what the agent answered on it.
+///
+/// Broken deliberately by taking `keep_the_page` out of the end of a turn:
+/// nothing was kept and the page came back as nothing.
+#[test]
+fn the_page_is_kept_when_a_turn_ends() {
+    let (scratch, mut app, events) = remembering("agent-page-kept", "0123456T", "s-old", &[]);
+    // Held, and not only asked for: the replay arrives before the answer
+    // that says the session is taken, so by then all of it has.
+    pump(&mut app, &events, "the conversation taken up", |app| {
+        app.agent_holds_for_test("s-old")
+    });
+    say_something(&mut app, &events);
+
+    let page = obelus_agent::acp::sessions::kept_page(scratch.path(), "s-old")
+        .expect("a page kept for the conversation");
+    let mut back = obelus_component::chat::Chat::new();
+    back.bring_back(&page).expect("a page Obelus can read");
+    let said: String = back
+        .rows(WIDTH)
+        .iter()
+        .map(|row| format!("{}\n", row.text()))
+        .collect();
+    assert!(
+        said.contains("/cost") && said.contains("ran cost"),
+        "the page kept is not the one the turn left:\n{said}"
+    );
+}
+
+/// A conversation the agent has forgotten starts again over its kept page,
+/// and the session it starts again with is not written down until
+/// something is said in it.
+///
+/// The page above is the old conversation's, and was taken for something
+/// said to the new one. So the new session was written down at once and
+/// never let go -- and an agent keeps no session nobody talked in, so the
+/// next start asked for it, was told it had gone, and started again under
+/// the same page. Every start, one more "Starting again".
+///
+/// Broken deliberately by taking `page_outlived_its_session` out of the
+/// `Lost` arm: the fresh session was written down against the note.
+#[test]
+fn a_session_started_over_a_kept_page_is_not_written_down_for_it() {
+    let (scratch, mut app, events) = remembering_after(
+        "agent-lost-kept-page",
+        "0123456M",
+        "s-gone",
+        &[],
+        None,
+        |root| {
+            keep_a_page(root, "s-gone");
+        },
+    );
+    pump(&mut app, &events, "a fresh conversation", |app| {
+        app.chat_session_for_test()
+            .is_some_and(|session| session != "s-gone" && app.agent_holds_for_test(&session))
+    });
+    let fresh = app.chat_session_for_test().expect("the fresh session");
+    let text = screen(&mut app);
+    assert!(
+        text.contains("what the page kept") && text.contains("Starting again"),
+        "this is not the case it is about:\n{text}"
+    );
+
+    let note = obelus_todo::NoteId::read("0123456M").expect("a name");
+    let written = obelus_agent::acp::sessions::read(scratch.path(), 0)
+        .remembered()
+        .expect("the table")
+        .get(
+            &obelus_agent::chats::ChatId::Note(note),
+            "fake",
+            scratch.path(),
+        )
+        .map(|kept| kept.session.clone());
+    assert_eq!(
+        written, None,
+        "a session nothing was said in was written down for the note"
+    );
+    app.keep_every_page();
+    assert!(
+        obelus_agent::acp::sessions::kept_page(scratch.path(), &fresh).is_none(),
+        "a page was kept for a session nothing was said in"
+    );
+}
+
+/// The page of a conversation whose agent died is kept as it was left,
+/// with the agent's going on it.
+///
+/// The agent dying takes every session with it, and a page was kept under
+/// the session listening -- so a reader who left without another word
+/// left the end of the page behind.
+///
+/// Broken deliberately by keeping under `session` rather than `page_of`
+/// in `keep_the_page_of`: nothing was kept after the agent went.
+#[test]
+fn the_page_of_a_conversation_whose_agent_died_is_kept() {
+    let (scratch, mut app, events) = remembering("agent-died-page", "0123456D", "s-old", &[]);
+    pump(&mut app, &events, "the conversation taken up", |app| {
+        app.agent_holds_for_test("s-old")
+    });
+    support::type_text(&mut app, "/die");
+    support::press(&mut app, KeyCode::Enter);
+    pump(&mut app, &events, "it to stop", |app| {
+        app.talking() == obelus_agent::Talking::Gone
+    });
+
+    // The way out, which is what keeps every page.
+    app.keep_every_page();
+    let page = obelus_agent::acp::sessions::kept_page(scratch.path(), "s-old").unwrap_or_default();
+    assert!(
+        page.contains("The agent stopped"),
+        "the page was not kept as the agent left it: {page:?}"
+    );
+}
+
+/// What the reader says is kept the moment it goes, not when the turn
+/// answering it ends.
+///
+/// A turn can run for the length of a build, and a window that went in
+/// the middle of one left the question behind.
+///
+/// Broken deliberately by taking `keep_the_page` out of `say_in`: the turn
+/// never ends, so nothing was kept.
+#[test]
+fn what_is_said_is_kept_as_it_goes() {
+    let (scratch, mut app, events) = remembering("agent-kept-on-saying", "0123456G", "s-old", &[]);
+    pump(&mut app, &events, "the conversation taken up", |app| {
+        app.agent_holds_for_test("s-old")
+    });
+    support::type_text(&mut app, "take it slowly");
+    support::press(&mut app, KeyCode::Enter);
+    pump(&mut app, &events, "it to start thinking", |app| {
+        app.talking() == obelus_agent::Talking::Thinking
+    });
+
+    let page = obelus_agent::acp::sessions::kept_page(scratch.path(), "s-old").unwrap_or_default();
+    assert!(
+        page.contains("take it slowly"),
+        "what was said is not on the page kept: {page:?}"
+    );
+}
+
 /// An agent that echoes the prompt back does not put it on the page twice.
 ///
 /// Obelus writes the reader's words when they press send, and some agents
@@ -7312,6 +7597,18 @@ fn remembering_how(
     how: &[&str],
     tools: Option<&str>,
 ) -> (support::Scratch, App, Receiver<Event>) {
+    remembering_after(name, note, session, how, tools, |_| {})
+}
+
+/// The same, with something done to the tree before Obelus opens on it.
+fn remembering_after(
+    name: &str,
+    note: &str,
+    session: &str,
+    how: &[&str],
+    tools: Option<&str>,
+    before: impl FnOnce(&Path),
+) -> (support::Scratch, App, Receiver<Event>) {
     let scratch = support::Scratch::new(name);
     support::make_room_for_notes(scratch.path());
     std::fs::write(
@@ -7340,6 +7637,7 @@ fn remembering_how(
         },
     );
 
+    before(scratch.path());
     let (mut app, events) = wired();
     app.working_directory_for_test(scratch.path().to_path_buf());
     if let Some(tools) = tools {

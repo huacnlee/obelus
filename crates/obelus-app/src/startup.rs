@@ -54,8 +54,7 @@ pub fn start_headless(paths: &[PathBuf], built: &'static str) -> Result<App> {
 }
 
 fn build(paths: &[PathBuf], built: &'static str, headless: bool) -> Result<App> {
-    // What the paths mean: which project, which files, and whether the
-    // question left over is "which file".
+    // What the paths mean: which project, and which files.
     let opening = app::opening(paths);
 
     // The first line of every session, and the one a reader of the log
@@ -79,7 +78,6 @@ fn build(paths: &[PathBuf], built: &'static str, headless: bool) -> Result<App> 
         project = ?opening.root,
         paths = paths.len(),
         opens = opening.files.len(),
-        list = opening.list,
         "Obelus starting"
     );
 
@@ -122,9 +120,6 @@ fn build(paths: &[PathBuf], built: &'static str, headless: bool) -> Result<App> 
     match root {
         Some(root) => {
             app.work_in(root);
-            if opening.list {
-                app.list_at_start();
-            }
         }
         // Nothing to go on, so Obelus asks, and the asking is the whole
         // of the screen until it is answered. `work_in` is deliberately

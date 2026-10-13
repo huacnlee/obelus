@@ -39,7 +39,7 @@ ignores them, and mixing the two makes the formatting oscillate. **Always
 Clippy must be silent. The lints are the workspace's, in the root
 `Cargo.toml` -- `missing_docs`, `unreachable_pub`, `private_interfaces` --
 because a `#![deny(..)]` in one crate root would silently stop applying to
-the other thirty-four. Every member opts in with a `[lints] workspace = true`
+the other thirty-seven. Every member opts in with a `[lints] workspace = true`
 of its own, which Cargo does not inherit for it, and every public item needs
 a doc comment.
 
@@ -365,9 +365,12 @@ command is gone and `App::blame` reads the setting.
   what is on its way into the history: the pull requests and issues. Bare,
   never with a
   modifier: one terminal reports `shift+f5` and the next reports `f17` for the
-  same press. That is the `classic` layout; a keyboard without the row starts
+  same press. That is the `obelus` layout; a keyboard without the row starts
   from `mnemonic` (`keys_from`), the same twelve on control and alt by the
-  letter of the word, and nothing else moved (`keymap::Layout`).
+  letter of the word, and nothing else moved -- or from another editor's,
+  `vscode` or `textmate`, which have no function key at all and are on
+  control like everything else, so a Mac's window makes them command too
+  (`keymap::Layout`).
 * **Control does something to the file in front of you**, on the letter of the
   word (`ctrl+p` the palette, `ctrl+w` close, `ctrl+c` copy, `ctrl+q` leave).
   In `obg` on a Mac it is command, and drawn so: one table, two names for the
@@ -380,11 +383,19 @@ command is gone and `App::blame` reads the setting.
   what the rule is about: they are the names a desktop already sends a
   terminal for paste and copy. Why Obelus answers them, and why copy still
   cannot work where a terminal keeps them, is argued in `keymap::why_not`.
+  The `vscode` and `textmate` layouts borrow those editors' `ctrl+shift`
+  chords, which are their names and not Obelus's -- each with an alt chord
+  beside it, because a terminal without the keyboard protocol sends `ctrl`
+  and the letter, and one with it often keeps the chord for itself. A
+  reader may bind any key at all, as many to a command as they like, and is
+  not warned where one cannot arrive -- `why_not` refuses only what never
+  reaches the table.
 
 **Escape always gives up on the nearest thing**, and everything else is
 reached from the palette: a chord for every command is how a key table stops
 being memorable. Which key is which is argued where it is bound, in
-`Keymap::new`.
+`obelus-keymap/keymaps/` -- each layout a JSON file with comments, compiled
+in, and the reasons beside the keys.
 
 **What is showing owns the keys.** A list and the settings page are dialogs:
 each takes the keys bound *in* its context and nothing else, so a global key
@@ -431,11 +442,16 @@ where the view is (`Window::scroll`, `component::window`). A list used to
 be the exception, a notch stepping its selection; that made the wheel two
 gestures depending on what was under it.
 
+In the file being read and in a list's preview, control and up or down make
+the wheel's gesture: the view a row, the cursor or the selection left where
+it was (`keys::editor_scrolling`, `previewing::preview_scrolling`).
+
 **Wherever enter means something else, a line is `shift+enter` *and*
 `alt+enter`.** Both, every time: `shift+enter` arrives only from a terminal
 that speaks the kitty keyboard protocol -- `main` pushes its narrowest flag
 for this, and nothing else in Obelus depends on it but `ctrl+enter`, which is
-plain enter without it -- and `alt+enter` arrives from the rest, because alt
+plain enter without it, and the editors' layouts' `ctrl+shift` chords, each
+with an alt chord beside it -- and `alt+enter` arrives from the rest, because alt
 is the escape prefix. A place that took one left the other falling through to
 whatever was underneath, so the pair is taken together, and before the
 modifier check (`component::composer`).
@@ -562,8 +578,9 @@ crates/
                       view is split by the errand, not by the shape of the
                       answer, and an answer on screen is an answer about a
                       moment (app/git/history_view); a preview is of a subject, not
-                      of a path, and the paging keys belong to whatever is
-                      being read (app/editor/previewing); a project may carry
+                      of a path, and the paging keys and control's arrows
+                      belong to whatever is being read
+                      (app/editor/previewing); a project may carry
                       settings, and it is not the reader, and the reader's is
                       the layer it is laid over; anything read once at startup
                       must be re-read when somebody else changes it; what
@@ -577,8 +594,8 @@ crates/
                       newest first, a conversation belongs to the agent that
                       had it and to the checkout it was had in, and a watch
                       is settled from what is open
-                      (app/chat/conversations); where Obelus has been is
-                      remembered however the project was named, and only a
+                      (app/chat/conversations); a project is remembered
+                      when it is chosen on the page that asks, and only a
                       worktree, and what a start with nothing to go on asks
                       (app/project/projects); what was open is kept by the tree,
                       and the last window to change it wins (app/project/reopening);
@@ -591,7 +608,9 @@ crates/
                       asked (app/hearing); what is typed in a terminal is the
                       program's (app/terminals); a
                       newer Obelus is asked about once a day, not once a start
-                      (app/project/releases); pull requests and issues are two tabs of
+                      (app/project/releases); a theme the registry no longer
+                      lists is still shown, if it is installed
+                      (app/project/themes); pull requests and issues are two tabs of
                       one errand, asked of `gh` and not of GitHub, a page
                       when the reader gets to the end of the last one,
                       choosing one opens the review or the answer and says
@@ -626,7 +645,8 @@ crates/
                       the desktop's name for paste and not Obelus's; a dialog
                       gets a context, not a fall-through; keys are rebound on
                       the keys page; modifiers are judged exactly, in one
-                      place (lib)
+                      place (lib); a layout is data, and the reasons stay
+                      beside the keys (shipped)
   obelus-buffer/    one open file: text, syntax, cursor, viewport
                     · an edit knows where it happened; do not read over an
                       edit; two modes, and two is enough (lib); a folded line
@@ -641,6 +661,18 @@ crates/
                     neither
   obelus-icons/     the Nerd Font switch and every glyph behind it
   obelus-theme/     colours, and only fields the renderer reads
+                    · a picture travels beside a theme's colours and not
+                      among them (wallpaper)
+  obelus-themes/    the themes registry: what its index lists, in its two
+                    groups, and where a theme taken from it is kept
+                    · fetched when the reader opens the page, and kept; read
+                      field by field, and an entry Obelus cannot use is left
+                      out (lib); a theme is installed whole or not at all,
+                      which package it came from is written inside it, and one
+                      Obelus at a time installs a theme (install)
+  obelus-download/  what every fetch from somebody else's server shares:
+                    reading a body within a limit, fetching one with its
+                    progress, checking its hash and unpacking it
   obelus-config/    the settings, their file, and what each one is
                     · what a project may set is a property of the setting; the
                       file holds preferences, not state; a setting says where
@@ -668,7 +700,8 @@ crates/
                       that has happened is the working tree's and one that has
                       not is the agent's to show, thinking is not folded away,
                       a call's title is three rows shut, a link is opened by
-                      a click and not by enter (chat); folding is one
+                      a click and not by enter (chat); the page is Obelus's,
+                      and so is the record of it (chat/kept); folding is one
                       act and the notes are the fourth place it happens, a note
                       somebody else is talking about is read here and not
                       changed, and a box is the reader's once they have put
@@ -679,8 +712,9 @@ crates/
                       `shift+enter` and `alt+enter` (composer); a list the
                       reader builds is not a picker (names); a screen that
                       cannot be left, two boxes that never share their
-                      text, why no numbers, and what could finish a path
-                      is an ordinary list somewhere else (chooser)
+                      text, why no numbers, a walk down the tree stops at
+                      a project, and what could finish a path is an
+                      ordinary list somewhere else (chooser)
   obelus-reading/   what a file is when it is not code: markdown, a log
                     · a log's format is decided by its lines, not its name;
                       what Obelus writes, Obelus has to be able to read (log)
@@ -817,8 +851,14 @@ crates/
                       own shape too (native); what is taken for a picture is
                       a file that is one (dropped)
   obelus-cli/       the `ob` binary: Obelus drawn on a terminal
-                    · two keys need the terminal's permission, and nothing
-                      else depends on the protocol (main)
+                    · two keys need the terminal's permission, and the
+                      editors' `ctrl+shift` chords are the only others that
+                      depend on the protocol (main)
+  obelus-check-theme/ whether Obelus can read a theme, for the themes
+                    registry, and in no release
+                    · the same reading the editor does and nothing of its
+                      own, only Obelus's own rules, a binary of its own and
+                      not in a release (main)
   obelus-gui/       the `obg` binary, and the window: what a screenful of
                     cells becomes when it is not a terminal -- the grid on
                     its way over, the glyphs, the quads, and the one clock
@@ -841,8 +881,12 @@ crates/
                       before it is a blur, a region of the frame is put
                       back somewhere else rather than drawn again, a pane
                       that has gone leaves out of a picture of the screen it
-                      went from, and every pane and every box is glass over
-                      everything said before it (paint); a
+                      went from, every pane and every box is glass over
+                      everything said before it, and the picture under the
+                      page stands still while what is written on it moves
+                      (paint); a picture is decoded on a thread of its own
+                      and only the newest is drawn, and is never drawn
+                      larger than it has to be (wallpaper); a
                       window owns the selection and hands the words
                       over on the way out (clipboard); a thread that borrows
                       somebody else's connection stops before the owner takes

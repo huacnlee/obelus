@@ -49,22 +49,6 @@ fn told_to_stop_it_stops_without_asking() {
     assert!(app.should_quit(), "it is still running");
 }
 
-/// A directory named opens no list of its files, which nobody would choose
-/// from and whose walk is the whole project.
-///
-/// Broken deliberately by taking `!self.headless` out of `App::start`: the
-/// list was open.
-#[test]
-fn a_directory_opens_no_list() {
-    let mut app = App::new(Vec::new());
-    app.headless();
-    app.working_directory_for_test(Path::new(env!("CARGO_MANIFEST_DIR")).to_path_buf());
-    app.list_at_start();
-    let (sender, _events) = obelus_app::event::channel();
-    app.start(sender);
-    assert!(app.picker().is_none(), "the list of files is open");
-}
-
 /// Told to stop from outside -- a `kill`, or `ctrl+c` on the terminal it
 /// was started from -- it hears it as an event, rather than being ended
 /// where it stands.

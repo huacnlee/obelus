@@ -1,0 +1,42 @@
+// The mnemonic layout: obelus with what the twelve function keys hold moved
+// onto letters, and nothing else touched -- so everything argued over the
+// obelus table holds for both, and control, alt and the palette are the same
+// keys in each.
+//
+// A command in `move` loses every key the obelus table gave it and takes
+// these, in each context it was bound in.
+//
+// Control where a letter of the word was free -- `o` open, `e` the editor
+// list JetBrains has there, `g` git, `n` the conversation a new one starts
+// in, `f` find -- and alt for the rest, because control has no more letters
+// that every terminal sends as themselves. `alt+.` for a definition is
+// Emacs's, and `ctrl+u` the pull requests, on the one control letter left.
+// In a terminal these are the shell's: unlike a function key, every one of
+// them already means something there.
+//
+// Not `alt+i` and `alt+o` for the symbols and the outline, which were the
+// first letters to hand: a view that names one of these swaps to it from
+// another, and the list of files keeps `alt+i` for its ignored files and the
+// notes `alt+o` for going where a note points -- so from there they would
+// have been a switch rather than a way out. `y` and `u` are the next letters
+// of the two words that nothing has.
+{
+  "extends": "obelus",
+  "move": [
+    { "command": "open-file", "keys": ["ctrl+o"] },
+    { "command": "switch-document", "keys": ["ctrl+e"] },
+    { "command": "open-changed-file", "keys": ["ctrl+g"] },
+    { "command": "choose-conversation", "keys": ["ctrl+n"] },
+    { "command": "search-file", "keys": ["ctrl+f"] },
+    { "command": "search-project", "keys": ["alt+/"] },
+    { "command": "show-outline", "keys": ["alt+u"] },
+    { "command": "search-symbols", "keys": ["alt+y"] },
+    { "command": "show-file-history", "keys": ["alt+l"] },
+    { "command": "show-project-history", "keys": ["alt+g"] },
+    { "command": "go-to-definition", "keys": ["alt+."] },
+    // On control, because it opens something to look at -- and `u`, the
+    // next letter of "pull" that nothing has: every control letter but it is
+    // taken, by a command, by tmux, or by the wire.
+    { "command": "review-pull-request", "keys": ["ctrl+u"] },
+  ],
+}

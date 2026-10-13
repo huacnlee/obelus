@@ -51,6 +51,7 @@ use obelus_command::Command;
 use obelus_config::{Config, Group, Kind, Setting, Value, Whose};
 use obelus_keymap::{KeyChord, Keymap};
 use obelus_remote::platform::{Description, Field as Told, Setup};
+use obelus_themes::Card as ThemeCard;
 
 use crate::{
     field::Field,
@@ -69,11 +70,15 @@ pub enum SettingsOutcome {
     /// A setting should stop being the project's, and go back to being
     /// whatever the reader has.
     ///
-    /// Only from the project's page, where `delete` means what it means on the
-    /// keys page: take this one out.
+    /// Only from the project's page, where `delete` means take this one
+    /// out.
     Unset(&'static str),
     /// An agent should be installed.
     Install(String),
+    /// A theme from the registry should be installed, or updated.
+    InstallTheme(String),
+    /// A theme taken from the registry should be taken away.
+    RemoveTheme(String),
     /// An agent should be the one Obelus talks to.
     Activate(String),
     /// Whichever agent was active should stop being.
@@ -93,12 +98,19 @@ pub enum SettingsOutcome {
     /// A setting that is typed wants its line: which setting, and what it
     /// says now, which is where the typing starts.
     Type(&'static str, String),
-    /// A command should be on this key from now on, or on none.
+    /// A command should be on these keys from now on, in this order, and
+    /// on no others -- on none, where the list is empty.
     ///
-    /// Only ever a key nothing else is on: what is taken is said on the row
+    /// Only ever keys nothing else is on: what is taken is said on the row
     /// and asked again, because the reader is looking at the row and it is
     /// that binding the answer is about.
-    Bind(Command, Option<KeyChord>),
+    Bind(Command, Vec<KeyChord>),
+    /// A command should be on the keys its layout gives it again: the
+    /// reader's line for it taken out of the file.
+    ResetKeys(Command),
+    /// Every command should be on the keys its layout gives it -- asked
+    /// first, because it takes every key the reader chose.
+    ResetAllKeys,
     /// One of the active agent's settings wants its values.
     ///
     /// Which setting, by the agent's id for it. What the values are is not
@@ -268,11 +280,19 @@ pub enum Page {
     Agents,
     /// Which chat a note can be worked on from.
     Remote,
+    /// The themes the registry lists, and the ones taken from it.
+    Themes,
 }
 
 impl Page {
     /// Every page, in the order their tabs sit in.
-    pub const ALL: [Self; 4] = [Self::Settings, Self::Keys, Self::Remote, Self::Agents];
+    pub const ALL: [Self; 5] = [
+        Self::Settings,
+        Self::Keys,
+        Self::Remote,
+        Self::Themes,
+        Self::Agents,
+    ];
 
     /// The pages one file's settings have.
     ///
@@ -304,8 +324,23 @@ impl Page {
             Self::Keys => "Keys",
             Self::Agents => "Agents",
             Self::Remote => "Remote",
+            Self::Themes => "Themes",
         }
     }
+}
+
+/// What the pages of cards are of, as the application hands them in.
+///
+/// Both together, so that every function a page of cards goes through is
+/// handed the same two lists -- the one that moves the focus, the one that
+/// measures the cards and the one that scrolls them -- and a page cannot be
+/// measured from one list and walked through another.
+#[derive(Clone, Copy, Debug)]
+pub struct Cards<'a> {
+    /// The agents Obelus could install.
+    pub agents: &'a [Agent],
+    /// The themes the registry lists, and the ones taken from it.
+    pub themes: &'a [ThemeCard],
 }
 
 /// The active agent's settings, as this page needs them.
@@ -519,14 +554,34 @@ fn narrowed_to(setting: &Setting, query: &str) -> bool {
     query.is_empty() || setting.name.to_lowercase().contains(query) || setting.key.contains(query)
 }
 
+/// A row of the keys page waiting for its key, and what that key will do.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Binding {
+    /// The command.
+    pub command: Command,
+    /// The row it is waiting on, which is where it says so.
+    pub slot: usize,
+    /// Whether the key pressed takes the place of the one on that row, or
+    /// is one more key for the command.
+    pub replacing: bool,
+}
+
 /// One row of the keys page.
 #[derive(Clone, Copy, Debug)]
 pub enum KeyRow {
     /// A setting about the whole table, above the commands it changes:
     /// which layout the reader's keys start from.
     Setting(&'static Setting),
-    /// A command, and the key it is on.
-    Command(Command),
+    /// One of a command's keys, by where it is in the command's list: a
+    /// row each, so every key a command is on can be stood on, replaced
+    /// and taken away. The first is the one that carries the command's
+    /// name, and a command on no key has that one row and no key in it.
+    Key {
+        /// The command.
+        command: Command,
+        /// Which of its keys, from nought.
+        slot: usize,
+    },
 }
 
 impl KeyRow {
@@ -535,7 +590,7 @@ impl KeyRow {
     pub fn name(self) -> &'static str {
         match self {
             Self::Setting(setting) => setting.name,
-            Self::Command(command) => command.name(),
+            Self::Key { command, .. } => command.name(),
         }
     }
 }
@@ -543,16 +598,32 @@ impl KeyRow {
 /// The settings view.
 #[derive(Debug)]
 pub struct Settings {
-    /// Whether every key this page answers to is showing.
-    keys_showing: bool,
     /// What has been typed, which narrows the rows.
     query: Field,
-    /// Which command's key is being pressed, while one is.
+    /// Which command's key is being pressed, while one is, and on which of
+    /// its rows.
     ///
     /// The page is in no mode otherwise: a key means what it means here
-    /// until the reader says "this row's key is the next thing I press",
+    /// until the reader says "the next thing I press is this command's",
     /// and from then until they press it every key belongs to that row.
-    binding: Option<Command>,
+    binding: Option<Binding>,
+    /// The keys each command is on, as the table was when it was last
+    /// heard ([`Settings::hear_keymap`]).
+    ///
+    /// Kept rather than asked for, because how many rows the keys page has
+    /// is asked by everything that moves its focus or scrolls it, and
+    /// almost none of those have the table to hand. The application says
+    /// when the table changes, which is the one moment the answer can.
+    held: Vec<(Command, Vec<KeyChord>)>,
+    /// The commands whose keys are not the ones their layout gives them,
+    /// heard with the keys: what the page marks, and what the keys that
+    /// put a command back are offered on.
+    changed: Vec<Command>,
+    /// The commands the reader's own file has a line for: the ones a
+    /// command can be put back from. A command can be changed without
+    /// one -- another's line took its key -- and putting it back would
+    /// take nothing out.
+    lined: Vec<Command>,
     /// The chord that would not do, and why it would not.
     ///
     /// On the row, because that is where the reader is looking and it is
@@ -591,9 +662,11 @@ impl Settings {
     #[must_use]
     pub fn new() -> Self {
         Self {
-            keys_showing: false,
             query: Field::new(),
             binding: None,
+            held: Vec::new(),
+            changed: Vec::new(),
+            lined: Vec::new(),
             refused: None,
             whose: Whose::Reader,
             page: 0,
@@ -606,9 +679,11 @@ impl Settings {
     #[must_use]
     pub fn for_project() -> Self {
         Self {
-            keys_showing: false,
             query: Field::new(),
             binding: None,
+            held: Vec::new(),
+            changed: Vec::new(),
+            lined: Vec::new(),
             refused: None,
             whose: Whose::Project,
             page: 0,
@@ -647,12 +722,6 @@ impl Settings {
             .unwrap_or(Page::Settings)
     }
 
-    /// Whether the list of every key is showing.
-    #[must_use]
-    pub const fn showing_keys(&self) -> bool {
-        self.keys_showing
-    }
-
     /// What typing into this page narrows, for the row before anything
     /// has been typed.
     ///
@@ -673,6 +742,7 @@ impl Settings {
             Page::Agents => "Filter agents",
             Page::Remote => "Filter remote settings",
             Page::Settings => "Filter settings",
+            Page::Themes => "Filter themes",
         })
     }
 
@@ -686,6 +756,18 @@ impl Settings {
     #[must_use]
     pub fn on_agents(&self) -> bool {
         self.page() == Page::Agents
+    }
+
+    /// Whether the page showing is the themes.
+    #[must_use]
+    pub fn on_themes(&self) -> bool {
+        self.page() == Page::Themes
+    }
+
+    /// Whether the page showing is one of cards rather than of rows.
+    #[must_use]
+    pub fn on_cards(&self) -> bool {
+        self.on_agents() || self.on_themes()
     }
 
     /// Whether the page showing is the remote one.
@@ -819,22 +901,94 @@ impl Settings {
     /// something to bind is looking for the ones that have none, and a page
     /// that hid them could not be used for that.
     #[must_use]
-    pub fn keys(&self, keymap: &Keymap) -> Vec<(KeyRow, Option<KeyChord>)> {
+    pub fn keys(&self) -> Vec<(KeyRow, Option<KeyChord>)> {
         self.key_rows()
             .into_iter()
             .map(|row| match row {
                 KeyRow::Setting(_) => (row, None),
-                KeyRow::Command(command) => (row, keymap.chord_for(command)),
+                KeyRow::Key { command, slot } => (row, self.held(command).get(slot).copied()),
             })
             .collect()
+    }
+
+    /// Hears the table of keys as it is now, which is what the keys page
+    /// lists: on opening, and whenever the application changes it.
+    ///
+    /// The focus stays on the command it was on, on the same row of it or
+    /// its last: a key taken away is a row fewer, and an index kept as it
+    /// was would land on the next command.
+    ///
+    /// And the table the layout alone would make, which is what a command
+    /// is changed from: asked of the keys, not of the file, so a line that
+    /// says what the layout says anyway marks nothing.
+    ///
+    /// And which commands the reader's file has a line for, which is what
+    /// putting one back takes out.
+    pub fn hear_keymap(&mut self, keymap: &Keymap, laid_out: &Keymap, lined: Vec<Command>) {
+        self.lined = lined;
+        let focused = match self.on_keys() {
+            true => self.key_rows().get(self.window.focus()).copied(),
+            false => None,
+        };
+        self.held = obelus_command::ALL
+            .iter()
+            .map(|spec| (spec.command, keymap.chords_for(spec.command)))
+            .collect();
+        self.changed = self
+            .held
+            .iter()
+            .filter(|(command, chords)| *chords != laid_out.chords_for(*command))
+            .map(|(command, _)| *command)
+            .collect();
+        if !self.on_keys() {
+            return;
+        }
+        self.window.set_count(self.row_count(None));
+        if let Some(KeyRow::Key { command, slot }) = focused {
+            let slot = slot.min(self.held(command).len().saturating_sub(1));
+            let landed = self.key_rows().iter().position(|row| {
+                matches!(row, KeyRow::Key { command: on, slot: at } if *on == command && *at == slot)
+            });
+            if let Some(at) = landed {
+                self.window.set_focus(at);
+            }
+        }
+    }
+
+    /// Whether a command's keys are not the ones its layout gives it.
+    #[must_use]
+    pub fn changed(&self, command: Command) -> bool {
+        self.changed.contains(&command)
+    }
+
+    /// Whether a command can be put back on its layout's keys: changed,
+    /// and by a line of the reader's own for it.
+    #[must_use]
+    pub fn resettable(&self, command: Command) -> bool {
+        self.changed(command) && self.lined.contains(&command)
+    }
+
+    /// Whether any command's are.
+    #[must_use]
+    pub fn any_changed(&self) -> bool {
+        !self.changed.is_empty()
+    }
+
+    /// The keys a command is on, as last heard.
+    fn held(&self, command: Command) -> &[KeyChord] {
+        self.held
+            .iter()
+            .find(|(held, _)| *held == command)
+            .map_or(&[], |(_, chords)| chords.as_slice())
     }
 
     /// The commands this page lists, without the keys they are on.
     ///
     /// What the filter leaves, which is what the focus moves over and how
-    /// far the window can scroll. Split from [`Settings::keys`] because
-    /// counting the rows does not need the table and the callers that
-    /// count do not have it.
+    /// far the window can scroll: a row for each of a command's keys, as
+    /// the page last heard them ([`Settings::hear_keymap`]). Split from
+    /// [`Settings::keys`] because counting the rows does not need the keys
+    /// themselves, only how many each command has.
     #[must_use]
     pub fn key_rows(&self) -> Vec<KeyRow> {
         if !self.on_keys() {
@@ -857,7 +1011,13 @@ impl Settings {
                     || spec.name.to_lowercase().contains(&query)
                     || spec.title.to_lowercase().contains(&query)
             })
-            .map(|spec| KeyRow::Command(spec.command));
+            .flat_map(|spec| {
+                let rows = self.held(spec.command).len().max(1);
+                (0..rows).map(|slot| KeyRow::Key {
+                    command: spec.command,
+                    slot,
+                })
+            });
         settings.chain(commands).collect()
     }
 
@@ -885,15 +1045,15 @@ impl Settings {
     pub fn scroll(
         &mut self,
         rows: isize,
-        agents: &[Agent],
+        cards: Cards<'_>,
         offering: Option<&Offering>,
         room: (u16, u16),
     ) {
         if self.binding.is_some() {
             return;
         }
-        let heights = match self.on_agents() {
-            true => self.card_heights(agents, room),
+        let heights = match self.on_cards() {
+            true => self.card_heights(cards, room),
             false => self.entry_heights(room, offering),
         };
         self.window.scroll_rows(rows, &heights);
@@ -901,7 +1061,14 @@ impl Settings {
 
     /// Which command's key is being pressed, if one is.
     #[must_use]
-    pub const fn binding(&self) -> Option<Command> {
+    pub fn binding(&self) -> Option<Command> {
+        self.binding.map(|binding| binding.command)
+    }
+
+    /// And on which of its rows, and whether the key pressed will take the
+    /// place of the one there or be one more.
+    #[must_use]
+    pub const fn binding_at(&self) -> Option<Binding> {
         self.binding
     }
 
@@ -1025,7 +1192,7 @@ impl Settings {
     // handed in, and a page that lent itself out here could not move its
     // own window while it held them.
     pub fn rows<'a>(&self, offering: Option<&'a Offering>) -> Vec<Shown<'a>> {
-        if self.on_agents() || self.on_keys() {
+        if self.on_cards() || self.on_keys() {
             return Vec::new();
         }
         if self.on_remote() {
@@ -1178,21 +1345,67 @@ impl Settings {
     /// has to be whole -- and cards are not all the same height, so there
     /// is no number to divide by.
     #[must_use]
-    pub fn cards_that_fit(&self, agents: &[Agent], room: (u16, u16)) -> usize {
-        let width = Self::card_width(room.0);
-        let height = room.1;
-        let listed = self.agents(agents);
+    pub fn cards_that_fit(&self, cards: Cards<'_>, room: (u16, u16)) -> usize {
+        let heights = self.card_heights(cards, room);
         let mut taken = 0;
         let mut fits = 0;
-        for agent in listed.iter().skip(self.window.focus().min(listed.len())) {
-            let card = self.card_rows(agent, width) + 1;
-            if taken + card > height && fits > 0 {
+        for card in heights.iter().skip(self.window.focus().min(heights.len())) {
+            if taken + card > room.1 && fits > 0 {
                 break;
             }
             taken += card;
             fits += 1;
         }
         fits
+    }
+
+    /// The themes on show: all of them, narrowed by what has been typed --
+    /// by name, the way the agents are.
+    #[must_use]
+    pub fn themes(&self, themes: &[ThemeCard]) -> Vec<ThemeCard> {
+        if self.query.is_empty() {
+            return themes.to_vec();
+        }
+        themes
+            .iter()
+            .filter(|card| self.matched_in(&card.theme.name).is_some())
+            .cloned()
+            .collect()
+    }
+
+    /// Whether the theme at `at` among those on show is the first of its
+    /// group, and so opens the group with a heading.
+    #[must_use]
+    pub fn opens_a_group(themes: &[ThemeCard], at: usize) -> bool {
+        match at {
+            0 => !themes.is_empty(),
+            _ => themes
+                .get(at)
+                .zip(themes.get(at - 1))
+                .is_some_and(|(this, before)| this.theme.group != before.theme.group),
+        }
+    }
+
+    /// How many rows a theme's card takes, the heading of the group it
+    /// opens included.
+    ///
+    /// Its name, its description wrapped, the line of facts under it, and
+    /// why the last install failed if one did -- the agents' card, less
+    /// nothing -- and two rows above it where it opens a group: the heading
+    /// and the blank under it.
+    #[must_use]
+    pub fn theme_rows(&self, themes: &[ThemeCard], at: usize, width: u16) -> u16 {
+        let Some(card) = themes.get(at) else {
+            return 0;
+        };
+        let failed = u16::from(matches!(card.status, obelus_themes::Status::Failed(_)));
+        let heading = if Self::opens_a_group(themes, at) {
+            2
+        } else {
+            0
+        };
+        let described = self.wrapped(&card.theme.description, width).len().max(1);
+        heading + 2 + u16::try_from(described).unwrap_or(u16::MAX) + failed
     }
 
     /// Where what has been typed matched in a name, in characters.
@@ -1262,30 +1475,44 @@ impl Settings {
         &mut self,
         key: &KeyEvent,
         config: &Config,
-        keymap: &Keymap,
-        agents: &[Agent],
+        cards: Cards<'_>,
         offering: Option<&Offering>,
         room: (u16, u16),
     ) -> SettingsOutcome {
+        let agents = cards.agents;
         // A row waiting for a key takes the next one, whatever it is: that
         // is what the reader asked for by pressing enter on it, and a
         // modifier is half of most chords worth binding. Escape is the way
         // out, because escape is the way out of everything -- and it gives
         // up on the nearest thing first, which is this row rather than the
         // page.
-        if let Some(command) = self.binding {
+        if let Some(Binding {
+            command,
+            slot,
+            replacing,
+        }) = self.binding
+        {
             if key.code == KeyCode::Esc && key.modifiers.is_empty() {
                 self.binding = None;
                 self.refused = None;
                 return SettingsOutcome::Consumed;
             }
-            // Taking the key away is a decision a reader can make, and
-            // there is nowhere else on the page to make it.
-            if matches!(key.code, KeyCode::Delete | KeyCode::Backspace) && key.modifiers.is_empty()
+            // Taking the key on this row away, on the key that does it
+            // everywhere on this page. Only where the row is being changed:
+            // one waiting for a key to add has nothing of its own to take,
+            // and goes on waiting.
+            let held = self.held(command).to_vec();
+            if KeyChord::from_event(key)
+                == Some(KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT))
             {
+                if !replacing || slot >= held.len() {
+                    return SettingsOutcome::Consumed;
+                }
+                let mut kept = held;
+                kept.remove(slot);
                 self.binding = None;
                 self.refused = None;
-                return SettingsOutcome::Bind(command, None);
+                return SettingsOutcome::Bind(command, kept);
             }
             let Some(chord) = KeyChord::from_event(key) else {
                 // A release, or a modifier Obelus cannot bind. Nothing to
@@ -1294,9 +1521,8 @@ impl Settings {
             };
             // A key that could never fire is not offered, whatever the
             // reader pressed: the editor's own keys never reach the table,
-            // the terminal sends another key for some chords, and some work
-            // on this machine and not the next. The row says which of those
-            // it is and goes on waiting.
+            // and every list and box takes some for itself. The row says
+            // which of those it is and goes on waiting.
             if let Some(why) = obelus_keymap::why_not(chord) {
                 self.refused = Some((chord, Refused::Never(why)));
                 return SettingsOutcome::Consumed;
@@ -1304,24 +1530,94 @@ impl Settings {
             // And a key already spoken for stays where it is. One key, one
             // meaning, is a rule a reader can hold in their head -- and the
             // row says which command has it.
-            match keymap.command_on(chord) {
+            let taken = self
+                .held
+                .iter()
+                .find(|(_, chords)| chords.contains(&chord))
+                .map(|(taken, _)| *taken);
+            match taken {
                 Some(taken) if taken != command => {
                     self.refused = Some((chord, Refused::Taken(taken)));
                     return SettingsOutcome::Consumed;
                 }
-                _ => {
+                // A key the command is already on changes nothing.
+                Some(_) => {
                     self.binding = None;
                     self.refused = None;
-                    return SettingsOutcome::Bind(command, Some(chord));
+                    return SettingsOutcome::Consumed;
+                }
+                None => {
+                    let mut chords = held;
+                    match chords.get_mut(slot).filter(|_| replacing) {
+                        Some(on_the_row) => *on_the_row = chord,
+                        None => chords.push(chord),
+                    }
+                    self.binding = None;
+                    self.refused = None;
+                    return SettingsOutcome::Bind(command, chords);
                 }
             }
         }
 
-        // The card's key before the modifiers are judged, because it has
-        // one: control is what every key below this refuses.
-        if obelus_keymap::is_keys_card(key) {
-            self.keys_showing = !self.keys_showing;
+        // One more key for the command the reader is on, whichever of its
+        // rows: `ctrl+enter`, and only that, so enter always changes a key
+        // and control always adds one. A terminal without the keyboard
+        // protocol sends it as enter, and there a key is added in the
+        // file -- a command's first as well, enter having nothing to change
+        // on a row with no key.
+        let adding = key.code == KeyCode::Enter && key.modifiers == KeyModifiers::CONTROL;
+        if adding && self.on_keys() {
+            if let Some(KeyRow::Key { command, slot }) = self.key_rows().get(self.window.focus()) {
+                self.binding = Some(Binding {
+                    command: *command,
+                    slot: *slot,
+                    replacing: false,
+                });
+                self.refused = None;
+            }
             return SettingsOutcome::Consumed;
+        }
+
+        // Taking keys away, on alt because the filter takes nothing on it:
+        // `alt+backspace` the key on this row, `alt+r` this command put back
+        // on its layout's keys, and `alt+shift+r` every command, asked
+        // first. Backspace and delete are the filter's, and a Mac has no
+        // delete to press.
+        if self.on_keys() {
+            let chord = KeyChord::from_event(key);
+            let focused = self.keys().get(self.window.focus()).copied();
+            let removing = chord == Some(KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT));
+            let resetting = chord == Some(KeyChord::new(KeyCode::Char('r'), KeyModifiers::ALT));
+            let resetting_all = chord
+                == Some(KeyChord::new(
+                    KeyCode::Char('r'),
+                    KeyModifiers::ALT | KeyModifiers::SHIFT,
+                ));
+            // The two that act on the row with the focus wait, as enter
+            // does, for the row to be on the screen: the first press brings
+            // back a row the wheel took away, and takes nothing from it.
+            if removing || resetting {
+                let count = self.key_rows().len();
+                self.window.set_count(count);
+                if count > 0 && self.window.reach_for_the_focus() {
+                    return SettingsOutcome::Consumed;
+                }
+            }
+            match focused {
+                Some((KeyRow::Key { command, slot }, Some(_))) if removing => {
+                    let mut kept = self.held(command).to_vec();
+                    kept.remove(slot);
+                    return SettingsOutcome::Bind(command, kept);
+                }
+                Some((KeyRow::Key { command, .. }, _)) if resetting && self.resettable(command) => {
+                    return SettingsOutcome::ResetKeys(command);
+                }
+                _ if resetting_all && self.any_changed() => {
+                    return SettingsOutcome::ResetAllKeys;
+                }
+                _ if removing || resetting || resetting_all => return SettingsOutcome::Consumed,
+                _ => {}
+            }
         }
 
         // The same rule every other view follows: a modifier Obelus has no
@@ -1348,19 +1644,23 @@ impl Settings {
         }
         let bare = modifiers == KeyModifiers::NONE;
         let rows = self.rows(offering);
-        let keys = self.keys(keymap);
+        let keys = self.keys();
         // How many things the focus can be on: the rows of the page, or the
         // agents that the query leaves.
-        let count = match self.on_agents() {
-            true => self.agents(agents).len(),
-            false => self.row_count(offering),
+        let themes = self.themes(cards.themes);
+        let count = if self.on_agents() {
+            self.agents(agents).len()
+        } else if self.on_themes() {
+            themes.len()
+        } else {
+            self.row_count(offering)
         };
 
         // How far a page moves: the rows a group shows, or however many
         // cards fit -- which is not a fixed number, because a card is as
         // tall as its description needs.
-        let page = if self.on_agents() {
-            self.cards_that_fit(agents, room).max(1)
+        let page = if self.on_cards() {
+            self.cards_that_fit(cards, room).max(1)
         } else {
             usize::from(room.1).max(1)
         };
@@ -1380,12 +1680,7 @@ impl Settings {
         }
 
         match key.code {
-            // The card first: a key that opens a thing closes that thing.
-            KeyCode::Esc if bare && self.keys_showing => {
-                self.keys_showing = false;
-                SettingsOutcome::Consumed
-            }
-            // Then what is held in the filter, which is nearer than the
+            // What is held in the filter first, which is nearer than the
             // page it is on.
             KeyCode::Esc if bare && self.query.let_go() => SettingsOutcome::Consumed,
             KeyCode::Esc if bare => SettingsOutcome::Cancelled,
@@ -1449,15 +1744,44 @@ impl Settings {
                     None => SettingsOutcome::Consumed,
                 }
             }
-            // On the keys page, enter is the reader saying "the next key I
-            // press is this command's".
+            // On the themes page, enter is the card's button: install it,
+            // or update it -- and nothing on one installed and current, or
+            // on its way, or one the registry no longer has to give.
+            KeyCode::Enter if bare && self.on_themes() => match themes.get(self.window.focus()) {
+                Some(card) if card.may_be_installed() => {
+                    SettingsOutcome::InstallTheme(card.theme.name.clone())
+                }
+                _ => SettingsOutcome::Consumed,
+            },
+            // And delete takes one away, where one may be: the same answer
+            // the foot asks before it offers the key, so a key it does not
+            // show does nothing.
+            KeyCode::Delete if bare && !self.query.takes_a_delete() && self.on_themes() => {
+                match themes.get(self.window.focus()) {
+                    Some(card) if card.may_be_taken_away() => {
+                        SettingsOutcome::RemoveTheme(card.theme.name.clone())
+                    }
+                    _ => SettingsOutcome::Consumed,
+                }
+            }
+            // On the keys page, enter on a key is the reader saying "the
+            // next key I press goes here instead", with `alt+backspace` to
+            // take it away. On a command with no key there is nothing to
+            // change, and
+            // enter does nothing: a key is added with `ctrl+enter`, there as
+            // on every row.
             KeyCode::Enter if bare && self.on_keys() => match keys.get(self.window.focus()) {
                 Some((KeyRow::Setting(setting), _)) => Self::change(setting, config),
-                Some((KeyRow::Command(command), _)) => {
-                    self.binding = Some(*command);
+                Some((KeyRow::Key { command, slot }, Some(_))) => {
+                    self.binding = Some(Binding {
+                        command: *command,
+                        slot: *slot,
+                        replacing: true,
+                    });
                     self.refused = None;
                     SettingsOutcome::Consumed
                 }
+                Some((KeyRow::Key { .. }, None)) => SettingsOutcome::Consumed,
                 None => SettingsOutcome::Consumed,
             },
             // A row of the remote page asks for what it is about, and the
@@ -1562,7 +1886,7 @@ impl Settings {
                     && !self.query.takes_a_delete()
                     && self.on_project()
                     && !self.on_keys()
-                    && !self.on_agents() =>
+                    && !self.on_cards() =>
             {
                 match rows.get(self.window.focus()).and_then(Shown::setting) {
                     Some(setting) => SettingsOutcome::Unset(setting.key),
@@ -1620,6 +1944,20 @@ impl Settings {
         }
     }
 
+    /// Goes to a page, with `said` in the filter in place of whatever was
+    /// there -- what a list that found nothing hands on.
+    ///
+    /// Nothing, on a page this file has not got.
+    pub fn go_to(&mut self, page: Page, said: &str) {
+        let Some(at) = Page::of(self.whose).iter().position(|on| *on == page) else {
+            return;
+        };
+        self.page = at;
+        self.query = Field::new();
+        self.query.put(said);
+        self.settle(None);
+    }
+
     /// Moves to the next tab, or the previous one, wrapping.
     fn step_tab(&mut self, forward: bool, offering: Option<&Offering>) {
         // Every tab, not every group: the agents are a tab and not a group,
@@ -1656,15 +1994,21 @@ impl Settings {
     /// and the geometry is only settled at that point -- which is also what
     /// makes a resize move the window rather than leave the focus off the
     /// screen.
-    pub fn settle_cards(&mut self, agents: &[Agent], room: (u16, u16)) {
-        let heights = self.card_heights(agents, room);
+    pub fn settle_cards(&mut self, cards: Cards<'_>, room: (u16, u16)) {
+        let heights = self.card_heights(cards, room);
         self.window.settle_by_height(&heights, room.1);
     }
 
-    /// How tall each card is, with the blank after it.
-    fn card_heights(&self, agents: &[Agent], room: (u16, u16)) -> Vec<u16> {
+    /// How tall each card on the page showing is, with the blank after it.
+    fn card_heights(&self, cards: Cards<'_>, room: (u16, u16)) -> Vec<u16> {
         let width = Self::card_width(room.0);
-        self.agents(agents)
+        if self.on_themes() {
+            let themes = self.themes(cards.themes);
+            return (0..themes.len())
+                .map(|at| self.theme_rows(&themes, at, width) + 1)
+                .collect();
+        }
+        self.agents(cards.agents)
             .iter()
             .map(|agent| self.card_rows(agent, width) + 1)
             .collect()
@@ -1693,7 +2037,7 @@ impl Settings {
                         },
                         description_width(room.0),
                     ),
-                    KeyRow::Command(_) => 1,
+                    KeyRow::Key { .. } => 1,
                 })
                 .collect(),
             false => self

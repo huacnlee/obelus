@@ -143,6 +143,9 @@ impl App {
     /// One repeated telling on the way past, rather than a silence that
     /// lasts.
     pub(in crate::app) fn let_the_conversations_go(&mut self) {
+        // Every page under the session it was had in, before the agent that
+        // had them goes: the next agent's are asked for by other names.
+        self.keep_every_page();
         for document in &mut self.documents {
             let Some(talk) = document.as_mut().and_then(Document::chat_mut) else {
                 continue;
@@ -165,6 +168,7 @@ impl App {
             if had {
                 talk.chat
                     .note("The agent this was with is no longer the one Obelus talks to");
+                talk.page_outlived_its_session();
             }
         }
     }
@@ -405,7 +409,7 @@ impl App {
                 continue;
             };
             talk.asked_while_shown = false;
-            if !talk.minted || talk.chat.anything_said() {
+            if !talk.minted || talk.said_in_this_session() {
                 continue;
             }
             let Some(session) = talk.session.take() else {
@@ -438,6 +442,10 @@ impl App {
     /// conversation is next shown or spoken in, and a conversation about a
     /// note takes its own up again by the name written down.
     fn forget_what_the_agent_held(&mut self) {
+        // Every page as the agent left it, the turn it died in included:
+        // nothing else would keep that turn if the reader leaves without
+        // saying another word.
+        self.keep_every_page();
         for document in &mut self.documents {
             let Some(talk) = document.as_mut().and_then(Document::chat_mut) else {
                 continue;
@@ -458,6 +466,7 @@ impl App {
                 talk.claim = None;
                 talk.told = None;
                 talk.introduced = false;
+                talk.page_outlived_its_session();
             }
         }
     }
@@ -521,18 +530,26 @@ impl App {
                 })
                 .and_then(|(_, _, _, kept)| kept.title.clone())
         });
-        let Some(talker) = self.agent.talker.as_mut() else {
+        if self.agent.talker.is_none() {
             return;
-        };
+        }
         match had {
             Some(session) => {
-                let asking = talker.reopen(&session, title, tools);
+                let own_page = self.bring_back_the_page(whose, &session);
+                let Some(talker) = self.agent.talker.as_mut() else {
+                    return;
+                };
+                let asking = talker.reopen(&session, title, tools, !own_page);
                 if let Some(talk) = self.talk_mut(whose) {
                     talk.asked_for = Some(obelus_agent::acp::SessionId::new(session));
                     talk.requested = Some(asking);
+                    talk.own_page = own_page;
                 }
             }
             None => {
+                let Some(talker) = self.agent.talker.as_mut() else {
+                    return;
+                };
                 let asking = talker.open(tools);
                 if let Some(talk) = self.talk_mut(whose) {
                     talk.opening = true;
@@ -540,6 +557,99 @@ impl App {
                 }
             }
         }
+    }
+
+    /// Puts the page of a conversation being taken up back as it was, from
+    /// what Obelus kept of it, and says whether the page is Obelus's own.
+    ///
+    /// A page that is this session's already is left as it is: the agent
+    /// died under it and it is being taken up in the same sitting. One that
+    /// is another session's -- the agent before this one -- is kept under
+    /// its own name and taken off, because what goes on this page is this
+    /// conversation. One with nothing kept is the agent's to fill, by
+    /// replaying it.
+    fn bring_back_the_page(&mut self, whose: Whose, session: &str) -> bool {
+        let wanted = obelus_agent::acp::SessionId::new(session);
+        let Some(talk) = self.talk(whose) else {
+            return false;
+        };
+        if talk.page_of.as_ref() == Some(&wanted) {
+            return true;
+        }
+        let another = talk.page_of.is_some();
+        if another {
+            Self::keep_the_page_of(&self.working_directory, talk);
+        }
+        let page = obelus_agent::acp::sessions::kept_page(&self.working_directory, session);
+        let Some(talk) = self.talk_mut(whose) else {
+            return false;
+        };
+        if another {
+            talk.chat.clear_the_page();
+        }
+        talk.page_of = Some(wanted);
+        talk.said_from = 0;
+        let Some(page) = page else {
+            return false;
+        };
+        match talk.chat.bring_back(&page) {
+            Ok(()) => {
+                // And which checkout it was working in, which a replay
+                // would have said through the calls it sent again.
+                if let Some(call) = talk.chat.last_to_write() {
+                    self.hear_where_it_wrote(whose, &call);
+                }
+                true
+            }
+            Err(error) => {
+                tracing::warn!(%error, session, "the conversation's page will not read");
+                false
+            }
+        }
+    }
+
+    /// Writes down the page of the conversation `whose` names, as it is
+    /// now.
+    ///
+    /// Under the session it is the page of, which is not always the one
+    /// listening now (`Conversation::page_of`). Only one there is something
+    /// to come back to: something said to that session -- the same test
+    /// that decides whether its name is written down
+    /// (`remember_the_conversations`).
+    pub(in crate::app) fn keep_the_page(&self, whose: Whose) {
+        let Some(talk) = self.talk(whose) else {
+            return;
+        };
+        Self::keep_the_page_of(&self.working_directory, talk);
+    }
+
+    /// The same, for a conversation already in hand -- one on its way out
+    /// of the list of documents.
+    pub(in crate::app) fn keep_the_page_of(
+        root: &std::path::Path,
+        talk: &crate::conversation::Conversation,
+    ) {
+        let Some(session) = talk.page_of.as_ref() else {
+            return;
+        };
+        if !talk.said_in_this_session() {
+            return;
+        }
+        obelus_agent::acp::sessions::keep_page(root, &session.0, &talk.chat.to_keep());
+    }
+
+    /// Writes down the page of every conversation open here, for the way
+    /// out.
+    pub fn keep_every_page(&self) {
+        for talk in self.documents.iter().flatten().filter_map(Document::chat) {
+            Self::keep_the_page_of(&self.working_directory, talk);
+        }
+    }
+
+    /// Whether what the agent sent `whose` is the replay of a conversation
+    /// whose page Obelus put back itself, and so is not to be drawn.
+    fn is_a_replay_nobody_wants(&self, whose: Whose) -> bool {
+        self.replaying(whose) && self.talk(whose).is_some_and(|talk| talk.own_page)
     }
 
     /// Where the conversation `whose` names reaches Obelus's own tools.
@@ -923,7 +1033,7 @@ impl App {
                 // Obelus writes in a conversation of its own accord, and
                 // a page holding nothing but "starting again, because"
                 // is a page with nothing to come back to.
-                if !talk.chat.anything_said() {
+                if !talk.said_in_this_session() {
                     return None;
                 }
                 Some((
@@ -1913,6 +2023,10 @@ impl App {
         // arrives -- opening and all, because the opening belongs to
         // whatever goes first.
         talker.say(session.as_ref(), asking, said_of(parts), opening.as_deref());
+        // And the page with what was just said on it. A turn can run for
+        // the length of a build, and a window that goes in the middle of
+        // one would otherwise leave the question it was answering behind.
+        self.keep_the_page(whose);
         // A turn has started, which its thread says at the top of it.
         self.mirror_head(whose, Some(obelus_remote::model::Turning::Working));
     }
@@ -3781,6 +3895,7 @@ impl App {
                 talk.started_on.clear();
                 talk.introduced = false;
                 talk.chat.note(&format!("Starting again, because {why}"));
+                talk.page_outlived_its_session();
             }
             if let Some(which) = which {
                 self.forget_the_conversation(&which);
@@ -3866,6 +3981,10 @@ impl App {
                 talk.requested = None;
                 talk.minted = minted;
                 talk.session = Some(session.clone());
+                // And the page is this session's from here on, whichever
+                // way it got its session: what is said next is kept under
+                // this name.
+                talk.page_of = Some(session.clone());
             }
             // The first moment a conversation about nothing in particular
             // can be claimed: it is named by its session and by nothing
@@ -3948,6 +4067,23 @@ impl App {
         let Some(whose) = self.whose(&incoming) else {
             return;
         };
+        // What was said, replayed to a conversation that has its page
+        // already. What the agent calls it and what it can be set to still
+        // count: those are about the session, which is the part asked for.
+        if let acp::Incoming::Update { update, .. } = &incoming
+            && matches!(
+                update,
+                acp::Update::Said(_)
+                    | acp::Update::Thought(_)
+                    | acp::Update::Heard(_)
+                    | acp::Update::Tool { .. }
+                    | acp::Update::Plan(_)
+                    | acp::Update::Task(_)
+            )
+            && self.is_a_replay_nobody_wants(whose)
+        {
+            return;
+        }
         match incoming {
             acp::Incoming::Update { update, .. } => match update {
                 acp::Update::Said(text) => {
@@ -3959,9 +4095,9 @@ impl App {
                     self.in_talk(whose, |chat| chat.chunk(Speaker::Thought, &text));
                 }
                 // The reader's own words, as the agent has them. What this
-                // is for is a conversation taken up again after Obelus was
-                // shut: the transcript is the agent's, and this is the half
-                // of it Obelus cannot write itself.
+                // is for is a conversation taken up again that Obelus kept
+                // no page of: the transcript is then the agent's, and this
+                // is the half of it Obelus cannot write itself.
                 acp::Update::Heard(text) => self.in_talk(whose, |chat| chat.heard(&text)),
                 acp::Update::Tool { call, status } => {
                     self.mirror_paused(whose);
@@ -4037,6 +4173,11 @@ impl App {
                 // After the line above and not before it, so that the
                 // transcript reads in the order the things happened.
                 self.say_what_was_waiting(whose);
+                // And the page as the turn left it, which is the moment it
+                // stops changing on its own. After what was waiting has
+                // gone, so that it is kept as said rather than left out as
+                // not yet sent.
+                self.keep_the_page(whose);
             }
             acp::Incoming::Failed(what, why) => {
                 tracing::warn!(what, why, "the agent");
@@ -4787,7 +4928,70 @@ fn lasted_said(lasted: std::time::Duration) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::window;
+    use obelus_agent::acp::{SessionId, sessions};
+    use obelus_component::{chat::Chat, composer::Part};
+
+    use super::{App, DocumentId, Whose, window};
+
+    /// A window on a tree of its own, with nothing open.
+    fn on_a_tree(name: &str) -> (App, std::path::PathBuf) {
+        obelus_logging::state_directory_for_test(
+            std::env::temp_dir().join(format!("obelus-talking-state-{}", std::process::id())),
+        );
+        let root =
+            std::env::temp_dir().join(format!("obelus-talking-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        std::fs::create_dir_all(&root).expect("the tree");
+        let mut app = App::new(Vec::new());
+        app.working_directory = root.clone();
+        (app, root)
+    }
+
+    /// A page with one thing the reader said on it.
+    fn saying(words: &str) -> Chat {
+        let mut chat = Chat::new();
+        chat.asked(&[Part::Words(words.to_string())]);
+        chat
+    }
+
+    /// A conversation taken up with another agent's session than the one
+    /// its page is of: the page is kept under its own name and taken off,
+    /// and this session's is put up in its place.
+    ///
+    /// The page on screen was taken for this session's because it had
+    /// words on it. Switching agents left the first agent's page up, the
+    /// second's was never read, its replay was dropped as a copy, and the
+    /// next turn wrote the first agent's conversation over the second's.
+    ///
+    /// Broken deliberately by going back to that -- returning early for any
+    /// page with something said on it -- and the page still held the first
+    /// agent's words.
+    #[test]
+    fn a_page_that_is_another_sessions_gives_way_to_this_ones() {
+        let (mut app, root) = on_a_tree("another-sessions-page");
+        sessions::keep_page(&root, "s-b", &saying("said to the second").to_keep());
+        let talk = crate::conversation::Conversation {
+            chat: saying("said to the first"),
+            page_of: Some(SessionId::new("s-a")),
+            ..crate::conversation::Conversation::default()
+        };
+        app.documents.push(Some(talk.into()));
+        let whose = Whose::One(DocumentId::new(app.documents.len() - 1));
+
+        assert!(
+            app.bring_back_the_page(whose, "s-b"),
+            "the page kept was not brought back"
+        );
+
+        let on_screen = app.talk(whose).expect("the conversation").chat.to_keep();
+        assert!(on_screen.contains("said to the second"), "{on_screen}");
+        assert!(!on_screen.contains("said to the first"), "{on_screen}");
+        let first = sessions::kept_page(&root, "s-a").unwrap_or_default();
+        assert!(
+            first.contains("said to the first"),
+            "the first agent's page was not kept before it went: {first:?}"
+        );
+    }
 
     /// The protocol counts a file's lines from one, and asking for line 2 of
     /// a three-line file has to give the second line rather than the third.

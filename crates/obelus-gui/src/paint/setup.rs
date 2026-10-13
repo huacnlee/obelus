@@ -9,7 +9,7 @@ use std::time::Instant;
 use anyhow::{Context, Result};
 use obelus_font::Fonts;
 
-use super::*;
+use super::{glass::tiles, *};
 use crate::{
     grid::{Going, Page, Said, Spelling},
     motion::Moving,
@@ -269,7 +269,35 @@ impl Painter {
                     },
                     count: None,
                 },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 7,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Texture {
+                        sample_type: wgpu::TextureSampleType::Float { filterable: true },
+                        view_dimension: wgpu::TextureViewDimension::D2,
+                        multisampled: false,
+                    },
+                    count: None,
+                },
+                wgpu::BindGroupLayoutEntry {
+                    binding: 8,
+                    visibility: wgpu::ShaderStages::FRAGMENT,
+                    ty: wgpu::BindingType::Sampler(wgpu::SamplerBindingType::Filtering),
+                    count: None,
+                },
             ],
+        });
+        // Smooth, and round the edge to the other side, for the picture
+        // under the page: a tiling is one copy read past its edges, and a
+        // picture fitted to the window is read inside them, where this is
+        // the smooth sampler by another name.
+        let repeating = device.create_sampler(&wgpu::SamplerDescriptor {
+            label: Some("obelus wallpaper"),
+            mag_filter: wgpu::FilterMode::Linear,
+            min_filter: wgpu::FilterMode::Linear,
+            address_mode_u: wgpu::AddressMode::Repeat,
+            address_mode_v: wgpu::AddressMode::Repeat,
+            ..Default::default()
         });
         // Smooth, unlike the glyphs': what this samples is a picture being
         // bent, and bending it a pixel at a time is what a staircase is.
@@ -282,6 +310,7 @@ impl Painter {
             ..Default::default()
         });
         let (width, height) = (configured.width, configured.height);
+        let nothing = made_to_draw_into(&device, view, 1, 1);
         let binder = Binder {
             device: &device,
             layout: &layout,
@@ -290,8 +319,10 @@ impl Painter {
             pictures: &atlas.pictures.view,
             sampler: &sampler,
             smooth: &smooth,
+            // No picture under the page until a theme says there is one.
+            wallpaper: &nothing,
+            repeating: &repeating,
         };
-        let nothing = made_to_draw_into(&device, view, 1, 1);
         let levels = vec![Seen::made(&binder, view, width, height)];
         let scratch = made_to_draw_into(&device, view, halved(width), halved(height));
         let scratch_bindings = binder.bound(&scratch, &nothing);
@@ -381,10 +412,81 @@ impl Painter {
             scratch,
             scratch_bindings,
             picture: None,
+            lifted: None,
             left: None,
+            left_lifted: None,
             gone: Vec::new(),
             plain_bindings,
             nothing,
+            repeating,
+            wallpaper: None,
+            laid: None,
+        })
+    }
+
+    /// The picture under the page from now on, or none.
+    ///
+    /// Onto the card once, and every bind group made again to read it --
+    /// the same as the atlas growing, and as rare: a theme chosen.
+    pub(crate) fn hang(&mut self, hung: Option<&crate::wallpaper::Hung>) {
+        self.wallpaper = hung.and_then(|hung| self.hung_on_the_card(hung));
+        self.bound_again();
+    }
+
+    /// A picture put on the card, or nothing where the card will not take
+    /// one that size -- said, rather than a validation error, which is a
+    /// panic.
+    fn hung_on_the_card(&self, hung: &crate::wallpaper::Hung) -> Option<Hanging> {
+        let (width, height) = hung.pixels.dimensions();
+        let most = self.device.limits().max_texture_dimension_2d;
+        if width > most || height > most {
+            tracing::warn!(
+                width,
+                height,
+                most,
+                "a wallpaper larger than this card takes, so there is none"
+            );
+            return None;
+        }
+        let size = wgpu::Extent3d {
+            width,
+            height,
+            depth_or_array_layers: 1,
+        };
+        let texture = self.device.create_texture(&wgpu::TextureDescriptor {
+            label: Some("obelus wallpaper"),
+            size,
+            mip_level_count: 1,
+            sample_count: 1,
+            dimension: wgpu::TextureDimension::D2,
+            // Without the sRGB conversion, as the surface is viewed: the
+            // picture's bytes are what is drawn, the way a theme's colours
+            // are.
+            format: wgpu::TextureFormat::Rgba8Unorm,
+            usage: wgpu::TextureUsages::TEXTURE_BINDING | wgpu::TextureUsages::COPY_DST,
+            view_formats: &[],
+        });
+        self.queue.write_texture(
+            wgpu::TexelCopyTextureInfo {
+                texture: &texture,
+                mip_level: 0,
+                origin: wgpu::Origin3d::ZERO,
+                aspect: wgpu::TextureAspect::All,
+            },
+            hung.pixels.as_raw(),
+            wgpu::TexelCopyBufferLayout {
+                offset: 0,
+                bytes_per_row: Some(width * 4),
+                rows_per_image: Some(height),
+            },
+            size,
+        );
+        Some(Hanging {
+            view: texture.create_view(&wgpu::TextureViewDescriptor::default()),
+            size: [width, height],
+            opacity: hung.opacity,
+            fit: hung.fit,
+            anchor: hung.anchor,
         })
     }
 
@@ -427,9 +529,12 @@ impl Painter {
         self.levels = levels;
         (self.scratch, self.scratch_bindings) = (scratch, scratch_bindings);
         self.picture = picture;
+        // Made again by the next frame that wants it, at the new size.
+        self.lifted = None;
         // A picture of the window at its old size is a pane leaving from the
         // wrong place, so what was leaving is simply gone.
         self.left = None;
+        self.left_lifted = None;
         self.gone.clear();
     }
 
@@ -458,6 +563,13 @@ impl Painter {
             (false, true) => self.picture = None,
             _ => {}
         }
+        // And what is written on a pane on its way in, only for as long as
+        // one is: a fifth of a second, against a window's worth of memory.
+        match (self.placed.arriving.is_some(), self.lifted.is_some()) {
+            (true, false) => self.lifted = Some(self.whole()),
+            (false, true) => self.lifted = None,
+            _ => {}
+        }
     }
 
     /// Every bind group again, over the same pictures, because the atlas
@@ -472,6 +584,9 @@ impl Painter {
         let scratch = binder.bound(&self.scratch, &self.nothing);
         let showing = (self.picture.as_ref()).map(|whole| binder.bound(&whole.view, &self.nothing));
         let left = (self.left.as_ref()).map(|whole| binder.bound(&whole.view, &self.nothing));
+        let lifted = (self.lifted.as_ref()).map(|whole| binder.bound(&whole.view, &self.nothing));
+        let left_lifted =
+            (self.left_lifted.as_ref()).map(|whole| binder.bound(&whole.view, &self.nothing));
         let plain = binder.bound(&self.nothing, &self.nothing);
         for (seen, bindings) in self.levels.iter_mut().zip(levels) {
             seen.bindings = bindings;
@@ -481,6 +596,12 @@ impl Painter {
             whole.bindings = bindings;
         }
         if let (Some(whole), Some(bindings)) = (self.left.as_mut(), left) {
+            whole.bindings = bindings;
+        }
+        if let (Some(whole), Some(bindings)) = (self.lifted.as_mut(), lifted) {
+            whole.bindings = bindings;
+        }
+        if let (Some(whole), Some(bindings)) = (self.left_lifted.as_mut(), left_lifted) {
             whole.bindings = bindings;
         }
         self.plain_bindings = plain;
@@ -496,6 +617,11 @@ impl Painter {
             pictures: &self.atlas.pictures.view,
             sampler: &self.sampler,
             smooth: &self.smooth,
+            wallpaper: self
+                .wallpaper
+                .as_ref()
+                .map_or(&self.nothing, |hanging| &hanging.view),
+            repeating: &self.repeating,
         }
     }
 
@@ -538,6 +664,7 @@ impl Painter {
         self.picture_while_wanted();
         if self.placed.going.is_none() {
             self.left = None;
+            self.left_lifted = None;
         }
         let acquiring = Instant::now();
         let acquired = self.surface.get_current_texture();
@@ -605,20 +732,37 @@ impl Painter {
         // Cut where its glass is, which is where it was cut from what was
         // under it: the half row above a list's rule is the file, and taken
         // along it would be a strip of the file going down with the list.
-        self.gone = going
+        let levels: Vec<Option<&Level>> = going
             .iter()
             .map(|gone| {
-                let level = self
-                    .placed
+                self.placed
                     .levels
                     .iter()
-                    .find(|level| level.pane && level.area == gone.area);
+                    .find(|level| level.pane && level.area == gone.area)
+            })
+            .collect();
+        self.gone = going
+            .iter()
+            .zip(&levels)
+            .map(|(gone, level)| {
                 (
                     level.map_or_else(|| box_of(gone.area, cell), |level| level.rect),
                     gone.joined,
                 )
             })
             .collect();
+        // What is written over the page after its glass goes in a picture
+        // of its own, where it was -- see `left_lifted`. Only for one pane
+        // going, and one that is a level: two that went side by side would
+        // be cut at the lower one's glass, and the other's glass would go
+        // with what is written on it, a flat block where the glass stood.
+        // Those go as one picture, the way every pane did.
+        let kept_from = match levels.as_slice() {
+            [Some(level)] => Some(level.end),
+            _ => None,
+        };
+        self.placed.kept_from = kept_from;
+        self.left_lifted = kept_from.map(|_| self.whole());
         let mut encoder = self
             .device
             .create_command_encoder(&wgpu::CommandEncoderDescriptor {
@@ -648,15 +792,21 @@ impl Painter {
             // taken from where it has got to -- the same two steps the
             // screen is put back in, so what the glass shows moves with
             // what is round it.
+            // Less the picture under the page, which stands still while the
+            // band goes over it: drawn into the backdrop first, and what is
+            // put back over it is clear where it is the page.
             Some((above, put_back)) => {
                 if let Some(picture) = &self.picture {
                     {
-                        let mut pass = self.pass(encoder, "obelus behind, standing", &picture.view);
+                        let mut pass =
+                            self.cleared(encoder, "obelus behind, standing", &picture.view);
                         pass.set_bind_group(0, &self.plain_bindings, &[]);
-                        drawing(&mut pass, 0..placed.behind());
+                        drawing(&mut pass, placed.hung..placed.behind().max(placed.hung));
                         drawing(&mut pass, above);
                     }
                     let mut pass = self.pass(encoder, "obelus behind", &self.levels[0].backdrop);
+                    pass.set_bind_group(0, &self.plain_bindings, &[]);
+                    drawing(&mut pass, 0..placed.hung);
                     pass.set_bind_group(0, &picture.bindings, &[]);
                     drawing(&mut pass, put_back);
                 }
@@ -687,8 +837,48 @@ impl Painter {
         if let Some(picture) = composing {
             // The glass is drawn in here, and what it reads is the
             // backdrop -- which this pass is not writing to.
-            let mut pass = self.pass(encoder, "obelus frame", &picture.view);
-            self.the_frame(&mut pass);
+            //
+            // Less the picture under the page, and cleared to nothing
+            // rather than black, so the page here is clear: what is cut
+            // out of this and moved is what is written on the page, and the
+            // picture stays where it is under it.
+            let mut pass = self.cleared(encoder, "obelus frame", &picture.view);
+            let plan = without_the_picture(on_the_screen(&placed), placed.hung);
+            match placed.arriving {
+                // A pane on its way in: its glass goes in here, where it has
+                // got to, and what is written on it goes in a picture of its
+                // own and is slid in over the glass -- see `lifted`. So the
+                // frame holds what is said after the glass everywhere but
+                // where the pane is.
+                Some(level) => {
+                    let pane = placed.levels[level].rect;
+                    let (glass, written) = parted_at(plan, placed.levels[level].end);
+                    let glass = match placed.glass_so_far {
+                        Some(copy) => in_place_of(glass, placed.levels[level].glass, copy),
+                        None => glass,
+                    };
+                    self.follow(&mut pass, &glass, &self.levels[0].bindings);
+                    for tile in tiles([f32::MIN, f32::MIN, f32::MAX, f32::MAX], &[pane]) {
+                        self.within(&mut pass, tile);
+                        self.follow(&mut pass, &written, &self.levels[0].bindings);
+                    }
+                    drop(pass);
+                    if let Some(lifted) = &self.lifted {
+                        // Cleared to nothing whatever is under the page:
+                        // what is put back from this is only what is
+                        // written, over the glass.
+                        let mut pass = self.pass_on(
+                            encoder,
+                            "obelus lifted",
+                            &lifted.view,
+                            wgpu::Color::TRANSPARENT,
+                        );
+                        self.within(&mut pass, pane);
+                        self.follow(&mut pass, &written, &self.levels[0].bindings);
+                    }
+                }
+                None => self.follow(&mut pass, &plan, &self.levels[0].bindings),
+            }
         }
         {
             // Cleared to black, which is never seen: the first quad of
@@ -700,6 +890,22 @@ impl Painter {
                 // part of the pane and arrives with it. Left standing in
                 // place, it was a pane already open with only its words
                 // sliding into it -- which is not what the list does.
+                Some(picture) if placed.hung > 0 => {
+                    // The picture under the page, which nothing moves.
+                    pass.set_bind_group(0, &self.plain_bindings, &[]);
+                    drawing(&mut pass, 0..placed.hung);
+                    // And what a pane on top was put over, only where the
+                    // pane is: everywhere else the pieces put back are the
+                    // page itself, clear over the picture, and the page
+                    // drawn under them as well would be every letter twice.
+                    if let Some(top) = placed.levels.iter().rposition(|level| level.pane) {
+                        self.within(&mut pass, placed.levels[top].rect);
+                        let plan = without_the_picture(put_over(&placed.levels, top), placed.hung);
+                        self.follow(&mut pass, &plan, &self.plain_bindings);
+                        self.within(&mut pass, [f32::MIN, f32::MIN, f32::MAX, f32::MAX]);
+                    }
+                    self.follow(&mut pass, &catching(&placed), &picture.bindings);
+                }
                 Some(picture) => {
                     // What the pane on top was put over, which is the
                     // picture its glass reads.
@@ -708,6 +914,31 @@ impl Painter {
                     }
                     self.follow(&mut pass, &catching(&placed), &picture.bindings);
                 }
+                // The screen a pane went from, being kept: what was
+                // written on the panes that went is left out where they
+                // were, and drawn into a picture of its own below.
+                None if let Some(from) = placed.kept_from => {
+                    let (glass, written) = parted_at(on_the_screen(&placed), from);
+                    self.follow(&mut pass, &glass, &self.levels[0].bindings);
+                    let gone: Vec<[f32; 4]> = self.gone.iter().map(|&(pane, _)| pane).collect();
+                    for tile in tiles([f32::MIN, f32::MIN, f32::MAX, f32::MAX], &gone) {
+                        self.within(&mut pass, tile);
+                        self.follow(&mut pass, &written, &self.levels[0].bindings);
+                    }
+                    drop(pass);
+                    if let Some(lifted) = &self.left_lifted {
+                        let mut pass = self.pass_on(
+                            encoder,
+                            "obelus left lifted",
+                            &lifted.view,
+                            wgpu::Color::TRANSPARENT,
+                        );
+                        for pane in gone {
+                            self.within(&mut pass, pane);
+                            self.follow(&mut pass, &written, &self.levels[0].bindings);
+                        }
+                    }
+                }
                 // And a pane that went, over the frame it went from.
                 None => {
                     self.the_frame(&mut pass);
@@ -715,6 +946,12 @@ impl Painter {
                         && let Some(left) = &self.left
                     {
                         pass.set_bind_group(0, &left.bindings, &[]);
+                        drawing(&mut pass, going);
+                    }
+                    if let Some(going) = placed.going_lifted
+                        && let Some(lifted) = &self.left_lifted
+                    {
+                        pass.set_bind_group(0, &lifted.bindings, &[]);
                         drawing(&mut pass, going);
                     }
                 }
@@ -766,13 +1003,57 @@ impl Painter {
         label: &str,
         target: &wgpu::TextureView,
     ) -> wgpu::RenderPass<'e> {
+        self.pass_on(encoder, label, target, wgpu::Color::BLACK)
+    }
+
+    /// The same, cleared to nothing at all where the picture under the page
+    /// is left out of what is drawn -- so that what is put back from it is
+    /// clear where it is the page. Black, as ever, where there is no
+    /// picture: then the frame covers every pixel of it anyway.
+    fn cleared<'e>(
+        &self,
+        encoder: &'e mut wgpu::CommandEncoder,
+        label: &str,
+        target: &wgpu::TextureView,
+    ) -> wgpu::RenderPass<'e> {
+        let clear = match self.placed.hung {
+            0 => wgpu::Color::BLACK,
+            _ => wgpu::Color::TRANSPARENT,
+        };
+        self.pass_on(encoder, label, target, clear)
+    }
+
+    /// Keeps what is drawn next to `rect`, in the grid's pixels -- left,
+    /// top, right and bottom -- and within the window whatever it says.
+    fn within(&self, pass: &mut wgpu::RenderPass<'_>, rect: [f32; 4]) {
+        let (across, down) = (self.configured.width, self.configured.height);
+        #[expect(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "clamped to the window, which is thousands of pixels"
+        )]
+        let at = |value: f32, most: u32| value.round().clamp(0.0, most as f32) as u32;
+        let left = at(rect[0] + self.margin[0], across);
+        let top = at(rect[1] + self.margin[1], down);
+        let right = at(rect[2] + self.margin[0], across).max(left);
+        let bottom = at(rect[3] + self.margin[1], down).max(top);
+        pass.set_scissor_rect(left, top, right - left, bottom - top);
+    }
+
+    fn pass_on<'e>(
+        &self,
+        encoder: &'e mut wgpu::CommandEncoder,
+        label: &str,
+        target: &wgpu::TextureView,
+        clear: wgpu::Color,
+    ) -> wgpu::RenderPass<'e> {
         let mut pass = encoder.begin_render_pass(&wgpu::RenderPassDescriptor {
             label: Some(label),
             color_attachments: &[Some(wgpu::RenderPassColorAttachment {
                 view: target,
                 resolve_target: None,
                 ops: wgpu::Operations {
-                    load: wgpu::LoadOp::Clear(wgpu::Color::BLACK),
+                    load: wgpu::LoadOp::Clear(clear),
                     store: wgpu::StoreOp::Store,
                 },
                 depth_slice: None,
@@ -814,6 +1095,12 @@ impl Painter {
                 Reads::Nothing => otherwise,
                 Reads::Level(level) => &self.levels[*level].bindings,
                 Reads::Left => self.left.as_ref().map_or(otherwise, |left| &left.bindings),
+                Reads::Lifted => {
+                    (self.lifted.as_ref()).map_or(otherwise, |lifted| &lifted.bindings)
+                }
+                Reads::LeftLifted => {
+                    (self.left_lifted.as_ref()).map_or(otherwise, |lifted| &lifted.bindings)
+                }
             };
             pass.set_bind_group(0, bindings, &[]);
             drawing(pass, quads.clone());
@@ -888,7 +1175,7 @@ fn made_to_draw_into(
 /// reads, in one place because the pictures are made again whenever the
 /// window changes size and the rest goes with them.
 ///
-/// Seven things that are the same in every one of them, kept together so
+/// Nine things that are the same in every one of them, kept together so
 /// that what differs between bind groups is all that is written at each.
 struct Binder<'a> {
     device: &'a wgpu::Device,
@@ -898,6 +1185,8 @@ struct Binder<'a> {
     pictures: &'a wgpu::TextureView,
     sampler: &'a wgpu::Sampler,
     smooth: &'a wgpu::Sampler,
+    wallpaper: &'a wgpu::TextureView,
+    repeating: &'a wgpu::Sampler,
 }
 
 impl Binder<'_> {
@@ -935,6 +1224,14 @@ impl Binder<'_> {
                 wgpu::BindGroupEntry {
                     binding: 6,
                     resource: wgpu::BindingResource::TextureView(self.pictures),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 7,
+                    resource: wgpu::BindingResource::TextureView(self.wallpaper),
+                },
+                wgpu::BindGroupEntry {
+                    binding: 8,
+                    resource: wgpu::BindingResource::Sampler(self.repeating),
                 },
             ],
         })

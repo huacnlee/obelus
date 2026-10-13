@@ -56,6 +56,56 @@ impl Painter {
         // be the black the pass clears to.
         let [left, top, wide, tall] = whole_window([across, down], margin);
         self.block(left, top, wide, tall, rgba(self.ground, Ink::Background));
+        // And the picture under the page, over that ground and under the
+        // page's own colour laid at the theme's opacity -- once, across the
+        // whole window, so the cells in the page's colour are not painted
+        // again on top of it (`backgrounds` leaves them out). Where the
+        // picture does not reach, a contained or centred one, the ground
+        // is the page at full strength: there is nothing there to see
+        // through to.
+        //
+        // In the first picture with everything else, so every pane and box
+        // has it under its glass.
+        self.laid = self.wallpaper.as_ref().map(|hanging| {
+            #[expect(
+                clippy::cast_possible_truncation,
+                reason = "a screen is a few points to a pixel"
+            )]
+            let scale = self.window.scale_factor() as f32;
+            let laid = crate::wallpaper::laid(
+                hanging.size,
+                hanging.fit,
+                hanging.anchor,
+                [across, down],
+                scale,
+            );
+            let [x, y, width, height] = laid.rect;
+            crate::wallpaper::Laid {
+                rect: [x - margin[0], y - margin[1], width, height],
+                ..laid
+            }
+        });
+        if let Some(laid) = self.laid {
+            self.quads.push(Quad {
+                rect: laid.rect,
+                uv: laid.uv,
+                colour: [1.0; 4],
+                flags: WALLPAPER,
+                radius: 0.0,
+                layer: 0,
+                lower: 0.0,
+            });
+            let veil = self.veil();
+            self.block(left, top, wide, tall, veil);
+        }
+        // Where the picture's quads end, which every whole screen drawn
+        // from this frame draws first -- and the one picture of the frame
+        // that is cut into moving pieces leaves out (see `encode`).
+        self.placed.hung = if self.laid.is_some() {
+            self.quads.len()
+        } else {
+            0
+        };
         // Every pane and box, furthest first, each over the glass of those
         // before it. A box is one only while its frame is still there to
         // hold it -- see `Behind::framed` -- which four passes ask about.
@@ -228,9 +278,10 @@ impl Painter {
         }
 
         // Everything the frame says has been said. What is left is
-        // putting it back on the screen in two pieces, where a pane is on
-        // its way in -- see `paint.wgsl`.
+        // putting it back on the screen in pieces, where a pane is on its
+        // way in -- see `paint.wgsl` and `Painter::lifted`.
         self.placed.drawn = self.quads.len();
+        let mut so_far = None;
         if let (Some(top), Some(pane), Some(along)) = (top, pane, moving.pane) {
             let height = pane[3] - pane[1];
             // A pane comes from the side it is joined to, which is the
@@ -240,12 +291,34 @@ impl Painter {
                 _ => -1.0,
             };
             let shift = away * (1.0 - along) * height * TRAVEL;
+            // The glass where the pane has got to, reading what is behind
+            // it there -- which stands where it is while the slab goes over
+            // it -- and cut off at the seam it comes out of, which is the
+            // rectangle it was given and keeps.
+            //
+            // A copy, drawn in the frame in the place of the glass, and the
+            // glass itself left where the pane is going: a box over the
+            // pane is what is written on it and comes in with it, so what
+            // its own glass reads is the pane as it will be.
+            let glass = self.quads[self.placed.levels[top].glass];
+            let [left, top_edge, wide, tall] = glass.rect;
+            so_far = Some(Quad {
+                rect: [left, top_edge + shift, wide, tall],
+                ..glass
+            });
+            self.placed.arriving = Some(top);
             self.placed.composed = true;
             self.covering(&[pane]);
             // Under the one arriving, which comes over it: the files come
             // down over the palette going.
             self.going(moving.leaving);
+            // The glass coming up where it has reached, over what stands
+            // under it in the frame -- and then what is written on it,
+            // slid in out of its own picture.
+            self.slid_piece(reached(pane, shift), pane, 0.0, along);
+            let lifting = self.quads.len();
             self.slid(pane, shift, along);
+            self.placed.lifting = Some(lifting..self.quads.len());
             // And the shadow, here rather than in the frame -- see
             // `shadows`. It falls from the edge the pane has *reached*,
             // which is the only edge of it that has moved: the other is
@@ -287,6 +360,10 @@ impl Painter {
             && let Some(first) = first
         {
             self.sliding_under(page, first, said.bands, fonts);
+        }
+        if let Some(glass) = so_far {
+            self.placed.glass_so_far = Some(self.quads.len());
+            self.quads.push(glass);
         }
         // After the last glyph has been placed and before anything is drawn:
         // a glyph that found no room made the texture again, and every

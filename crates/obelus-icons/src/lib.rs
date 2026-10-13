@@ -139,6 +139,16 @@ pub mod ui {
     pub const DIRECTORY: char = '\u{f07b}';
     /// A set of colours.
     pub const THEME: char = '\u{f03d8}';
+    /// A theme with a dark page, on its card: the night.
+    ///
+    /// Which of the two is the one fact about a theme a reader can act on
+    /// without trying it, and the cards have no picture to say so.
+    pub const DARK: char = '\u{f0594}';
+    /// And one with a light page: the sun.
+    pub const LIGHT: char = '\u{f0599}';
+    /// The row at the foot of a list of themes that goes for more of them:
+    /// a download, because what is there is not on this machine yet.
+    pub const MORE_THEMES: char = '\u{f01da}';
     /// The project Obelus is reading, taken as a whole.
     ///
     /// A folder, which is what a tree of files is drawn as everywhere. It

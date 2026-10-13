@@ -364,6 +364,10 @@ struct Showing {
     /// drawn on it, and that has to be the page rather than an empty one
     /// on `Reset`.
     shown: bool,
+    /// The system says nobody can see the window: covered, on another
+    /// desktop, minimised. Only macOS and X11 say so; elsewhere this stays
+    /// `false` and the screen is what holds back a frame nobody can see.
+    covered: bool,
     /// How many pixels at the top of the window are the title bar's --
     /// see `title::height`. Measured with the columns and rows, because it
     /// changes when they do: a resize, a screen of another density, and
@@ -373,6 +377,9 @@ struct Showing {
     /// characters, and the row their keys are on. The application's, said
     /// at the same two moments the ground is.
     holding: (Color, Color),
+    /// Which asking for a picture under the page was the last one drawn,
+    /// so that an older one decoded later is not -- see `wallpaper`.
+    hung: u64,
     /// Which cells are switches on the frame being shown.
     ticked: Vec<Ticked>,
     /// Which cells are the mark that turns on the frame being shown.
@@ -386,23 +393,24 @@ struct Showing {
     spinning: Vec<Spun>,
     sheening: Option<Sheened>,
     parting: Vec<Parted>,
-    /// Which columns are bars on the frame being shown.
-    barred: Vec<Bar>,
+    /// Which columns are bars on the frame being shown, each with how many
+    /// panes and boxes had been put over the page when it was said.
+    barred: Vec<(Bar, usize)>,
     /// And those again with how the window is showing each, refilled
     /// every frame rather than kept: `shown` is a moment's answer and
     /// the pointer moves between frames. A `Vec` that is cleared and
     /// filled rather than made, because this is on the frame's own path.
     showing: Vec<Barred>,
     /// And on the one being laid out.
-    barring_up: Vec<Bar>,
+    barring_up: Vec<(Bar, usize)>,
     /// Which rows are rules on the frame being shown.
     ruled: Vec<Ruled>,
     /// And on the one being laid out.
     ruling: Vec<Ruled>,
     /// Which cells are the words of a link on the frame being shown.
-    linked: Vec<Rect>,
+    linked: Vec<(Rect, usize)>,
     /// And on the one being laid out.
-    linking: Vec<Rect>,
+    linking: Vec<(Rect, usize)>,
     /// Whether the pointer is a hand, so that it is changed only when
     /// what is under it does.
     pointing: bool,
@@ -506,8 +514,10 @@ impl Showing {
             capping: Vec::new(),
             ground: Color::Reset,
             shown: false,
+            covered: false,
             titled: 0.0,
             holding: (Color::Reset, Color::Reset),
+            hung: 0,
             ticked: Vec::new(),
             spun: Vec::new(),
             spinning: Vec::new(),
@@ -822,12 +832,42 @@ impl Showing {
 /// which from the outside is indistinguishable from Obelus having hung.
 ///
 /// `Wake::EveryFrame` is the second question already answered: it is the
-/// window saying something is in flight. A pass about to poll for a frame
-/// is a pass that wants one, and asking for it is also what lets the
-/// surface pace the loop at all -- the vertical blank holds nothing back
-/// from a loop that never presents.
-fn wants_a_frame(stepped: bool, wake: Option<Wake>) -> bool {
-    stepped || wake == Some(Wake::EveryFrame)
+/// window saying something is in flight. A pass that wants a rate is a
+/// pass that wants the next frame, and asking for it is what wakes the
+/// loop at all now that it sleeps in between -- see `control_flow`.
+///
+/// And no frame at all for a window the system says is `covered`, which
+/// is the one thing that holds a frame back where the screen does not.
+/// macOS hands a covered window no surface to draw on and says so at
+/// once, so a frame asked for there is skipped, asked for again on the
+/// next pass, and skipped again -- the loop going round as fast as it can
+/// for the whole of an animation nobody can see.
+fn wants_a_frame(stepped: bool, wake: Option<Wake>, covered: bool) -> bool {
+    !covered && (stepped || wake == Some(Wake::EveryFrame))
+}
+
+/// How the loop waits after a pass that worked out `wake`.
+///
+/// Something in flight waits for the frame `wants_a_frame` has just
+/// asked for, and the screen is what lets that frame through: on Wayland
+/// the compositor's frame callback, which the loop sleeps until (see
+/// `paint`), and elsewhere the vertical blank, which the frame is held
+/// at as it is presented. That is the rate an animation is meant to run
+/// at, and the one number nobody here has to pick.
+///
+/// It was `ControlFlow::Poll`, which never sleeps: the loop ran flat out
+/// between the frames the screen let through, and a Wayland compositor
+/// lets through none at all to a window it is not showing. So the
+/// welcome screen left on another workspace held a whole core for the two
+/// and a half seconds of every pass of its light, for hours, with nothing
+/// drawn. A window covered on macOS or X11 is the other half, and is
+/// `wants_a_frame`'s; one minimised on Windows, which says nothing about
+/// being covered, is still neither's.
+fn control_flow(wake: Option<Wake>) -> ControlFlow {
+    match wake {
+        Some(Wake::At(when)) => ControlFlow::WaitUntil(when),
+        Some(Wake::EveryFrame) | None => ControlFlow::Wait,
+    }
 }
 
 /// Whether the window is on X11, XWayland included.
@@ -934,9 +974,18 @@ impl ApplicationHandler<Waking> for Showing {
         // And the other direction: what the settings say about the window,
         // which the application sends when they change and nobody else can
         // answer.
+        // The screen it opened on, which is as large as a picture under the
+        // page is ever drawn; a window moved to a larger one later draws
+        // the picture a little soft rather than keeping one this large in
+        // case. Two common screens where the platform will not say.
+        let screen = window.current_monitor().map_or([3840, 2160], |monitor| {
+            let size = monitor.size();
+            [size.width, size.height]
+        });
         app.drawn_by(Arc::new(crate::grid::Telling::new(
             frames.clone(),
             Arc::clone(&wake),
+            screen,
         )));
         // And the marks, which a window draws itself. A terminal is asked
         // what it can show and mostly cannot; there is nothing to ask
@@ -1018,6 +1067,10 @@ impl ApplicationHandler<Waking> for Showing {
                 let mut drew = false;
                 let mut sized = None;
                 let mut faces = None;
+                // A picture arrives on its own, with no frame behind it --
+                // it was being decoded while the frames went by -- so it
+                // asks for the screen to be drawn again by itself.
+                let mut rehung = false;
                 while let Ok(update) = frames.try_recv() {
                     match update {
                         // Not cells, so the page never sees them.
@@ -1036,6 +1089,15 @@ impl ApplicationHandler<Waking> for Showing {
                             self.page.drawn_on(ground);
                         }
                         Update::Holding { held, row } => self.holding = (held, row),
+                        Update::Wallpaper { number, hung } => {
+                            if number > self.hung
+                                && let Some(painter) = self.painter.as_mut()
+                            {
+                                self.hung = number;
+                                painter.hang(hung.as_deref());
+                                rehung = true;
+                            }
+                        }
                         Update::Mark {
                             id,
                             focused,
@@ -1051,9 +1113,8 @@ impl ApplicationHandler<Waking> for Showing {
                         }
                         // Every one said is kept, in the order it was
                         // said, which is the order they are stacked in: a
-                        // setting's choices open over the settings, and
-                        // the card of every key over those. Each is glass,
-                        // and what the reader sees through one is
+                        // setting's choices open over the settings. Each is
+                        // glass, and what the reader sees through one is
                         // everything said before it -- the settings kept
                         // their glass under a list once there was more
                         // than one place to keep a pane.
@@ -1068,6 +1129,7 @@ impl ApplicationHandler<Waking> for Showing {
                                 joined,
                                 ground,
                                 cells,
+                                depth: self.stacking.len(),
                             };
                             // A pane, however many edges it is joined
                             // along. A box goes on the pile too, and what
@@ -1099,13 +1161,31 @@ impl ApplicationHandler<Waking> for Showing {
                             self.parting.push(Parted { area });
                         }
                         Update::Sheened { area, from, to } => {
-                            self.sheening = Some(Sheened { area, from, to });
+                            self.sheening = Some(Sheened {
+                                area,
+                                from,
+                                to,
+                                depth: self.stacking.len(),
+                            });
                         }
-                        Update::Barred { bar } => self.barring_up.push(bar),
-                        Update::Ruled { area } => self.ruling.push(Ruled { area }),
-                        Update::Linked { area } => self.linking.push(area),
+                        // Each shape with how much had been put over the
+                        // page when it was said, which is whose its cells
+                        // are -- see `Page::layer`.
+                        Update::Barred { bar } => {
+                            self.barring_up.push((bar, self.stacking.len()));
+                        }
+                        Update::Ruled { area } => self.ruling.push(Ruled {
+                            area,
+                            depth: self.stacking.len(),
+                        }),
+                        Update::Linked { area } => {
+                            self.linking.push((area, self.stacking.len()));
+                        }
                         Update::Stroked { stroke } => {
-                            self.stroking.push(Stroked { stroke });
+                            self.stroking.push(Stroked {
+                                stroke,
+                                depth: self.stacking.len(),
+                            });
                         }
                         Update::Capped {
                             keys,
@@ -1119,6 +1199,7 @@ impl ApplicationHandler<Waking> for Showing {
                             cap,
                             page,
                             edge,
+                            depth: self.stacking.len(),
                         }),
                         Update::Frame => {
                             if left.is_none()
@@ -1140,6 +1221,9 @@ impl ApplicationHandler<Waking> for Showing {
                                     going: Vec::new(),
                                 });
                             }
+                            // Whose each cell is, before anything below asks
+                            // -- see `Page::layer`.
+                            self.page.put_over(&self.stacking);
                             // The frame is over: what it asked for is what
                             // is on screen until the next one says
                             // otherwise.
@@ -1160,8 +1244,11 @@ impl ApplicationHandler<Waking> for Showing {
                             // arriving knows that. A frame drawn twice
                             // for some other reason must not read as a
                             // reader scrolling.
-                            self.motion
-                                .bars_drawn(&self.barred, self.pointer, Instant::now());
+                            self.motion.bars_drawn(
+                                self.barred.iter().map(|&(bar, _)| bar),
+                                self.pointer,
+                                Instant::now(),
+                            );
                             self.ruled = std::mem::take(&mut self.ruling);
                             self.linked = std::mem::take(&mut self.linking);
                             // Only where the page still holds it: the
@@ -1347,6 +1434,8 @@ impl ApplicationHandler<Waking> for Showing {
                         self.shown = true;
                     }
                     self.redraw();
+                } else if rehung && self.shown {
+                    self.redraw();
                 }
             }
             Waking::Finished => {
@@ -1412,22 +1501,10 @@ impl ApplicationHandler<Waking> for Showing {
         let now = Instant::now();
         let caret = self.page.caret().is_some();
         let wake = self.motion.wake(now, caret);
-        if wants_a_frame(self.motion.advance(now, caret), wake) {
+        if wants_a_frame(self.motion.advance(now, caret), wake, self.covered) {
             self.redraw();
         }
-        events.set_control_flow(match wake {
-            Some(Wake::At(when)) => ControlFlow::WaitUntil(when),
-            // Something is in flight, so the next frame is wanted as soon
-            // as the screen will take one. What paces it is the screen's
-            // refresh -- the surface presented on the vertical blank, or on
-            // Wayland the compositor's frame callback (see `paint`): that is
-            // the rate an animation is meant to run at, and the one
-            // number nobody here has to pick -- and it paces nothing at
-            // all unless a frame was actually asked for, which is what
-            // the line above is.
-            Some(Wake::EveryFrame) => ControlFlow::Poll,
-            None => ControlFlow::Wait,
-        });
+        events.set_control_flow(control_flow(wake));
     }
 
     fn window_event(&mut self, events: &ActiveEventLoop, _window: WindowId, event: WindowEvent) {
@@ -1467,16 +1544,11 @@ impl ApplicationHandler<Waking> for Showing {
                 let now = Instant::now();
                 self.showing.clear();
                 self.showing
-                    .extend(self.barred.iter().enumerate().map(|(at, bar)| {
-                        Barred {
-                            bar: *bar,
-                            over: self.barred[at + 1..]
-                                .iter()
-                                .map(|later| later.area)
-                                .collect(),
-                            shown: self.motion.bar_shown(bar.area, now),
-                            under: self.motion.bar_under(bar.area, now),
-                        }
+                    .extend(self.barred.iter().map(|&(bar, depth)| Barred {
+                        bar,
+                        depth,
+                        shown: self.motion.bar_shown(bar.area, now),
+                        under: self.motion.bar_under(bar.area, now),
                     }));
 
                 // How each band is being shown, worked out for this
@@ -1554,6 +1626,15 @@ impl ApplicationHandler<Waking> for Showing {
             // window it did -- so shift held on the way out was held for
             // good, and every press in a terminal after it took hold of
             // words rather than reaching the program.
+            // Uncovered, the window is drawn as things are now: what moved
+            // while it was covered moved on its clock, and only the frames
+            // were left out -- see `wants_a_frame`.
+            WindowEvent::Occluded(covered) => {
+                self.covered = covered;
+                if !covered {
+                    self.redraw();
+                }
+            }
             WindowEvent::Focused(false) => {
                 if self.modifiers.shift_key() {
                     self.tell(Event::Shifted(false));
@@ -1776,14 +1857,13 @@ impl Drop for Finished {
 /// page, and a hand over the list's row would be a promise the row does not
 /// keep. A link's words are underlined, and a cell that is not is somebody
 /// else's.
-fn on_a_link(linked: &[Rect], page: &Page, x: u16, y: u16) -> bool {
-    linked
-        .iter()
-        .any(|area| area.contains(ratatui::layout::Position { x, y }))
-        && page
-            .look(x, y)
-            .modifier
-            .contains(ratatui::style::Modifier::UNDERLINED)
+fn on_a_link(linked: &[(Rect, usize)], page: &Page, x: u16, y: u16) -> bool {
+    linked.iter().any(|&(area, depth)| {
+        area.contains(ratatui::layout::Position { x, y }) && page.layer(x, y) <= depth
+    }) && page
+        .look(x, y)
+        .modifier
+        .contains(ratatui::style::Modifier::UNDERLINED)
 }
 
 /// What this window is called by the thing that manages windows.
@@ -1889,11 +1969,12 @@ fn marked(attributes: winit::window::WindowAttributes) -> winit::window::WindowA
 
 #[cfg(test)]
 mod tests {
-    use std::time::Instant;
+    use std::time::{Duration, Instant};
 
     use ratatui::layout::Rect;
+    use winit::event_loop::ControlFlow;
 
-    use super::{MARK, Rolling, on_a_link, wants_a_frame};
+    use super::{MARK, Rolling, control_flow, on_a_link, wants_a_frame};
     use crate::{
         grid::{Page, Update},
         motion::{Motion, Wake},
@@ -1925,13 +2006,27 @@ mod tests {
                 cell: Box::new(cell),
             });
         }
-        let linked = [Rect::new(0, 0, 4, 1)];
+        let linked = [(Rect::new(0, 0, 4, 1), 0)];
         assert!(on_a_link(&linked, &page, 1, 0), "not a hand over the link");
         assert!(
             !on_a_link(&linked, &page, 3, 0),
             "a hand over a covered link"
         );
         assert!(!on_a_link(&linked, &page, 4, 0), "a hand over a complaint");
+        // And a dialog put over it that underlines words of its own in the
+        // same cells: the welcome screen's link is under the settings.
+        // Deliberate break: take `page.layer` out of `on_a_link`.
+        page.put_over(&[crate::grid::Behind {
+            area: Rect::new(0, 0, 6, 1),
+            joined: obelus_ui::shapes::Joined::Screen,
+            ground: ratatui::style::Color::Reset,
+            cells: Vec::new(),
+            depth: 0,
+        }]);
+        assert!(
+            !on_a_link(&linked, &page, 1, 0),
+            "a hand over a dialog's own words"
+        );
     }
 
     /// A band is matched with the one it was, not with another in the same
@@ -1996,13 +2091,13 @@ mod tests {
         );
     }
 
-    /// A pass that is about to poll asks for the frame it is polling for.
+    /// A pass that wants a rate asks for the frame it wants.
     ///
-    /// Otherwise the loop polls for nothing: `ControlFlow::Poll` with no
-    /// redraw requested is a busy wait that draws nothing and is paced by
-    /// nothing, because what paces an animation here is the surface being
-    /// presented and a loop that never presents is never held back. The
-    /// welcome screen sat at a hundred per cent behind a frozen picture.
+    /// Otherwise nothing ever arrives: the loop sleeps until a frame wakes
+    /// it, and a frame nobody asked for is never let through. When the
+    /// loop polled instead, the same mistake was a busy wait that drew
+    /// nothing -- the welcome screen sat at a hundred per cent behind a
+    /// frozen picture -- and now it would be a light that never moves.
     ///
     /// The second half is why the first cannot be `advance` alone, and it
     /// is asked of `Motion` rather than assumed: the light is out, so the
@@ -2012,15 +2107,15 @@ mod tests {
     /// The third assertion goes red, which is exactly the case this is
     /// about -- in flight, and nothing stepped for it.
     #[test]
-    fn a_pass_that_polls_asks_for_the_frame_it_is_polling_for() {
-        assert!(!wants_a_frame(false, None), "nothing is moving");
-        assert!(wants_a_frame(true, None), "something stepped");
+    fn a_pass_that_wants_a_rate_asks_for_the_frame_it_wants() {
+        assert!(!wants_a_frame(false, None, false), "nothing is moving");
+        assert!(wants_a_frame(true, None, false), "something stepped");
         assert!(
-            wants_a_frame(false, Some(Wake::EveryFrame)),
+            wants_a_frame(false, Some(Wake::EveryFrame), false),
             "in flight, and nothing stepped for it"
         );
         assert!(
-            !wants_a_frame(false, Some(Wake::At(Instant::now()))),
+            !wants_a_frame(false, Some(Wake::At(Instant::now())), false),
             "a moment to come back at is not a rate"
         );
 
@@ -2037,6 +2132,72 @@ mod tests {
         assert!(
             !motion.advance(now, false),
             "and nothing stepped, so `advance` cannot be what asks"
+        );
+    }
+
+    /// Something in flight sleeps between frames, the way nothing at all
+    /// does, and a moment is slept until.
+    ///
+    /// Asked with the light across the welcome screen's mark, which is
+    /// what held a core: a window on another workspace is let draw no
+    /// frame at all, and a loop that polled for one spun the whole time
+    /// the light was out.
+    ///
+    /// Deliberate break: answer `ControlFlow::Poll` for `EveryFrame` in
+    /// `control_flow`, as it did. The first assertion goes red.
+    #[test]
+    fn a_window_waiting_for_a_frame_sleeps_until_the_screen_lets_it_draw() {
+        let mut motion = Motion::new(None);
+        let now = Instant::now();
+        motion.sheen_drawn(true, now);
+        // Asked first, or a light that stopped asking for a rate would pass
+        // the assertion after it for the reason the next one does.
+        let wake = motion.wake(now, false);
+        assert_eq!(wake, Some(Wake::EveryFrame), "the light is out");
+        assert_eq!(
+            control_flow(wake),
+            ControlFlow::Wait,
+            "and the loop sleeps until its frame"
+        );
+        assert_eq!(control_flow(None), ControlFlow::Wait, "nothing moving");
+        let later = now + Duration::from_secs(1);
+        assert_eq!(
+            control_flow(Some(Wake::At(later))),
+            ControlFlow::WaitUntil(later),
+            "a moment"
+        );
+    }
+
+    /// A window nobody can see asks for no frame, however much is moving,
+    /// and is drawn again once it can be seen.
+    ///
+    /// The light again, because it is what moves on a screen left alone,
+    /// and a covered window on macOS is told at once that there is nothing
+    /// to draw on: a frame asked for on every pass is a loop going round
+    /// flat out for the whole of every pass of the light.
+    ///
+    /// Deliberate break: drop `!covered &&` from `wants_a_frame`. The
+    /// first assertion goes red. The coming back is not asked here -- it
+    /// is the `Occluded(false)` arm asking for a frame, which needs a
+    /// window to send it.
+    #[test]
+    fn a_window_nobody_can_see_asks_for_no_frame() {
+        let mut motion = Motion::new(None);
+        let now = Instant::now();
+        motion.sheen_drawn(true, now);
+        let wake = motion.wake(now, false);
+        assert_eq!(wake, Some(Wake::EveryFrame), "the light is out");
+        assert!(
+            !wants_a_frame(motion.advance(now, false), wake, true),
+            "and nobody can see it"
+        );
+        assert!(
+            !wants_a_frame(true, None, true),
+            "nor for something that stepped"
+        );
+        assert!(
+            wants_a_frame(motion.advance(now, false), wake, false),
+            "until somebody can"
         );
     }
 

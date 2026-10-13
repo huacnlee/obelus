@@ -81,7 +81,7 @@ use obelus_component::{
         Remark,
     },
     prompt::{Prompt, PromptKind, PromptOutcome},
-    settings::{Settings, SettingsOutcome},
+    settings::{Cards, Settings, SettingsOutcome},
 };
 use obelus_editing::motion_for;
 use obelus_keymap::{Context, KeyChord, Keymap};
@@ -95,11 +95,11 @@ use obelus_reading::Reading;
 use obelus_search::Scope;
 use obelus_syntax::{LanguageId, brackets, highlight::Highlights, parse::SyntaxState, tags};
 use obelus_text::coordinates::{ByteOffset, CharColumn, LineNumber, Span};
-use obelus_theme::{Theme, builtin};
+use obelus_theme::{Theme, Worn, builtin};
 use obelus_ui::{Previewed, Screen, image::Images};
 use obelus_watch::Watcher;
 use previewing::Preview;
-use project::{preferences, projects, releases, reopening};
+use project::{preferences, releases, reopening};
 use ratatui::{
     Terminal,
     backend::Backend,
@@ -226,6 +226,12 @@ pub struct App {
     /// a theme is a set of colours and a name is not one of them.
     theme: Theme,
     theme_name: String,
+    /// The picture under the page, where the theme in force carries one.
+    ///
+    /// Beside the colours rather than among them, because no view reads
+    /// it: it is said to whatever is drawing, and a terminal has nowhere to
+    /// put it -- see `Drawing::hang`.
+    wallpaper: Option<obelus_theme::Wallpaper>,
     /// The open picker, if one is open.
     ///
     /// One field for all four, because they differ only in what they list.
@@ -306,7 +312,7 @@ pub struct App {
     /// each theme: a list of colour names is not a choice between colour
     /// schemes, and the only honest preview of a theme is the screen wearing
     /// it. Cancelling has to undo that.
-    theme_before: Option<(String, Theme)>,
+    theme_before: Option<(String, Worn)>,
     /// Where the reader was before quitting took them to the file it is
     /// asking about.
     ///
@@ -353,6 +359,8 @@ pub struct App {
     jobs: Option<obelus_jobs::Pool>,
     /// What Obelus knows about the agents it could run.
     agents: agents::Agents,
+    /// What Obelus knows about the registry's themes.
+    themes: project::themes::Registry,
     /// Where the agents page's marks were on the frame just drawn.
     ///
     /// Kept so that the next frame can be asked whether they have moved,
@@ -493,17 +501,10 @@ pub struct App {
     /// The other windows heard in that chat through this one, or the one
     /// this one is heard through.
     relaying: relaying::Relaying,
-    /// Whether to open on the file list.
-    ///
-    /// A directory on the command line is a reader saying which project
-    /// rather than which file, and "which file" is what the list answers.
-    /// A flag rather than a list opened on the spot, because the rows come
-    /// from a walk on the loop's own channel and there is no channel until
-    /// [`App::start`].
-    list_at_start: bool,
     /// Whether to connect to the chat once started, as `connect-remote`
-    /// would. A flag for the same reason as the one above: connecting
-    /// waits on the loop's channel.
+    /// would. A flag rather than a connection made on the spot, because
+    /// connecting waits on the loop's channel and there is no channel until
+    /// [`App::start`].
     remote_at_start: bool,
     /// Whether nobody is at the screen: `ob --headless` (`headless`).
     headless: bool,
@@ -572,6 +573,7 @@ impl App {
             current,
             theme: builtin::DARK,
             theme_name: obelus_config::DEFAULT_THEME.to_string(),
+            wallpaper: None,
             picker: None,
             servers: HashMap::new(),
             stopped: HashSet::new(),
@@ -591,6 +593,7 @@ impl App {
             jobs: None,
             settled: preferences::Settled::default(),
             agents: agents::Agents::default(),
+            themes: project::themes::Registry::default(),
             picture_layout: None,
             settings: None,
             counts: None,
@@ -635,7 +638,6 @@ impl App {
             remote: remote::Remote::default(),
             mirror: mirroring::Mirror::default(),
             relaying: relaying::Relaying::default(),
-            list_at_start: false,
             remote_at_start: false,
             headless: false,
             stopped_because: None,
@@ -771,8 +773,34 @@ impl App {
     ///
     /// The point of the table being data. A configuration file becomes a
     /// caller of this rather than a change to how lookup works.
+    ///
+    /// The one door it changes through, because the settings page keeps
+    /// the keys it lists and has to hear that they moved.
     pub fn set_keymap(&mut self, keymap: Keymap) {
         self.keymap = keymap;
+        let laid_out = self.laid_out_keys();
+        let lined = self.lined_keys();
+        if let Some(settings) = self.settings.as_mut() {
+            settings.hear_keymap(&self.keymap, &laid_out, lined);
+        }
+    }
+
+    /// The commands the reader's own `[keys]` has a line for.
+    pub(crate) fn lined_keys(&self) -> Vec<obelus_command::Command> {
+        self.settled
+            .readers
+            .keys
+            .keys()
+            .filter_map(|name| obelus_command::by_name(name))
+            .collect()
+    }
+
+    /// The table the reader's layout makes with none of their own keys
+    /// laid over it: what a command's keys are changed from.
+    pub(crate) fn laid_out_keys(&self) -> Keymap {
+        Keymap::laid_out(
+            obelus_keymap::Layout::named(&self.settled.config.keys_from).unwrap_or_default(),
+        )
     }
 
     /// The colours currently in force.
@@ -804,13 +832,41 @@ impl App {
     /// Only when they have moved. A theme being previewed is worn again on
     /// every frame the list is open, and a front end told something wakes
     /// to draw it -- so telling it every time is a frame that asks for the
-    /// next one, for as long as the reader looks at the list.
-    pub fn set_theme(&mut self, name: &str, theme: Theme) {
-        let moved = colours_said(&theme) != colours_said(&self.theme);
+    /// next one, for as long as the reader looks at the list. The picture
+    /// most of all: a window told about one reads and decodes the file.
+    pub fn set_theme(&mut self, name: &str, worn: impl Into<Worn>) {
+        let Worn { colours, wallpaper } = worn.into();
+        let moved = colours_said(&colours) != colours_said(&self.theme);
+        let hung = wallpaper != self.wallpaper;
         self.theme_name = name.to_string();
-        self.theme = theme;
+        self.theme = colours;
+        self.wallpaper = wallpaper;
         if moved {
             self.say_the_colours();
+        }
+        if hung {
+            self.say_the_wallpaper();
+        }
+    }
+
+    /// The theme in force, picture and all, for putting back later.
+    pub(crate) fn worn(&self) -> Worn {
+        Worn {
+            colours: self.theme,
+            wallpaper: self.wallpaper.clone(),
+        }
+    }
+
+    /// The picture under the page, where there is one.
+    #[must_use]
+    pub const fn wallpaper(&self) -> Option<&obelus_theme::Wallpaper> {
+        self.wallpaper.as_ref()
+    }
+
+    /// Tells whatever is drawing which picture is under the page.
+    pub(crate) fn say_the_wallpaper(&self) {
+        if let Some(drawing) = self.drawing.as_ref() {
+            drawing.hang(self.wallpaper.as_ref());
         }
     }
 
@@ -834,11 +890,6 @@ impl App {
     #[must_use]
     pub fn working_directory(&self) -> &Path {
         &self.working_directory
-    }
-
-    /// Says to open on the file list rather than on a file.
-    pub fn list_at_start(&mut self) {
-        self.list_at_start = true;
     }
 
     /// Says to connect to the chat once started.
@@ -1539,6 +1590,19 @@ pub trait Drawing: std::fmt::Debug + Send + Sync {
     /// like every other list because it paints the row the same colour,
     /// which it must do anyway for the terminal.
     fn holding(&self, held: Color, row: Color);
+
+    /// The picture under the page, or that there is none.
+    ///
+    /// What the theme says and nothing more: which file, how much of the
+    /// page covers it, how it is fitted. Reading the file, decoding it and
+    /// laying it out on a window of some size are the front end's, which
+    /// is the one that knows the size -- and decoding a photograph is not
+    /// work for the thread a key is waiting on.
+    ///
+    /// Said when it moves -- a theme chosen, previewed, put back, or its
+    /// file or its picture rewritten -- and once when the front end says
+    /// who it is, the way the page's ground is.
+    fn hang(&self, wallpaper: Option<&obelus_theme::Wallpaper>);
 }
 
 /// Lays out, scrolls and draws one frame.
@@ -1614,8 +1678,6 @@ pub struct Opening {
     pub root: Option<PathBuf>,
     /// The files to open, in the order they were given.
     pub files: Vec<PathBuf>,
-    /// Whether to open on the file list.
-    pub list: bool,
 }
 
 /// What a set of command-line paths means.
@@ -1624,10 +1686,10 @@ pub struct Opening {
 /// what a reader means by the project, and the directory the file sits in
 /// only where git has never heard of it. A directory *is* the project --
 /// naming one is a reader saying where to work, so it is taken at its word
-/// and not widened to the repository over it -- and the question it leaves,
-/// which file, is the one the list answers. The first path decides the
-/// project, because a reader who names two has said which they meant
-/// first.
+/// and not widened to the repository over it -- and opens nothing: which
+/// file is the reader's to ask, from the welcome screen. The first path
+/// decides the project, because a reader who names two has said which they
+/// meant first.
 ///
 /// Absolute, and by the same rule [`obelus_buffer::Buffer::open`] uses on
 /// a file: made absolute rather than canonical, so a project reached through
@@ -1664,9 +1726,6 @@ pub fn opening(paths: &[PathBuf]) -> Opening {
     };
     Opening {
         root: Some(absolute(&root)),
-        // Nothing to open means the list is the whole answer: `ob src`
-        // is a reader saying which project and asking which file.
-        list: files.is_empty(),
         files,
     }
 }
@@ -1770,6 +1829,10 @@ where
     // arrives in that moment is let go; what does not stays with the
     // agent, which is where it would have been anyway.
     app.let_go_of_what_nothing_was_said_in(None);
+    // And every conversation's page as it is now, for the same reason the
+    // carets are written below: whatever happened after its turn ended
+    // happened since it was last kept.
+    app.keep_every_page();
     // And what was open, with the carets where they are now: the frames
     // wrote it down as it changed, and the way out is the last chance to
     // say where in each file the reader was.

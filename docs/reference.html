@@ -75,7 +75,41 @@
     <section id="keys">
       <h2><span class="num">01</span><span>Keys &amp; commands</span></h2>
 
-      <p>There are no modes, so every key below does the same thing whenever you press it, like VS Code or Emacs and unlike vim or helix. The keys come in three families: function keys, <kbd>Ctrl</kbd> and <kbd>Alt</kbd>. Remember what each family is for and the rest follows. These are the defaults, and you can rebind any of them: see <a href="#config">settings</a>.</p>
+      <p>There are no modes, so every key below does the same thing whenever you press it, like VS Code or Emacs and unlike vim or helix. The keys come in three families: function keys, <kbd>Ctrl</kbd> and <kbd>Alt</kbd>. Remember what each family is for and the rest follows. These are the defaults (the <code>obelus</code> layout below), and you can rebind any of them: see <a href="#config">settings</a>.</p>
+
+      <h3 id="layouts">Four layouts</h3>
+      <p>Which keys you start from is the <code>keys_from</code> setting, and there are four. <code>obelus</code> is the tables on this page. <code>mnemonic</code> moves the twelve function keys onto <kbd>Ctrl</kbd> and <kbd>Alt</kbd> by the letter of the word, for a keyboard without the row, and nothing else. <code>vscode</code> and <code>textmate</code> use the keys those editors taught you wherever Obelus has the same command, and have no function keys at all; the rest of <kbd>Ctrl</kbd> and <kbd>Alt</kbd> stays as below. They adapt those editors' keys to what Obelus has; they are not a copy of either.</p>
+      <div class="table-wrap">
+      <table>
+        <thead><tr>
+          <th><span>Command</span></th>
+          <th><span>obelus</span></th>
+          <th><span>mnemonic</span></th>
+          <th><span>vscode</span></th>
+          <th><span>textmate</span></th>
+        </tr></thead>
+        <tbody>
+          <tr><td><code>open-file</code></td><td><kbd>F1</kbd></td><td><kbd>Ctrl+o</kbd></td><td><kbd>Ctrl+p</kbd></td><td><kbd>Ctrl+t</kbd></td></tr>
+          <tr><td><code>run-command</code></td><td><kbd>Ctrl+p</kbd></td><td><kbd>Ctrl+p</kbd></td><td><kbd>Ctrl+Shift+p</kbd> <kbd>Alt+Shift+p</kbd></td><td><kbd>Ctrl+Shift+p</kbd> <kbd>Alt+Shift+p</kbd></td></tr>
+          <tr><td><code>switch-document</code></td><td><kbd>F2</kbd></td><td><kbd>Ctrl+e</kbd></td><td><kbd>Ctrl+e</kbd></td><td><kbd>Ctrl+e</kbd></td></tr>
+          <tr><td><code>open-changed-file</code></td><td><kbd>F3</kbd></td><td><kbd>Ctrl+g</kbd></td><td><kbd>Ctrl+Shift+g</kbd> <kbd>Alt+g</kbd></td><td><kbd>Ctrl+Shift+g</kbd> <kbd>Alt+g</kbd></td></tr>
+          <tr><td><code>choose-conversation</code></td><td><kbd>F4</kbd></td><td><kbd>Ctrl+n</kbd></td><td><kbd>Alt+Shift+n</kbd></td><td><kbd>Alt+Shift+n</kbd></td></tr>
+          <tr><td><code>search-file</code></td><td><kbd>F5</kbd></td><td><kbd>Ctrl+f</kbd></td><td><kbd>Ctrl+f</kbd></td><td><kbd>Ctrl+f</kbd></td></tr>
+          <tr><td><code>search-project</code></td><td><kbd>F6</kbd></td><td><kbd>Alt+/</kbd></td><td><kbd>Ctrl+Shift+f</kbd> <kbd>Alt+/</kbd></td><td><kbd>Ctrl+Shift+f</kbd> <kbd>Alt+/</kbd></td></tr>
+          <tr><td><code>show-outline</code></td><td><kbd>F7</kbd></td><td><kbd>Alt+u</kbd></td><td><kbd>Ctrl+Shift+o</kbd> <kbd>Alt+u</kbd></td><td><kbd>Ctrl+Shift+t</kbd> <kbd>Alt+u</kbd></td></tr>
+          <tr><td><code>search-symbols</code></td><td><kbd>F8</kbd></td><td><kbd>Alt+y</kbd></td><td><kbd>Ctrl+t</kbd></td><td><kbd>Alt+y</kbd></td></tr>
+          <tr><td><code>show-file-history</code></td><td><kbd>F9</kbd></td><td><kbd>Alt+l</kbd></td><td><kbd>Alt+l</kbd></td><td><kbd>Alt+l</kbd></td></tr>
+          <tr><td><code>show-project-history</code></td><td><kbd>F10</kbd></td><td><kbd>Alt+g</kbd></td><td><kbd>Alt+Shift+l</kbd></td><td><kbd>Alt+Shift+l</kbd></td></tr>
+          <tr><td><code>go-to-definition</code></td><td><kbd>F11</kbd></td><td><kbd>Alt+.</kbd></td><td><kbd>Alt+.</kbd></td><td><kbd>Alt+.</kbd></td></tr>
+          <tr><td><code>review-pull-request</code></td><td><kbd>F12</kbd></td><td><kbd>Ctrl+u</kbd></td><td><kbd>Ctrl+u</kbd></td><td><kbd>Ctrl+u</kbd></td></tr>
+          <tr><td><code>todo</code></td><td><kbd>Ctrl+t</kbd></td><td><kbd>Ctrl+t</kbd></td><td><kbd>Alt+Shift+t</kbd></td><td><kbd>Alt+Shift+t</kbd></td></tr>
+          <tr><td><code>redo</code></td><td><kbd>Ctrl+y</kbd></td><td><kbd>Ctrl+y</kbd></td><td><kbd>Ctrl+y</kbd> <kbd>Ctrl+Shift+z</kbd></td><td><kbd>Ctrl+y</kbd> <kbd>Ctrl+Shift+z</kbd></td></tr>
+        </tbody>
+      </table>
+      </div>
+      <p class="quiet small">Shift on a letter is written out: <kbd>Ctrl+Shift+p</kbd>. Most terminals can't send <kbd>Ctrl</kbd> with <kbd>Shift</kbd> on a letter, and send plain <kbd>Ctrl+p</kbd> instead, which is why each of those has an <kbd>Alt</kbd> key beside it that every terminal can send. <code>obg</code> gets them as they are. In <code>obg</code> on a Mac, <kbd>Ctrl</kbd> is <kbd>Cmd</kbd>, in every layout: press <kbd>Cmd+p</kbd> where this page says <kbd>Ctrl+p</kbd>, and the screen says <kbd>Cmd</kbd> too. <kbd>Ctrl</kbd> itself still works there, and the settings file still says <code>Ctrl</code>, because <code>ob</code> in a terminal reads the same file and a terminal keeps <kbd>Cmd</kbd> for itself. Elsewhere the Super or Windows key is never read as <kbd>Ctrl</kbd>; it belongs to the desktop.</p>
+      <p class="quiet small">On a Mac, a terminal sends <kbd>Alt</kbd> only when <kbd>Option</kbd> is set to act as Meta: in Terminal, <em>Use Option as Meta key</em> under Settings → Profiles → Keyboard; in iTerm2, <em>Left Option key: Esc+</em> under Settings → Profiles → Keys. Otherwise <kbd>Option</kbd> types a character instead (<kbd>Option+Shift+p</kbd> is <code>∏</code>) and every <kbd>Alt</kbd> key in Obelus does nothing. <code>obg</code> needs no setting.</p>
+      <p>To choose, open <code>open-settings</code> and pick <em>Layout</em> under Keys. Each row shows what that layout puts the files and the palette on. The very first time Obelus starts with no settings file, it asks; <kbd>Esc</kbd> keeps <code>obelus</code> and asks again next time, and any choice is saved straight away, <code>obelus</code> included, so it never asks again. Whatever you have under <code>[keys]</code> is laid over the layout, so switching layouts keeps your own keys.</p>
 
       <h3>Function keys open something to look at</h3>
       <p class="quiet small">Three groups of four, the way they sit on the keyboard: F1–F4 open things to read, F5–F8 search, F9–F12 are Git's history, go-to-definition, and the pull requests and issues. None of them takes a modifier, because terminals disagree about what something like <kbd>Shift+F5</kbd> sends, so a binding like that works on one machine and not the next.</p>
@@ -163,8 +197,8 @@
       <p><kbd>Insert</kbd> is <code>toggle-replace</code>: what you type replaces the character under the cursor instead of going in front of it, and the status row says <code>Replacing</code> while it is on. <kbd>Esc</kbd> clears the selection, or closes whatever is on top.</p>
 
       <h3>Moving, and inside a list</h3>
-      <p>Moving around isn't a command, so it isn't in the tables above: the arrow keys, <kbd>PageUp</kbd>/<kbd>PageDown</kbd>, <kbd>Home</kbd>/<kbd>End</kbd> for the start and end of a line, <kbd>Ctrl+Home</kbd>/<kbd>Ctrl+End</kbd> for the start and end of the file. Up and down go by the rows you see, so a wrapped line moves the way it looks. <kbd>Shift</kbd> is never a command of its own: it only extends the selection.</p>
-      <p>In any list (a picker, the settings, the line counts): type to filter, <kbd>↑</kbd><kbd>↓</kbd> to pick, <kbd>PageUp</kbd>/<kbd>PageDown</kbd> to move a page, <kbd>Home</kbd>/<kbd>End</kbd> to jump to either end, <kbd>Enter</kbd> on the row you're on, <kbd>Esc</kbd> to cancel, and <kbd>Ctrl+k</kbd> to see every key. Function keys work inside a full-screen view too, and swap it for the view they open: <kbd>F6</kbd> from the file list goes to search, and <kbd>F3</kbd> is the file list's other tab.</p>
+      <p>Moving around isn't a command, so it isn't in the tables above: the arrow keys, <kbd>PageUp</kbd>/<kbd>PageDown</kbd>, <kbd>Home</kbd>/<kbd>End</kbd> for the start and end of a line, <kbd>Ctrl+Home</kbd>/<kbd>Ctrl+End</kbd> for the start and end of the file, <kbd>Ctrl+↑</kbd>/<kbd>Ctrl+↓</kbd> to scroll the view a row and leave the cursor where it is. Up and down go by the rows you see, so a wrapped line moves the way it looks. <kbd>Shift</kbd> is never a command of its own: it only extends the selection.</p>
+      <p>In any list (a picker, the settings, the line counts): type to filter, <kbd>↑</kbd><kbd>↓</kbd> to pick, <kbd>PageUp</kbd>/<kbd>PageDown</kbd> to move a page, <kbd>Home</kbd>/<kbd>End</kbd> to jump to either end, <kbd>Enter</kbd> on the row you're on, and <kbd>Esc</kbd> to cancel. A list with a preview under it shares the keys with it: <kbd>↑</kbd><kbd>↓</kbd> and <kbd>Ctrl+PageUp</kbd>/<kbd>Ctrl+PageDown</kbd> move the list, and <kbd>PageUp</kbd>/<kbd>PageDown</kbd> and <kbd>Ctrl+↑</kbd>/<kbd>Ctrl+↓</kbd> scroll the preview. A list with keys of its own says what they do along the bottom. Function keys work inside a full-screen view too, and swap it for the view they open: <kbd>F6</kbd> from the file list goes to search, and <kbd>F3</kbd> is the file list's other tab.</p>
 
       <h3>In a conversation</h3>
       <p><kbd>Enter</kbd> sends, and <kbd>Alt+Enter</kbd> starts a new line (<kbd>Shift+Enter</kbd> does too, in terminals that support it). In a conversation about a note, <kbd>→</kbd> in the empty box fills in a suggested first message. <kbd>Shift+Tab</kbd> switches between the agent's own modes, shown along the bottom. <kbd>Esc</kbd> stops the agent, along with any command it is running. <kbd>Alt+t</kbd> takes you to the note the conversation is about. When the agent asks you something, it's a card: <kbd>↑</kbd><kbd>↓</kbd> to move, <kbd>Enter</kbd> to answer.</p>
@@ -173,7 +207,7 @@
       <p>The notes page is always ready for typing: letters go straight in, <kbd>Enter</kbd> starts a new note, and <kbd>Alt+Enter</kbd> or <kbd>Shift+Enter</kbd> starts a new line inside one. <kbd>Tab</kbd> moves a note under the one above it, and <kbd>Shift+Tab</kbd> moves it back out. Everything else you do to a note is under <kbd>Alt</kbd>: <kbd>Alt+Space</kbd> ticks it, <kbd>Alt+o</kbd> goes to the line it points at, <kbd>Alt+a</kbd> opens its conversation, <kbd>Alt+↑</kbd><kbd>Alt+↓</kbd> move it, and <kbd>Alt+←</kbd> removes it.</p>
 
       <h3>In a terminal</h3>
-      <p><code>open-terminal</code> opens your shell in the project, as a document of its own. When an agent needs you to sign in, its sign-in runs in one of these too. While a program is running, it gets the keys, <kbd>Esc</kbd> and <kbd>Ctrl+c</kbd> included. Obelus keeps only the function keys, <kbd>Ctrl+p</kbd>, <kbd>Ctrl+q</kbd> to quit, <kbd>Ctrl+v</kbd> or <kbd>Shift+Insert</kbd> to paste, and <kbd>Ctrl+w</kbd> to close the terminal (it asks first if the program is still running).</p>
+      <p><code>open-terminal</code> opens your shell in the project, as a document of its own. When an agent needs you to sign in, its sign-in runs in one of these too. While a program is running, it gets the keys, <kbd>Esc</kbd> and <kbd>Ctrl+c</kbd> included. Obelus keeps only the function keys, the palette (<kbd>Ctrl+p</kbd>, or in the <code>vscode</code> and <code>textmate</code> layouts <kbd>Ctrl+Shift+p</kbd> and <kbd>Alt+Shift+p</kbd>, which have no function keys and leave <kbd>Ctrl+p</kbd> to the program), <kbd>Ctrl+q</kbd> to quit, <kbd>Ctrl+v</kbd> or <kbd>Shift+Insert</kbd> to paste, and <kbd>Ctrl+w</kbd> to close the terminal (it asks first if the program is still running).</p>
       <p>To look back at output that has scrolled away, use the mouse wheel, <kbd>PageUp</kbd>/<kbd>PageDown</kbd> for a screen at a time, or <kbd>Ctrl+Home</kbd>/<kbd>Ctrl+End</kbd> for the very top and bottom; those keys are Obelus's and never reach the program. Drag to select what was printed, then <kbd>Ctrl+c</kbd> or <kbd>Ctrl+Insert</kbd> to copy it; with nothing selected, <kbd>Ctrl+c</kbd> goes to the program as usual. If the program uses the mouse itself (an editor, a process list), it gets the left button and the wheel; hold <kbd>Shift</kbd> to select anyway. Quitting while a program is running asks first, and once it ends the keys are Obelus's again.</p>
 
       <h3 id="commands">Commands</h3>
@@ -250,7 +284,7 @@
       <p class="quiet small">It also tells you <em>which line</em>. A settings file that won't parse, a key binding that doesn't work, a setting the project isn't allowed to set, a theme with no file: each is marked on its own line, in the same list as the language server's errors, so <kbd>Alt+e</kbd> and <kbd>Alt+[</kbd> <kbd>Alt+]</kbd> find them like any other problem.</p>
 
       <div class="aside">
-        <p><strong>Six settings a project can't set:</strong> <code>agent</code>, <code>keys</code>, <code>agents</code>, <code>new_versions</code>, <code>conversation_days</code> and <code>read_only</code>. All six are yours, not a downloaded repository's: which program gets started on your machine, where your keys are (a project could move <code>quit</code> somewhere you'd hit by accident), what an agent may do without asking (exactly what a hostile project would want to set), whether Obelus goes online to check for updates, how long your conversations are kept (a project could empty your list), and whether your own keys may edit files.</p>
+        <p><strong>Twelve settings a project can't set:</strong> <code>agent</code>, <code>agents</code>, <code>environment</code>, <code>keys</code>, <code>keys_from</code>, <code>remote</code>, <code>remotes</code>, <code>new_versions</code>, <code>conversation_days</code>, <code>read_only</code>, <code>build_jobs</code> and <code>theme</code>. All twelve are yours, not a downloaded repository's: which program gets started on your machine, what an agent may do without asking (exactly what a hostile project would want to set), what an agent is started with (which could point it at somebody else's server), where your keys are (a project could move <code>quit</code> somewhere you'd hit by accident), who may reach this machine from a chat, whether Obelus goes online to check for updates, how long your conversations are kept (a project could empty your list), whether your own keys may edit files, how much of your machine a build may take, and which of your themes you wear.</p>
       </div>
 
       <h3>The settings</h3>
@@ -264,6 +298,7 @@
         </tr></thead>
         <tbody>
           <tr><td><code>theme</code></td><td><code>"dark"</code></td><td>The colours Obelus draws in</td></tr>
+          <tr><td><code>keys_from</code></td><td><code>"obelus"</code></td><td>Which keys yours start from: <code>obelus</code>, <code>mnemonic</code>, <code>vscode</code> or <code>textmate</code>. See <a href="#layouts">four layouts</a></td></tr>
           <tr><td><code>icons</code></td><td><code>false</code></td><td><em>Terminal only.</em> Draw Nerd Font icons. Without a patched font they show up as boxes. <code>obg</code> has the icons built in, so this doesn't apply there</td></tr>
           <tr><td><code>wrap</code></td><td><code>false</code></td><td>Wrap lines too long for the screen onto the next row. Off by default, so one line is one row</td></tr>
           <tr><td><code>blame_margin</code></td><td><code>true</code></td><td>Show in the margin who last changed each line</td></tr>
@@ -287,7 +322,7 @@
       </div>
 
       <h3>Rebinding</h3>
-      <p>Write only what you want to change: rebind one key and everything else keeps its default, including keys Obelus adds later. An empty string removes a binding. Use the command names from above, and write keys the way the screen shows them (case doesn't matter).</p>
+      <p>Write only what you want to change: rebind one key and everything else keeps its default, including keys Obelus adds later. A command can be on several keys: write them as a list, and the first is the one the screen shows. An empty string or an empty list removes its keys. Any key may be bound, whether or not every terminal can send it, except the few Obelus never hands to the table: a plain character, <kbd>Esc</kbd>, <kbd>Enter</kbd> (but <kbd>Alt+Enter</kbd> may be), <kbd>Tab</kbd>, <kbd>Backspace</kbd>, <kbd>Delete</kbd>, and the moving keys without <kbd>Alt</kbd>. Use the command names from above, and write keys the way the screen shows them (case doesn't matter: <code>Ctrl+P</code> is <code>ctrl+p</code>, and <kbd>Shift</kbd> is written as <code>shift+</code>). Your lines are laid over whichever layout <code>keys_from</code> names, so they survive a change of layout.</p>
       <pre><code>theme = "light"
 wrap = true
 blame_margin = false
@@ -295,11 +330,22 @@ blame_margin = false
 [keys]
 open-file = "Ctrl+o"
 show-change = "Alt+g"
+run-command = ["Ctrl+Shift+p", "Alt+Shift+p"]   # on both
 quit = ""            # taken away</code></pre>
+      <p>On the settings page, the Keys tab lists every key a command is on, one to a row. <kbd>Enter</kbd> changes a key: it waits for the one to put in its place. <kbd>Ctrl+Enter</kbd> on any of a command's rows adds one more key, and is how a command with no key gets its first. A terminal without the keyboard protocol sends <kbd>Ctrl+Enter</kbd> as <kbd>Enter</kbd>; there, add a key in the file, a command's first included. <kbd>Alt+Backspace</kbd> takes the key on that row away, <kbd>Alt+r</kbd> puts the command back on its layout's keys, and <kbd>Alt+Shift+r</kbd> puts every command back, after asking. On alt because the filter takes nothing there: <kbd>Backspace</kbd> and <kbd>Delete</kbd> are the filter's. A command whose keys are not its layout's says <em>Changed</em> beside its name, and the keys at the foot are offered only where they would do something.</p>
 
       <h3>Themes</h3>
-      <p><code>dark</code> and <code>light</code> are built in; <code>choose-theme</code> switches between themes instantly. Any <code>.toml</code> file in <code>~/.config/obelus/themes/</code> is also a theme, named after the file (<code>omarchy.toml</code> → <code>omarchy</code>). Every colour is optional: anything you leave out comes from the built-in theme yours is based on, so an old theme file keeps working when Obelus adds a colour.</p>
-      <p class="quiet small"><code>contrib/omarchy/</code> in the repository is a template for <a href="https://omarchy.org">omarchy</a>: when you change your desktop theme, Obelus's colours follow. Obelus itself knows nothing about omarchy; the template just writes the theme file for you.</p>
+      <p><code>dark</code>, <code>light</code> and a shelf of well-known palettes are built in; <code>choose-theme</code> switches between themes instantly. Any <code>.toml</code> file in <code>~/.config/obelus/themes/</code> is also a theme, named after the file (<code>mine.toml</code> → <code>mine</code>), and so is a directory there holding a <code>theme.toml</code>, named after the directory — which is how a theme keeps a picture beside its colours. A theme of yours by a built-in name comes first. Every colour is optional: anything you leave out comes from the built-in theme yours is based on, so an old theme file keeps working when Obelus adds a colour.</p>
+      <p>In a window, a theme may carry a wallpaper under the page. The file names it in a table of its own; everything but <code>file</code> may be left out:</p>
+      <pre><code>[wallpaper]
+file = "rain.jpg"     # beside theme.toml
+opacity = 85          # how much of the page covers it, 0 to 100
+fit = "cover"         # cover, contain, stretch, center or tile
+anchor = "center"     # what stays put: top-left, top, top-right, left,
+                      # center, right, bottom-left, bottom or bottom-right</code></pre>
+      <p class="quiet small">A terminal has no pixels to put one in, so <code>ob</code> wears the colours alone. A line Obelus can't use is marked and left at its default, and a picture that isn't there is marked too.</p>
+      <p>More themes are on the settings' <strong>Themes</strong> page: the ones made for Obelus, and omarchy's own, turned into Obelus themes. <kbd>Enter</kbd> installs or updates the one you are on &mdash; a theme you install for the first time is put on as soon as it arrives &mdash; and <kbd>Delete</kbd> takes it away again, except the one you are wearing; a theme the list no longer carries stays until you take it away, which takes <kbd>Delete</kbd> twice. What you install is kept apart from your own <code>~/.config/obelus/themes/</code>, and a theme of yours by the same name comes first. Every list of themes ends in <strong>More themes</strong>, which goes there; and a name the list hasn't got is taken there with <kbd>Enter</kbd>, already typed into its filter.</p>
+      <p class="quiet small"><code>omarchy</code> is offered wherever <a href="https://omarchy.org">omarchy</a> has written a theme for Obelus; <code>contrib/omarchy/</code> in the repository is the template that makes it, so that changing your desktop theme changes Obelus's colours with it.</p>
     </section>
     <section id="windows">
       <h2><span class="num">04</span><span>Several windows</span></h2>

@@ -13,6 +13,7 @@ use obelus_component::settings::{
 use obelus_config::{Config, Kind, Value};
 use obelus_text::text_width;
 use obelus_theme::Theme;
+use obelus_themes::Card as ThemeCard;
 use ratatui::{
     buffer::Buffer as CellBuffer,
     layout::Rect,
@@ -83,6 +84,11 @@ pub struct SettingsView<'a> {
     agents: Vec<Listed>,
     /// Why the list could not be fetched, if it could not.
     failure: Option<&'a str>,
+    /// The themes the registry lists and those taken from it, while the
+    /// themes page is showing.
+    themes: Vec<ThemeCard>,
+    /// Why the registry's list of themes could not be fetched.
+    themes_failure: Option<&'a str>,
     /// The agents' own marks, for a terminal that can draw one.
     images: &'a crate::image::Images,
     /// Every command and the key it is on, for the keys page -- under the
@@ -124,8 +130,10 @@ impl<'a> SettingsView<'a> {
             theme: app.theme(),
             agents: app.listed_agents(),
             failure: app.registry_failure(),
+            themes: app.listed_themes(),
+            themes_failure: app.themes_failure(),
             images: app.images(),
-            keys: app.settings()?.keys(app.keymap()),
+            keys: app.settings()?.keys(),
             offering: app.agent_offering(),
             pinned: app.pinned().to_vec(),
             named: app.readers_named().to_vec(),
@@ -215,31 +223,41 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
     let on_row = settings.rows(offering).get(settings.focus()).copied();
     let adding = matches!(on_row, Some(Shown::AddVariable { .. }));
     let removes = matches!(on_row, Some(Shown::Variable { .. }));
-    let (enter, saying) = match remote {
+    let enter = match remote {
         Some(Shown::Remote { row, .. }) => match row {
-            RemoteRow::Pair => (
-                "Pair",
-                "Make a code to send in the group you put the bot in",
-            ),
-            RemoteRow::Setup(obelus_remote::platform::Setup::Copy { .. }) => {
-                ("Copy", "Copy it, to paste where the app is made")
-            }
-            RemoteRow::Setup(obelus_remote::platform::Setup::Steps { .. }) => {
-                ("Open", "Open the steps in the browser")
-            }
-            RemoteRow::Platform | RemoteRow::Field(_) | RemoteRow::People => {
-                ("Change", "Change it, or open what it can be")
-            }
+            RemoteRow::Pair => "Pair",
+            RemoteRow::Setup(obelus_remote::platform::Setup::Copy { .. }) => "Copy",
+            RemoteRow::Setup(obelus_remote::platform::Setup::Steps { .. }) => "Open",
+            RemoteRow::Platform | RemoteRow::Field(_) | RemoteRow::People => "Change",
         },
-        _ if adding => ("Add", "Add a variable to what the agent is started with"),
-        _ => (
-            "Change",
-            match settings.key_rows().get(settings.focus()) {
-                Some(KeyRow::Command(_)) => "Put this command on another key",
-                Some(KeyRow::Setting(_)) | None => "Change it, or open what it can be",
-            },
-        ),
+        _ if adding => "Add",
+        _ => "Change",
     };
+    // On a command with no key there is nothing for enter to change, so
+    // the foot does not offer it there.
+    let nothing_to_change = settings.on_keys()
+        && matches!(
+            settings.keys().get(settings.focus()),
+            Some((KeyRow::Key { .. }, None))
+        );
+    // The row the reader is on, on the keys page: whether it has a key to
+    // take away, and whether its command is off its layout's keys.
+    let on_keys_row = settings
+        .on_keys()
+        .then(|| settings.keys().get(settings.focus()).copied())
+        .flatten();
+    let on_a_key = matches!(on_keys_row, Some((KeyRow::Key { .. }, Some(_))));
+    let changed_here = matches!(
+        on_keys_row,
+        Some((KeyRow::Key { command, .. }, _)) if settings.resettable(command)
+    );
+    // And one more key for the command the reader is on, which is always
+    // control: enter changes a key, and control adds one.
+    let adds = settings.on_keys()
+        && matches!(
+            settings.keys().get(settings.focus()),
+            Some((KeyRow::Key { .. }, _))
+        );
     // Pairing does nothing where the chat could not be reached, and a key
     // that does nothing is not offered at the foot.
     let pairing_waits = matches!(
@@ -255,38 +273,83 @@ pub fn hints(settings: &Settings, offering: Option<&Offering>) -> Vec<Hint> {
         Some(Shown::Remote { row: RemoteRow::Field(field), .. })
             if settings.reached().kept.contains_key(field.key)
     );
+    // A row waiting for its key takes every key, so the foot says the one
+    // that does something else there: taking this row's key away, where it
+    // has one. Not escape, which gives up on the nearest thing here as
+    // everywhere, and a foot does not spend itself saying so (`ui::foot`).
+    if let Some(binding) = settings.binding_at() {
+        return vec![
+            Hint::new(
+                obelus_keymap::KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT),
+                "Remove",
+            )
+            .when(binding.replacing),
+        ];
+    }
     // Delete is the filter's while the filter has something for it, so
     // nothing below says what it does to a row until then.
     let rows_delete = !settings.delete_is_the_filters();
     vec![
-        Hint::common(bare(KeyCode::Enter), enter)
-            .saying(saying)
+        Hint::new(bare(KeyCode::Enter), enter)
             // Asked of whichever page is showing rather than of the
             // settings: the keys page has rows too, and enter does the same
             // sort of thing to one of them.
-            .when(settings.row_count(offering) > 0 && !pairing_waits),
-        Hint::common(bare(KeyCode::Delete), "Forget")
-            .saying("Take this out of the keyring, or out of the settings")
-            .when(forgets && rows_delete),
+            .when(settings.row_count(offering) > 0 && !pairing_waits && !nothing_to_change),
+        Hint::new(
+            obelus_keymap::KeyChord::new(KeyCode::Enter, KeyModifiers::CONTROL),
+            "Add a key",
+        )
+        .when(adds),
+        // Taking keys away, each offered only where it would do something:
+        // the key on this row, this command put back on its layout's keys,
+        // and every command.
+        Hint::new(
+            obelus_keymap::KeyChord::new(KeyCode::Backspace, KeyModifiers::ALT),
+            "Remove",
+        )
+        .when(on_a_key),
+        Hint::new(
+            obelus_keymap::KeyChord::new(KeyCode::Char('r'), KeyModifiers::ALT),
+            "Reset",
+        )
+        .when(changed_here),
+        Hint::new(
+            obelus_keymap::KeyChord::new(
+                KeyCode::Char('r'),
+                KeyModifiers::ALT | KeyModifiers::SHIFT,
+            ),
+            "Reset all",
+        )
+        .when(settings.on_keys() && settings.any_changed()),
+        Hint::new(bare(KeyCode::Delete), "Forget").when(forgets && rows_delete),
         // On an agent's row, and only while there is something to undo:
         // what `delete` leaves there is not a default of Obelus's but the
         // agent's own answer.
-        Hint::common(bare(KeyCode::Delete), AGENTS_OWN)
-            .saying("Stop saying what this one starts on, and leave it to the agent")
-            .when(focused.is_some() && rows_delete),
-        Hint::common(bare(KeyCode::Delete), "Remove")
-            .saying("Stop starting the agent with this one")
-            .when(removes && rows_delete),
-        Hint::common(bare(KeyCode::Delete), "Unset")
-            .saying("Take this setting out of the project's file")
-            .when(
-                rows_delete
-                    && settings.on_project()
-                    && !settings.on_keys()
-                    && !settings.on_agents(),
-            ),
-        // The card's, not the foot's: see `crate::foot`.
-        Hint::rare(bare(KeyCode::Esc), "Leave").saying("Leave the settings"),
+        Hint::new(bare(KeyCode::Delete), AGENTS_OWN).when(focused.is_some() && rows_delete),
+        Hint::new(bare(KeyCode::Delete), "Remove").when(removes && rows_delete),
+        Hint::new(bare(KeyCode::Delete), "Unset").when(
+            rows_delete && settings.on_project() && !settings.on_keys() && !settings.on_cards(),
+        ),
+    ]
+}
+
+/// What the keys do to the theme the reader is on: the card's button, and
+/// taking it away -- each only where it does anything.
+///
+/// Apart from [`hints`] because only the drawing has the cards: the foot is
+/// as tall with these as without them, which is all the region asks.
+fn theme_hints(settings: &Settings, card: Option<&ThemeCard>) -> Vec<Hint> {
+    use crossterm::event::{KeyCode, KeyModifiers};
+    let bare = |code| obelus_keymap::KeyChord::new(code, KeyModifiers::NONE);
+    let enter = match card {
+        Some(card) if card.installed => "Update",
+        _ => "Install",
+    };
+    vec![
+        Hint::new(bare(KeyCode::Enter), enter).when(card.is_some_and(ThemeCard::may_be_installed)),
+        Hint::new(bare(KeyCode::Delete), "Remove").when(
+            card.is_some_and(ThemeCard::may_be_taken_away) && !settings.delete_is_the_filters(),
+        ),
     ]
 }
 
@@ -340,10 +403,12 @@ fn entry_rows(row: &Row) -> u16 {
 /// and what it does.
 ///
 /// A row with no name is its prose and nothing else: there is nothing to
-/// put on a first line.
+/// put on a first line -- unless it has a key, which is the line: a
+/// command's second key is a row with no name, and one counted as nothing
+/// is a row the next command is drawn over.
 fn own_rows(row: &Row) -> u16 {
     u16::try_from(row.body.len() + row.warning.len()).unwrap_or(0)
-        + u16::from(!row.label.is_empty())
+        + u16::from(!row.label.is_empty() || matches!(row.aside, Aside::Words(_)))
 }
 
 /// How many rows of the screen are above the first entry a page shows.
@@ -494,7 +559,12 @@ impl Widget for SettingsView<'_> {
             self.theme,
         );
 
-        let hints = hints(self.settings, self.offering.as_ref());
+        let mut hints = hints(self.settings, self.offering.as_ref());
+        if self.settings.on_themes() {
+            let shown = self.settings.themes(&self.themes);
+            let card = shown.get(self.settings.focus());
+            hints.splice(0..0, theme_hints(self.settings, card));
+        }
         crate::foot(cells, area, &hints, self.theme);
         // Through the one function that answers it, which the pointer and
         // the window both ask as well: three workings-out of what the tabs
@@ -507,7 +577,12 @@ impl Widget for SettingsView<'_> {
         // and a row of a table has nowhere to say what one is.
         if self.settings.on_agents() {
             self.agents(cells, region);
-            self.keys_card(cells, area, &hints);
+            return;
+        }
+        // And so are the themes, for the same reason and one more: there is
+        // no picture of one on its card, so its words are all there is.
+        if self.settings.on_themes() {
+            self.themes(cells, region);
             return;
         }
 
@@ -530,28 +605,37 @@ impl Widget for SettingsView<'_> {
                         },
                         obelus_component::settings::description_width(region.width),
                     ),
-                    KeyRow::Command(command) => Row {
+                    // A row a key, and the command named on the first of
+                    // them only: the rows under it are more of its keys.
+                    KeyRow::Key { command, slot } => Row {
                         opens: None,
-                        label: command.name().to_string(),
-                        matched: self.settings.matched_in(command.name()),
-                        detail: self.saying(*command),
+                        label: match slot {
+                            0 => command.name().to_string(),
+                            _ => String::new(),
+                        },
+                        matched: match slot {
+                            0 => self.settings.matched_in(command.name()),
+                            _ => None,
+                        },
+                        detail: self.saying(*command, *slot, chord.is_some()),
                         aside: Aside::Words(chord.map(|chord| chord.label()).unwrap_or_default()),
                         body: Vec::new(),
                         entry: false,
                         warning: Vec::new(),
                         pinned: None,
-                        scope: None,
+                        // Once, beside the name: the rows under it are
+                        // more of the same command's keys.
+                        scope: (*slot == 0 && self.settings.changed(*command))
+                            .then_some(Scope::Changed),
                     },
                 })
                 .collect();
             self.column(cells, region, &rows, "No command by that name");
-            self.keys_card(cells, area, &hints);
             return;
         }
 
         let rows = self.rows(region);
         self.column(cells, region, &rows, "No setting by that name");
-        self.keys_card(cells, area, &hints);
     }
 }
 
@@ -833,6 +917,10 @@ enum Scope {
     Global,
     /// Nobody's: what Obelus ships with.
     Default,
+    /// On the keys page, a command the reader has put on keys other than
+    /// its layout's: their own, said against the layout rather than
+    /// against Obelus's defaults, which on that page are the layout.
+    Changed,
 }
 
 impl Scope {
@@ -842,6 +930,7 @@ impl Scope {
             Self::Project => "Project",
             Self::Global => "Global",
             Self::Default => "Default",
+            Self::Changed => "Changed",
         }
     }
 }
@@ -868,16 +957,6 @@ enum Aside {
 }
 
 impl SettingsView<'_> {
-    /// Every key this page answers to, where the reader asked for them.
-    ///
-    /// Above the foot, which says how to close it: a card that covered the
-    /// way out would be a card with no way out on screen.
-    fn keys_card(&self, cells: &mut CellBuffer, area: Rect, hints: &[Hint]) {
-        if self.settings.showing_keys() {
-            crate::keys_card(cells, crate::footed(area, hints), hints, self.theme);
-        }
-    }
-
     /// A page's rows, drawn one to a row.
     ///
     /// One loop for the settings and for the keys, because they are the
@@ -1066,7 +1145,9 @@ impl SettingsView<'_> {
                 // enough to the name to read as one phrase, and in a line
                 // down the page so that the page is read as a table.
                 let at = detail_at.max(after + 2);
-                let left = aside_at.saturating_sub(at + reserved);
+                // And a blank before the right-hand column, or a
+                // description that fills its room runs into the key.
+                let left = aside_at.saturating_sub(at + reserved + 1);
                 write(
                     cells,
                     at,
@@ -1116,9 +1197,13 @@ impl SettingsView<'_> {
                 ),
                 Aside::Words(words) => {
                     let keys = truncate_from_right(words, usize::from(CONTROL_WIDTH));
+                    // Against the column's right edge, so a command's keys,
+                    // one to a row, end in a line however long each is.
+                    let width = u16::try_from(text_width(&keys)).unwrap_or(CONTROL_WIDTH);
+                    let key_at = aside_at + CONTROL_WIDTH.saturating_sub(width);
                     write(
                         cells,
-                        aside_at,
+                        key_at,
                         y,
                         &keys,
                         plain.fg(self.theme.foreground).bg(background),
@@ -1127,7 +1212,7 @@ impl SettingsView<'_> {
                     // a cap on the row the reader is on is drawn over the
                     // colour that says so.
                     crate::cap_around(
-                        aside_at,
+                        key_at,
                         y,
                         &keys,
                         text_width(&keys),
@@ -1380,10 +1465,21 @@ impl SettingsView<'_> {
     /// row because that is where they are looking and it is that binding
     /// the answer is about -- the status row here is the page's filter, and
     /// a passing note would be cleared by the very next keystroke.
-    fn saying(&self, command: obelus_command::Command) -> Option<(String, ratatui::style::Color)> {
-        if self.settings.binding() != Some(command) {
-            return Some((command.spec().title.to_string(), self.theme.gutter));
-        }
+    fn saying(
+        &self,
+        command: obelus_command::Command,
+        slot: usize,
+        has_a_key: bool,
+    ) -> Option<(String, ratatui::style::Color)> {
+        let Some(binding) = self
+            .settings
+            .binding_at()
+            .filter(|binding| binding.command == command && binding.slot == slot)
+        else {
+            // What it does once, beside its name; the rows of its other
+            // keys say nothing there.
+            return (slot == 0).then(|| (command.spec().title.to_string(), self.theme.gutter));
+        };
         match self.settings.refused() {
             Some((chord, Refused::Taken(taken))) => Some((
                 format!("{} is {}", chord.label(), taken.name()),
@@ -1393,8 +1489,14 @@ impl SettingsView<'_> {
                 format!("{}: {why}", chord.label()),
                 self.theme.change_removed,
             )),
+            // One line, because most commands have one key and so one row
+            // to say it on.
             None => Some((
-                "Press a key, or delete to unbind".to_string(),
+                match binding.replacing && has_a_key {
+                    true => "Press the new key",
+                    false => "Press a key to add it",
+                }
+                .to_string(),
                 self.theme.change_modified,
             )),
         }
@@ -1443,22 +1545,51 @@ impl SettingsView<'_> {
             .map(|agent| self.settings.card_rows(agent, width) + 1)
             .collect();
         let focus = self.settings.focus().min(listed.len().saturating_sub(1));
+        let (area, first) = self.beside_the_bar(cells, area, &heights);
+
+        let mut y = area.y;
+        for (index, agent) in listed.iter().enumerate().skip(first) {
+            if y >= area.bottom() {
+                break;
+            }
+            // What is left of the page under it, rather than the page's own
+            // height moved down to this row: a card told it had the whole
+            // of one draws off the bottom of the region, and what is under
+            // the region is the rule over the foot -- which the last card
+            // on screen wrote its third line across.
+            self.card(
+                cells,
+                Rect {
+                    y,
+                    height: area.bottom().saturating_sub(y),
+                    ..area
+                },
+                agent,
+                self.in_front && index == focus,
+            );
+            y += heights[index];
+        }
+    }
+
+    /// The bar beside a page of cards, and what it leaves them: the column
+    /// they are drawn in, and which card is at the top of it.
+    fn beside_the_bar(&self, cells: &mut CellBuffer, area: Rect, heights: &[u16]) -> (Rect, usize) {
         // The window's top, which a dragged bar has put away from the
         // focus -- see `placed` -- and never past the last card.
-        let first = self.settings.top().min(listed.len().saturating_sub(1));
+        let first = self.settings.top().min(heights.len().saturating_sub(1));
 
         // The same bar the page of settings has, measured in rows rather
         // than in cards: a card is as tall as its description needs, so
         // how far down a page of them the reader is cannot be counted in
         // cards.
         let rows = |taken: &[u16]| taken.iter().map(|rows| usize::from(*rows)).sum::<usize>();
-        let total = rows(&heights);
+        let total = rows(heights);
         let top = rows(&heights[..first]);
         let bar = (total > usize::from(area.height))
             .then(|| {
                 let bar = crate::scrollbar(cells, area, top, total, self.theme);
                 // And what the window is moved by is the card.
-                crate::bars::in_items(bar, &heights);
+                crate::bars::in_items(bar, heights);
                 bar
             })
             .flatten();
@@ -1483,29 +1614,7 @@ impl SettingsView<'_> {
             width: area.width.saturating_sub(crate::editor::SCROLLBAR_WIDTH),
             ..area
         };
-
-        let mut y = area.y;
-        for (index, agent) in listed.iter().enumerate().skip(first) {
-            if y >= area.bottom() {
-                break;
-            }
-            // What is left of the page under it, rather than the page's own
-            // height moved down to this row: a card told it had the whole
-            // of one draws off the bottom of the region, and what is under
-            // the region is the rule over the foot -- which the last card
-            // on screen wrote its third line across.
-            self.card(
-                cells,
-                Rect {
-                    y,
-                    height: area.bottom().saturating_sub(y),
-                    ..area
-                },
-                agent,
-                self.in_front && index == focus,
-            );
-            y += heights[index];
-        }
+        (area, first)
     }
 
     /// One card.
@@ -1723,6 +1832,268 @@ impl SettingsView<'_> {
             }
             _ => format!("{doing}\u{2026}"),
         }
+    }
+}
+
+/// The themes page: the registry's two groups of cards, each under its
+/// name.
+///
+/// The agents' card, with a group's heading over the first of each and a
+/// glyph that says which of dark and light the page is -- the one fact about
+/// a theme a reader can act on without trying it.
+impl SettingsView<'_> {
+    /// The themes, as cards.
+    fn themes(&self, cells: &mut CellBuffer, area: Rect) {
+        let plain = Style::new()
+            .fg(self.theme.foreground)
+            .bg(self.theme.background);
+        let dim = plain.fg(self.theme.gutter);
+
+        let shown = self.settings.themes(&self.themes);
+        if shown.is_empty() {
+            let reason = match (self.themes.is_empty(), self.themes_failure) {
+                (true, Some(why)) => format!("Could not fetch the list of themes: {why}"),
+                (true, None) => "Fetching the list of themes\u{2026}".to_string(),
+                (false, _) => "No theme by that name".to_string(),
+            };
+            write(
+                cells,
+                area.x + INDENT,
+                area.y,
+                &truncate_from_right(&reason, usize::from(area.width.saturating_sub(INDENT * 2))),
+                dim,
+            );
+            return;
+        }
+
+        let width = Settings::card_width(area.width);
+        let heights: Vec<u16> = (0..shown.len())
+            .map(|at| self.settings.theme_rows(&shown, at, width) + 1)
+            .collect();
+        let focus = self.settings.focus().min(shown.len().saturating_sub(1));
+        let (area, first) = self.beside_the_bar(cells, area, &heights);
+
+        let mut y = area.y;
+        for (index, card) in shown.iter().enumerate().skip(first) {
+            if y >= area.bottom() {
+                break;
+            }
+            // The group's name over the first of its cards, the way a group
+            // of settings is headed -- and part of that card's height, so
+            // the window moves the two together.
+            let mut at = y;
+            if Settings::opens_a_group(&shown, index) {
+                write(
+                    cells,
+                    area.x + 1,
+                    at,
+                    &truncate_from_right(
+                        card.theme.group.heading(),
+                        usize::from(area.width.saturating_sub(2)),
+                    ),
+                    plain
+                        .fg(self.theme.status_foreground)
+                        .add_modifier(Modifier::BOLD),
+                );
+                at += 2;
+            }
+            if at < area.bottom() {
+                self.theme_card(
+                    cells,
+                    Rect {
+                        y: at,
+                        height: area.bottom().saturating_sub(at),
+                        ..area
+                    },
+                    card,
+                    self.in_front && index == focus,
+                );
+            }
+            y += heights[index];
+        }
+    }
+
+    /// One theme's card: its name and where it stands, what it is, and the
+    /// facts about it -- who made it, when, and whose the picture is.
+    fn theme_card(&self, cells: &mut CellBuffer, area: Rect, card: &ThemeCard, focused: bool) {
+        let background = if focused {
+            self.theme.selected_row_background
+        } else {
+            self.theme.background
+        };
+        let plain = Style::new().fg(self.theme.foreground).bg(background);
+        let dim = plain.fg(self.theme.gutter);
+
+        let left = area.x + INDENT;
+        let inner = area.width.saturating_sub(INDENT * 2);
+        let failure = match &card.status {
+            obelus_themes::Status::Failed(why) => Some(why.as_str()),
+            _ => None,
+        };
+        let described = self.settings.wrapped(&card.theme.description, inner);
+        let rows = 2
+            + u16::try_from(described.len().max(1)).unwrap_or(u16::MAX)
+            + u16::from(failure.is_some());
+        for row in 0..rows {
+            if area.y + row >= area.bottom() {
+                break;
+            }
+            fill(
+                cells,
+                Rect {
+                    y: area.y + row,
+                    height: 1,
+                    ..area
+                },
+                plain,
+            );
+        }
+
+        let mut name_at = left;
+        if obelus_icons::enabled() {
+            let glyph = match card.theme.dark {
+                true => obelus_icons::ui::DARK,
+                false => obelus_icons::ui::LIGHT,
+            };
+            put(
+                cells,
+                left,
+                area.y,
+                glyph,
+                plain.fg(self.theme.gutter_current),
+            );
+            // A blank the glyph bleeds into, and one to read by.
+            name_at = left + 3;
+        }
+
+        let (state, colour) = self.theme_state(card);
+        let taken = u16::try_from(text_width(&state)).unwrap_or(0);
+        let room = inner.saturating_sub(taken + 2 + (name_at - left));
+        write_marked(
+            cells,
+            Rect {
+                y: area.y,
+                height: 1,
+                ..area
+            },
+            name_at,
+            area.y,
+            &truncate_from_right(&card.theme.name, usize::from(room)),
+            plain,
+            &Marked::matched(
+                run_of(self.settings.matched_in(&card.theme.name)),
+                self.theme.picker_match_background,
+            ),
+        );
+        if let Ok(offset) = u16::try_from(
+            usize::from(area.width).saturating_sub(text_width(&state) + usize::from(INDENT)),
+        ) {
+            write(cells, area.x + offset, area.y, &state, plain.fg(colour));
+            crate::turning_at(area.x + offset, area.y, &state);
+        }
+
+        let mut y = area.y + 1;
+        for row in &described {
+            if y >= area.bottom() {
+                return;
+            }
+            write(cells, name_at, y, row, dim);
+            y += 1;
+        }
+        if described.is_empty() {
+            y += 1;
+        }
+        if y < area.bottom() {
+            write(
+                cells,
+                name_at,
+                y,
+                &truncate_from_right(
+                    &Self::theme_facts(card),
+                    usize::from(inner.saturating_sub(3)),
+                ),
+                dim,
+            );
+            y += 1;
+        }
+        if let Some(why) = failure
+            && y < area.bottom()
+        {
+            write(
+                cells,
+                name_at,
+                y,
+                &truncate_from_right(
+                    &format!("\u{f0159} {why}"),
+                    usize::from(inner.saturating_sub(3)),
+                ),
+                plain.fg(self.theme.change_removed),
+            );
+        }
+    }
+
+    /// The line of facts under a theme's description.
+    ///
+    /// The picture's licence is there because a reader putting one behind
+    /// their work is owed whose it is -- and "No wallpaper" says the other
+    /// answer, which a card that said nothing would leave a guess. A theme
+    /// the registry no longer lists has none of these to say; and one the
+    /// reader's own file of the same name stands in front of says so, or
+    /// installing it would seem to have done nothing.
+    fn theme_facts(card: &ThemeCard) -> String {
+        let theme = &card.theme;
+        let mut facts: Vec<String> = Vec::new();
+        if !theme.author.is_empty() {
+            facts.push(theme.author.clone());
+        }
+        if !theme.updated.is_empty() {
+            facts.push(theme.updated.clone());
+        }
+        match &theme.wallpaper {
+            Some(credit) => facts.push(format!("Wallpaper {}", credit.license)),
+            None if card.status != obelus_themes::Status::Delisted => {
+                facts.push("No wallpaper".to_string());
+            }
+            None => {}
+        }
+        if card.shadowed {
+            facts.push(format!("A local {} is used instead", theme.name));
+        }
+        facts.join(" \u{b7} ")
+    }
+
+    /// What a theme card's right-hand corner says, and in what colour.
+    fn theme_state(&self, card: &ThemeCard) -> (String, ratatui::style::Color) {
+        use obelus_themes::Status;
+        match &card.status {
+            _ if card.worn => ("\u{25cf} In use".to_string(), self.theme.change_added),
+            Status::Installed => ("Installed".to_string(), self.theme.gutter),
+            Status::Delisted => ("No longer listed".to_string(), self.theme.gutter),
+            Status::Outdated => ("Update \u{25b8}".to_string(), self.theme.change_modified),
+            Status::Missing | Status::Failed(_) if card.installed => {
+                ("Update \u{25b8}".to_string(), self.theme.change_modified)
+            }
+            Status::Missing | Status::Failed(_) => {
+                ("Install \u{25b8}".to_string(), self.theme.foreground)
+            }
+            Status::Installing(progress) => (
+                format!(
+                    "{} {}",
+                    crate::spinning(self.phase),
+                    how_far(card.installed, *progress)
+                ),
+                self.theme.foreground,
+            ),
+        }
+    }
+}
+
+/// How far a theme's install has got, in words.
+fn how_far(updating: bool, progress: Option<obelus_themes::install::Progress>) -> String {
+    let doing = if updating { "Updating" } else { "Installing" };
+    match progress.and_then(|progress| progress.fraction()) {
+        Some(fraction) => format!("{doing} {}%", (fraction * 100.0).round() as u32),
+        None => format!("{doing}\u{2026}"),
     }
 }
 

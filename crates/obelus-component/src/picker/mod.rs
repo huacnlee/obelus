@@ -119,6 +119,9 @@ pub enum PickerValue {
     /// a question about the settings directories -- which the list knows
     /// nothing about and the application does.
     Theme(String),
+    /// Put every command back on the keys its layout gives it: the row a
+    /// reader confirms that with.
+    KeysBack,
     /// Set a setting to one of its choices.
     ///
     /// The settings view's droplist is this picker, opened over it: a list
@@ -222,6 +225,9 @@ pub enum PickerValue {
     },
     /// One of the ways out of a question Obelus stopped to ask.
     Answer(crate::question::Answer),
+    /// Go to the settings' themes page, for the themes this machine has not
+    /// got: the row at the foot of every list of themes.
+    MoreThemes,
     /// Nothing. A row that is there to say why the list is short.
     Nothing,
 }
@@ -721,6 +727,9 @@ pub struct Picker {
     /// Whether the empty reason is about the world rather than about there
     /// being nothing to list, and so wins over "No match".
     explains: bool,
+    /// Where else to look when what was typed matches nothing: what the
+    /// list says then, and what enter accepts -- see [`Picker::otherwise`].
+    otherwise: Option<(String, PickerValue)>,
     /// A question this list is the answer to, shown in front of the prompt.
     question: Option<String>,
     /// What typing into this list does, for the row before anything has
@@ -843,8 +852,6 @@ pub struct Picker {
     /// saying so is a row spent on what they just did -- so the foot goes
     /// where there is something they could not have guessed.
     footed: bool,
-    /// Whether the card listing every key is up.
-    keys: bool,
     /// Whether a key that opens a view may take this list's place.
     ///
     /// Every list the reader opened will: it is somewhere they are
@@ -1010,6 +1017,7 @@ impl Picker {
             aligned: None,
             previews: false,
             explains: false,
+            otherwise: None,
             marked: false,
             question: None,
             invitation: None,
@@ -1025,7 +1033,6 @@ impl Picker {
             unfinished: false,
             ordered: false,
             footed: false,
-            keys: false,
             gives_way: true,
             looking: None,
             outside: None,
@@ -1571,12 +1578,6 @@ impl Picker {
         self.footed
     }
 
-    /// Whether the card listing every key is showing.
-    #[must_use]
-    pub const fn showing_keys(&self) -> bool {
-        self.keys
-    }
-
     /// Says how this search is looking, or that the question does not arise.
     pub const fn looking_how(&mut self, how: Option<obelus_search::Looking>) {
         self.looking = how;
@@ -1933,6 +1934,18 @@ impl Picker {
         self.explains = false;
     }
 
+    /// Says where else to look when what was typed matches nothing: the
+    /// list says `line` in place of "No match", and enter accepts `value`.
+    ///
+    /// For a list that is not all there is. A query that found nothing
+    /// among the themes on this machine is still a good question, asked of
+    /// the wrong list, and a key that answers it is a step the reader does
+    /// not have to take by hand -- with their words carried, which only the
+    /// application can do, because only it knows where `value` goes.
+    pub fn otherwise(&mut self, line: &str, value: PickerValue) {
+        self.otherwise = Some((line.to_string(), value));
+    }
+
     /// Sets what the list says when it is empty, whether or not something
     /// has been typed.
     ///
@@ -1954,10 +1967,10 @@ impl Picker {
         if self.match_count() > 0 {
             return None;
         }
-        Some(if self.query.is_empty() || self.explains {
-            &self.empty
-        } else {
-            "No match"
+        Some(match &self.otherwise {
+            _ if self.query.is_empty() || self.explains => &self.empty,
+            Some((line, _)) => line,
+            None => "No match",
         })
     }
 
@@ -2467,20 +2480,10 @@ impl Picker {
                 self.step_tab(false);
                 PickerOutcome::Consumed
             }
-            // The card first: a key that opens a thing closes that thing,
-            // and escape reaches the nearest thing on screen.
-            KeyCode::Esc if bare && self.keys => {
-                self.keys = false;
-                PickerOutcome::Consumed
-            }
-            // Then what is held in the query, which is nearer than the
-            // list it is part of.
+            // What is held in the query first, which is nearer than the
+            // list it is part of: escape reaches the nearest thing on screen.
             KeyCode::Esc if bare && self.query.let_go() => PickerOutcome::Consumed,
             KeyCode::Esc if bare => PickerOutcome::Cancelled,
-            _ if self.footed && obelus_keymap::is_keys_card(key) => {
-                self.keys = !self.keys;
-                PickerOutcome::Consumed
-            }
             // A row the wheel left off the screen is brought back rather
             // than chosen: see `Window::reach_for_the_focus`.
             KeyCode::Enter if !self.matched.is_empty() && self.window.reach_for_the_focus() => {
@@ -2497,6 +2500,13 @@ impl Picker {
                 .filter(|item| item.enabled && self.switches_here())
                 .map_or(PickerOutcome::Consumed, |item| {
                     PickerOutcome::InPlace(item.value.clone())
+                }),
+            // Nothing matched, and the list knows somewhere else to look.
+            KeyCode::Enter if bare && self.matched.is_empty() && !self.query.is_empty() => self
+                .otherwise
+                .as_ref()
+                .map_or(PickerOutcome::Consumed, |(_, value)| {
+                    PickerOutcome::Accepted(value.clone())
                 }),
             KeyCode::Enter if bare || (self.opens && modifiers == KeyModifiers::ALT) => self
                 .matched

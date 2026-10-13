@@ -16,13 +16,6 @@ impl App {
         // and a watch says what happens next rather than what already
         // has.
         self.head = obelus_git::head_of_the_tree(&self.working_directory);
-        // The one door every way of settling on a project goes through --
-        // an argument, the directory Obelus was started in, a row on the
-        // page that asks which -- which is why the remembering is here
-        // and at none of the three. `remember` declines anything that is
-        // not a worktree, so a process that began in the home directory
-        // writes nothing.
-        projects::remember(&self.working_directory, jiff::Timestamp::now().as_second());
         let root = self.working_directory.clone();
         self.keep_what_is_open_for(&root);
     }
@@ -110,6 +103,9 @@ impl App {
         // The sessions nothing was said in, as on the way out: an agent
         // keeps what it is not told to let go of.
         self.let_go_of_what_nothing_was_said_in(None);
+        // And every conversation's page, as on the way out: the window is
+        // about to be a new one, and these go with the old.
+        self.keep_every_page();
         // Moved on rather than made again, because a walk still running
         // holds the old count: a new one would start where the old one's
         // answers are numbered, and they would arrive as current.
@@ -125,10 +121,17 @@ impl App {
         self.monospace_here = was.monospace_here;
         self.screen_area = was.screen_area;
         self.editor_area = was.editor_area;
+        // Whether `ctrl+enter` arrives, which `ob` asked the terminal once
+        // and nothing asks again: lost, a terminal without the protocol was
+        // offered a key it cannot send.
+        self.ctrl_enter_arrives = was.ctrl_enter_arrives;
         self.settled = was.settled;
         self.keymap = was.keymap;
         self.theme = was.theme;
         self.theme_name = was.theme_name;
+        // With the colours it came with, or the window -- which still has
+        // it -- is told it again, and decodes it again.
+        self.wallpaper = was.wallpaper;
         self.files.walk_generation = was.files.walk_generation;
         self.git.history_generation = was.git.history_generation;
         self.search.search_generation = was.search.search_generation;
@@ -223,17 +226,19 @@ impl App {
         // What went wrong on the way up, over whatever the first screen is,
         // and last of all so that everything that could go wrong has.
         let told = self.tell_what_went_wrong();
-        // Last, and here rather than at the command line: the rows come
-        // from a walk that sends on this channel, so a list opened before
-        // there was one would be a list nothing ever fills. Not over what
-        // went wrong, though: a list opened over a list would put the one
-        // the reader is owed under the one they asked for, and the files
-        // are one key away once it has been read.
+        // Which keys to start from, on a first start, and not over what
+        // went wrong: a list over a list hides the one the reader is owed.
+        // That start goes without the question -- the whole of it, or it
+        // would come up hours later when a project is next chosen -- and
+        // with no file written the next one asks it.
         //
-        // Nor where nobody is at the screen to choose from it: the walk
-        // that fills it is the whole project.
-        if self.list_at_start && !told && !self.headless {
-            self.open_file_picker();
+        // Over a file the command line named, or one reopened, all the
+        // same: escape is one key back to the file, and every key the
+        // reader is about to press depends on it.
+        if told {
+            self.let_the_keymap_question_go();
+        } else {
+            self.ask_for_a_keymap();
         }
     }
 

@@ -336,6 +336,12 @@ impl App {
         self.ctrl_enter_arrives = arrives;
     }
 
+    /// And what it was told: whether `ctrl+enter` arrives as itself.
+    #[must_use]
+    pub const fn ctrl_enter_does_arrive(&self) -> bool {
+        self.ctrl_enter_arrives
+    }
+
     /// Says what is drawing Obelus, so that it can be told the settings it
     /// is the only one that can act on.
     ///
@@ -351,6 +357,7 @@ impl App {
         drawing.animates(self.settled.config.animation);
         self.drawing = Some(drawing);
         self.say_the_colours();
+        self.say_the_wallpaper();
     }
 
     /// The marks, for the view to draw.
@@ -408,8 +415,9 @@ impl App {
         if self.settings.is_none() {
             return;
         }
-        let cards = self.settings.as_ref().is_some_and(Settings::on_agents);
+        let cards = self.settings.as_ref().is_some_and(Settings::on_cards);
         let listed = self.listed_agents();
+        let themes = self.themes_on_the_page();
         // Built before the page is borrowed: it comes out of the
         // application, and the page is about to be held mutably.
         let offering = self.agent_offering();
@@ -418,7 +426,13 @@ impl App {
         let room = self.settings_room(editor_area, offering.as_ref());
         if let Some(settings) = self.settings.as_mut() {
             match cards {
-                true => settings.settle_cards(&listed, room),
+                true => settings.settle_cards(
+                    Cards {
+                        agents: &listed,
+                        themes: &themes,
+                    },
+                    room,
+                ),
                 // A group of settings is a dozen entries and they all fit
                 // today. It has a window anyway: a group that grows past
                 // the screen should scroll rather than lose its last rows

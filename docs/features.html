@@ -222,7 +222,7 @@
       <p class="how"><span>Key</span><kbd>F3</kbd><span>Command</span><code>open-changed-file</code></p>
 
       <h3 id="projects">Projects and the welcome screen</h3>
-      <p>Name a file and its repository is the project; name a directory and that is the project. Start Obelus with nothing to go on — from a desktop menu, say — and it asks which project: the last twenty you opened, newest first, or a path typed with completion. <code>close-project</code> lets go of everything and comes back to that page. With nothing open, the welcome screen shows the keys to start from, read from your own key table, so a key you rebind is the key it shows.</p>
+      <p>Name a file and its repository is the project; name a directory and that is the project. Start Obelus with nothing to go on — from a desktop menu, say — and it asks which project: the last twenty you chose there, newest first, or a path typed with completion, which stops at a project. <code>close-project</code> lets go of everything and comes back to that page. With nothing open, the welcome screen shows the keys to start from, read from your own key table, so a key you rebind is the key it shows.</p>
       <p class="how"><span>Command</span><code>close-project</code></p>
 
       <h3 id="reopen">Coming back to what was open</h3>
@@ -515,7 +515,7 @@
       <h2><span class="num">12</span><span>Keys and settings</span></h2>
 
       <h3 id="palette">The command palette</h3>
-      <p>Every command, by name, sorted into six tabs: files, search, code, edit, Git, and Obelus itself. Names start with what they do — <code>open-file</code>, <code>show-calls</code> — so you type the verb first. A command that can't do anything where you are is dim, and its key does nothing either. At the foot of every list, the keys that work right now; <kbd>Ctrl+k</kbd> shows all of them.</p>
+      <p>Every command, by name, sorted into six tabs: files, search, code, edit, Git, and Obelus itself. Names start with what they do — <code>open-file</code>, <code>show-calls</code> — so you type the verb first. A command that can't do anything where you are is dim, and its key does nothing either. At the foot of a list with keys of its own, the ones that work right now.</p>
       <p class="how"><span>Key</span><kbd>Ctrl+p</kbd><span>Command</span><code>run-command</code></p>
 
       <h3 id="settings-page">The settings page</h3>
@@ -523,7 +523,7 @@
       <p class="how"><span>Commands</span><code>open-settings</code> <code>open-project-settings</code> <code>open-settings-file</code></p>
 
       <h3 id="keys">Rebinding keys</h3>
-      <p>The Keys tab lists every command with its key: press <kbd>Enter</kbd>, then the new key. A key already taken, or one some terminals can't send, is refused and you are told why. For a keyboard without a row of function keys, the <code>mnemonic</code> layout puts those twelve on <kbd>Ctrl</kbd> and <kbd>Alt</kbd> by the letter of the word.</p>
+      <p>The Keys tab lists every command with each of its keys: <kbd>Enter</kbd> on a key, then the new one, changes it, and <kbd>Ctrl+Enter</kbd> adds another. A key another command has, or one Obelus never hands to the table, is refused and you are told why. For a keyboard without a row of function keys, the <code>mnemonic</code> layout puts those twelve on <kbd>Ctrl</kbd> and <kbd>Alt</kbd> by the letter of the word.</p>
       <p class="how"><span>Settings</span><code>keys_from</code> <code>[keys]</code></p>
 
       <h3 id="themes">Themes</h3>

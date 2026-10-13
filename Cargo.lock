@@ -4353,11 +4353,11 @@ dependencies = [
  "agent-client-protocol",
  "base64 0.23.1",
  "dirs",
- "flate2",
  "futures",
  "image",
  "libc",
  "obelus-claim",
+ "obelus-download",
  "obelus-git",
  "obelus-jobs",
  "obelus-logging",
@@ -4368,13 +4368,10 @@ dependencies = [
  "reqwest",
  "serde",
  "serde_json",
- "sha2 0.11.0",
- "tar",
  "tokio",
  "toml 1.1.5+spec-1.1.0",
  "tracing",
  "windows-sys 0.61.2",
- "zip",
 ]
 
 [[package]]
@@ -4419,6 +4416,7 @@ dependencies = [
  "obelus-terminal",
  "obelus-text",
  "obelus-theme",
+ "obelus-themes",
  "obelus-todo",
  "obelus-ui",
  "obelus-watch",
@@ -4446,6 +4444,14 @@ dependencies = [
  "obelus-syntax",
  "obelus-text",
  "tracing",
+]
+
+[[package]]
+name = "obelus-check-theme"
+version = "0.12.0"
+dependencies = [
+ "image",
+ "obelus-theme",
 ]
 
 [[package]]
@@ -4496,6 +4502,7 @@ dependencies = [
 name = "obelus-component"
 version = "0.12.0"
 dependencies = [
+ "base64 0.23.1",
  "crossterm",
  "gix",
  "nucleo-matcher",
@@ -4514,7 +4521,10 @@ dependencies = [
  "obelus-row",
  "obelus-search",
  "obelus-text",
+ "obelus-themes",
  "obelus-todo",
+ "serde",
+ "serde_json",
  "tracing",
 ]
 
@@ -4527,6 +4537,18 @@ dependencies = [
  "toml 1.1.5+spec-1.1.0",
  "toml_edit 0.22.27",
  "tracing",
+]
+
+[[package]]
+name = "obelus-download"
+version = "0.12.0"
+dependencies = [
+ "flate2",
+ "futures",
+ "reqwest",
+ "sha2 0.11.0",
+ "tar",
+ "zip",
 ]
 
 [[package]]
@@ -4594,6 +4616,7 @@ dependencies = [
  "obelus-program",
  "obelus-runtime",
  "obelus-text",
+ "obelus-theme",
  "obelus-ui",
  "objc2 0.6.4",
  "objc2-app-kit 0.3.2",
@@ -4638,6 +4661,8 @@ dependencies = [
  "obelus-command",
  "obelus-editing",
  "obelus-icons",
+ "serde",
+ "serde_json",
  "tracing",
 ]
 
@@ -4837,9 +4862,28 @@ name = "obelus-theme"
 version = "0.12.0"
 dependencies = [
  "anyhow",
+ "image",
  "obelus-text",
  "ratatui",
  "toml 1.1.5+spec-1.1.0",
+ "toml_edit 0.22.27",
+]
+
+[[package]]
+name = "obelus-themes"
+version = "0.12.0"
+dependencies = [
+ "dirs",
+ "flate2",
+ "obelus-claim",
+ "obelus-download",
+ "obelus-runtime",
+ "obelus-sink",
+ "obelus-theme",
+ "reqwest",
+ "serde_json",
+ "sha2 0.11.0",
+ "tar",
  "tracing",
 ]
 
@@ -4878,6 +4922,7 @@ dependencies = [
  "obelus-terminal",
  "obelus-text",
  "obelus-theme",
+ "obelus-themes",
  "obelus-todo",
  "ratatui",
  "ratatui-image",

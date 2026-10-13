@@ -230,7 +230,7 @@ fn the_counts_take_the_whole_screen() {
     // there belongs to this view or there is nothing there at all.
     let foot = text.lines().last().unwrap_or_default();
     assert!(
-        foot.contains("Keys"),
+        foot.contains("Read it"),
         "the foot is not this view's:\n{dump}"
     );
 }
@@ -454,21 +454,13 @@ fn the_counts_say_what_their_keys_do() {
     let mut app = open(76, 18);
     press(&mut app, KeyCode::Tab);
     let text = support::text_block(&support::render(&mut app, 76, 18)).to_string();
-    for word in ["Open", "Keys"] {
-        assert!(text.contains(word), "{word:?} is not at the foot:\n{text}");
-    }
+    assert!(text.contains("Open"), "enter is not at the foot:\n{text}");
     // And not escape, which means the same thing in every view Obelus has:
-    // a foot is for what *this* one does. It is on the card.
+    // a foot is for what *this* one does.
     assert!(
         !text.contains("Leave"),
         "the foot is spending itself on escape:\n{text}"
     );
-    support::press_control(&mut app, 'k');
-    assert!(
-        support::text_block(&support::render(&mut app, 76, 18)).contains("Leave"),
-        "and it is not on the card either"
-    );
-    press(&mut app, KeyCode::Esc);
 
     // On a file it reads it instead: one key, two acts, and the foot says
     // which one is in front of the reader.
@@ -480,15 +472,6 @@ fn the_counts_say_what_their_keys_do() {
         text.contains("Read it"),
         "enter does not say what it does:\n{text}"
     );
-    // And `ctrl+k` says all of them, at length.
-    support::press_control(&mut app, 'k');
-    let dump = support::render(&mut app, 76, 18);
-    assert!(
-        support::text_block(&dump).contains("Read the file this row names"),
-        "no card:\n{dump}"
-    );
-    press(&mut app, KeyCode::Esc);
-    assert!(app.counts().is_some(), "escape left the view, not the card");
 }
 
 /// A press moves the selection, and a press on a row's fold mark opens it.

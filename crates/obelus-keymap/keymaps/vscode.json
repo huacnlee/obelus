@@ -1,0 +1,49 @@
+// VS Code's keys, where Obelus has the command: `ctrl+p` the files, `ctrl+shift+p`
+// the palette. An adaptation to what Obelus has, not a copy.
+//
+// Where neither editor has a key for something -- the history, the agent --
+// it goes where the mnemonic layout put it, if that is free here.
+//
+// On control, like everything else in the table, with no chord of its own
+// for Command: `obg` on a Mac reports Command as control and draws control as
+// `Cmd`, so the same table is Command there and control everywhere else.
+//
+// Shift does name a command here, which nothing of Obelus's own does: these
+// are another editor's chords, borrowed whole (`ctrl+shift+p`), and a
+// control byte cannot carry the case of a letter -- so each of them has an
+// alt chord as well, which every terminal can send. Without the keyboard
+// protocol `ctrl+shift+p` arrives as `ctrl+p`, which is the files rather than
+// the palette: the nearer of the two wrong answers, and the alt chord is the
+// right one. The first key of each is the one shown; the rest are the ones a
+// terminal without the protocol can send.
+//
+// A command in `move` loses every key the obelus table gave it and takes
+// these, in each context it was bound in -- and a key it takes is taken off
+// whatever had it there. `bindings` adds a key beside the ones a command has.
+{
+  "extends": "obelus",
+  "move": [
+    { "command": "open-file", "keys": ["ctrl+p"] },
+    { "command": "run-command", "keys": ["ctrl+shift+p", "alt+shift+p"] },
+    { "command": "switch-document", "keys": ["ctrl+e"] },
+    { "command": "open-changed-file", "keys": ["ctrl+shift+g", "alt+g"] },
+    { "command": "choose-conversation", "keys": ["alt+shift+n"] },
+    { "command": "search-file", "keys": ["ctrl+f"] },
+    { "command": "search-project", "keys": ["ctrl+shift+f", "alt+/"] },
+    { "command": "show-outline", "keys": ["ctrl+shift+o", "alt+u"] },
+    // VS Code's go-to-symbol-in-workspace.
+    { "command": "search-symbols", "keys": ["ctrl+t"] },
+    { "command": "show-file-history", "keys": ["alt+l"] },
+    { "command": "show-project-history", "keys": ["alt+shift+l"] },
+    { "command": "go-to-definition", "keys": ["alt+."] },
+    { "command": "review-pull-request", "keys": ["ctrl+u"] },
+    // Off `ctrl+t`, which both editors spend on something else, and beside
+    // `alt+t`, which writes a note rather than reading them.
+    { "command": "todo", "keys": ["alt+shift+t"] },
+  ],
+  "bindings": [
+    // Redo keeps `ctrl+y`, which every terminal can send, and gains the
+    // chord both editors have it on.
+    { "command": "redo", "context": "normal", "key": "ctrl+shift+z" },
+  ],
+}

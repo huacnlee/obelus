@@ -6,10 +6,36 @@
 //! nobody.
 
 pub mod builtin;
+pub mod wallpaper;
 pub mod written;
 
 use obelus_text::kind::SyntaxKind;
 use ratatui::style::{Color, Modifier, Style};
+pub use wallpaper::Wallpaper;
+
+/// A theme as it is worn: its colours, and the picture under them where it
+/// carries one.
+///
+/// One value rather than two, because a theme is chosen, previewed and put
+/// back as one thing -- and a picture that stayed behind when the colours
+/// were put back would be one theme's picture under another's page.
+#[derive(Clone, Debug)]
+pub struct Worn {
+    /// The colours.
+    pub colours: Theme,
+    /// The picture, where there is one.
+    pub wallpaper: Option<Wallpaper>,
+}
+
+impl From<Theme> for Worn {
+    /// A theme with no picture, which is every theme compiled in.
+    fn from(colours: Theme) -> Self {
+        Self {
+            colours,
+            wallpaper: None,
+        }
+    }
+}
 
 /// One colour per [`SyntaxKind`].
 #[derive(Clone, Copy, Debug)]
@@ -208,10 +234,10 @@ pub struct Theme {
     /// Behind something that reads as a surface rather than as prose: the
     /// cap a key is drawn in at the foot of a view.
     ///
-    /// Not a panel's ground -- the card that lists every key, a hover, the
-    /// completion list -- which is the page's own colour: a panel's frame
-    /// already says it is not the file, and in a window the ground is the
-    /// colour of the panel's glass, which everywhere else is the page's.
+    /// Not a panel's ground -- a hover, the completion list -- which is the
+    /// page's own colour: a panel's frame already says it is not the file,
+    /// and in a window the ground is the colour of the panel's glass, which
+    /// everywhere else is the page's.
     ///
     /// Not the welcome screen, which has the same key-and-word shape and
     /// argues its way out of the cap: six caps in a block is six strips of

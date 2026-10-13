@@ -1,6 +1,6 @@
 screen 66x20  editor 66x18  status 66x1
 -- text --
- 0|  Settings  Keys  Remote  Agents                              ⇤ ⇥ 
+ 0|  Settings  Keys  Remote  Themes  Agents                      ⇤ ⇥ 
  1|──────────────────────────────────────────────────────────────────
  2| Remote                                                           
  3|                                                                  
@@ -17,7 +17,7 @@ screen 66x20  editor 66x18  status 66x1
 14|                                                                  
 15|                                                                  
 16|──────────────────────────────────────────────────────────────────
-17|   Enter  Change                                    Ctrl+k  Keys  
+17|   Enter  Change                                                  
 18|──────────────────────────────────────────────────────────────────
 19| > Filter remote settings                                         
 -- style --
@@ -38,7 +38,7 @@ screen 66x20  editor 66x18  status 66x1
 14|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 15|cccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccccc
 16|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
-17|ccfffffffcaaaaaacccccccccccccccccccccccccccccccccccffffffffcaaaacc
+17|ccfffffffcaaaaaacccccccccccccccccccccccccccccccccccccccccccccccccc
 18|aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
 19|dddaaaaaaaaaaaaaaaaaaaaaaddddddddddddddddddddddddddddddddddddddddd
 -- legend --

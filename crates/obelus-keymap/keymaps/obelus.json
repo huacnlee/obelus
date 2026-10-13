@@ -1,0 +1,316 @@
+// The obelus layout: the table Obelus ships with, and the one every other
+// layout in this directory starts from.
+//
+// One binding is one command, in one context, on one key. The command is its
+// name -- the same word the settings file's `[keys]` table is written in --
+// the context is where the key applies (`Context` in `src/lib.rs`), and the
+// key is spelled the way `[keys]` spells it. Why there are three families,
+// and what may not be bound at all, is argued on `Keymap::new` and
+// `why_not`; why each key is the key it is, is argued beside it here.
+//
+// Read once, the first time a table is asked for, and never from the disk:
+// these files are compiled into Obelus, so what ships is what was tested.
+{
+  "bindings": [
+      // F1-F4: what to read. The three ways into a file, and the
+      // agent, which is the fourth thing a reader turns to.
+      //
+      // Reached from inside a view as well as from a file: a key
+      // that opens a view goes straight to it from another one --
+      // see `App::switch_view`.
+      { "command": "open-file", "context": "normal", "key": "f1" },
+      { "command": "switch-document", "context": "normal", "key": "f2" },
+      { "command": "open-changed-file", "context": "normal", "key": "f3" },
+      // Which conversation, asked the same way from a file and
+      // from inside one, with a new one as the first answer.
+      // It opened the conversation outside one and the list
+      // inside, which made the list two presses away from
+      // anywhere but a conversation and a fresh conversation the
+      // only thing the key ever gave a reader in a file. A
+      // conversation falls back to the file's table, so this one
+      // binding is both.
+      { "command": "choose-conversation", "context": "normal", "key": "f4" },
+      // F5-F8: finding, as a square. Across: the text, then the
+      // names a server knows. Down: this file, then every file.
+      // One view holds all four, because the reader's question is
+      // the same and only its radius changed -- which is why the
+      // tabs carry the query between them.
+      { "command": "search-file", "context": "normal", "key": "f5" },
+      { "command": "search-project", "context": "normal", "key": "f6" },
+      { "command": "show-outline", "context": "normal", "key": "f7" },
+      { "command": "search-symbols", "context": "normal", "key": "f8" },
+      // The third bank is git's. A file's history and a
+      // project's are one view at two radii, the way the finding
+      // keys are one question at four: the key lands on the tab
+      // it names and the other is a left or a right away.
+      { "command": "show-file-history", "context": "normal", "key": "f9" },
+      { "command": "show-project-history", "context": "normal", "key": "f10" },
+      // `f11`, which is not one of those two: it is the one jump
+      // this whole program is for. "Join the semantic graph to the
+      // git timeline -- jump to a definition from inside a diff" is
+      // the first paragraph Obelus was written under, and the jump
+      // had no key at all while every editor a reader arrives from
+      // puts it on `f12`. It was there, until `f12` went to the
+      // pull requests; it is here because the key that held it,
+      // the commit behind one line, was a command nobody used and
+      // went.
+      //
+      // The one exception to "the symbol questions live in the
+      // menu" -- see the note over them in `command`. Its
+      // neighbours in every other editor cannot follow it here:
+      // `shift+f12` and `ctrl+f12` are refused by `why_not`,
+      // because a function key with something held is two keys on
+      // the next terminal. A reader who learns this one and
+      // reaches for those finds the menu, which is where they
+      // were all along.
+      { "command": "go-to-definition", "context": "normal", "key": "f11" },
+      // And `f12` for the repository's pull requests and issues:
+      // somewhere to look, like everything on a function key, and
+      // the history's neighbour -- what is on its way into the
+      // history beside what is in it.
+      { "command": "review-pull-request", "context": "normal", "key": "f12" },
+      // `alt+t` for todo, on the letter of the word like the rest
+      // of the alt family, and asking the question alt asks: a
+      // note is about the line under the cursor.
+      { "command": "todo-add", "context": "normal", "key": "alt+t" },
+      // And `ctrl+t` for the notes themselves, from a file or from
+      // a conversation -- which falls back to this table, and
+      // from one about a note the list opens standing on it. It
+      // was `alt+t` there and nothing in a file, so one key named
+      // two commands and the palette offered `todo` on a key that
+      // did something else wherever the palette had been opened.
+      { "command": "todo", "context": "normal", "key": "ctrl+t" },
+      // Control, on the letter of the word. `ctrl+p` for the
+      // palette; `ctrl+w` is "close this" in every browser and
+      // most editors, and in a terminal it is also the shell's
+      // "delete the last word" -- which a terminal of Obelus's
+      // own gives up for it, below.
+      { "command": "run-command", "context": "normal", "key": "ctrl+p" },
+      { "command": "close-document", "context": "normal", "key": "ctrl+w" },
+      // And the same key in the list of what is open, where it
+      // closes the one on the row. One key that means "close
+      // this" everywhere beats a second key that works in one
+      // place -- and the list is a dialog, so it has to be bound
+      // in it to reach it.
+      { "command": "close-document", "context": "documents", "key": "ctrl+w" },
+      // What a terminal keeps for Obelus while its program runs,
+      // and nothing else: the palette, which is how everything
+      // else is reached from in there; paste, under the name a
+      // desktop sends a terminal for it; and closing it, on the
+      // key that closes everything else in Obelus. `ctrl+w` is a
+      // shell's word rubbed out as well, and it was given up for
+      // `ctrl+shift+w` once -- which made the one document whose
+      // close was a different key, and the one command Obelus
+      // named with shift. A word goes as well with `alt+backspace`.
+      // And leaving: `ctrl+q` is
+      // a shell's only as the flow control nobody has used since
+      // terminals were printers, and a key that leaves Obelus
+      // everywhere but in one kind of document is a key a reader
+      // cannot trust.
+      { "command": "run-command", "context": "terminal", "key": "ctrl+p" },
+      { "command": "quit", "context": "terminal", "key": "ctrl+q" },
+      { "command": "paste", "context": "terminal", "key": "shift+insert" },
+      // And under the name it has everywhere else in Obelus, which
+      // is also the one a desktop sends a *window* for its paste:
+      // without it, the desktop's own paste in `obg` put a `^V` in
+      // front of the shell. Taken from the program for good --
+      // vim's block selection and a shell's literal next character
+      // -- which is what Windows Terminal and VS Code's terminal
+      // decided too.
+      { "command": "paste", "context": "terminal", "key": "ctrl+v" },
+      // And copy under the same name. `ctrl+c` copies too, where
+      // something is held -- which is a question about the
+      // terminal rather than a binding, so it is asked there
+      // (`App::terminal_key`).
+      { "command": "copy-selection", "context": "terminal", "key": "ctrl+insert" },
+      { "command": "close-document", "context": "terminal", "key": "ctrl+w" },
+      { "command": "save-file", "context": "normal", "key": "ctrl+s" },
+      { "command": "reload-file", "context": "normal", "key": "ctrl+r" },
+      // `ctrl+d` for display: the file the way its format reads.
+      // It sat in the third bank of function keys until that bank
+      // was given to git, and on `ctrl+t` until the notes needed
+      // it, and it belongs to control anyway: control does
+      // something to the file in front of the reader, and a
+      // reading of the file is that rather than a thing opened to
+      // look at. Not `p`, which is the palette, and not `v`, which
+      // is the paste it was being kept for.
+      { "command": "toggle-preview", "context": "normal", "key": "ctrl+d" },
+      // `ctrl+l` for a line. Free in a full-screen program: the
+      // shell's `ctrl+l` clears a screen Obelus is drawing.
+      { "command": "go-to-line", "context": "normal", "key": "ctrl+l" },
+      // Raw mode makes `ctrl+c` an input event rather than SIGINT,
+      // and it is the copy chord every terminal can report. A
+      // desktop's `super+c` can map to this later, but cannot be a
+      // portable default because many terminals never receive it.
+      { "command": "copy-selection", "context": "normal", "key": "ctrl+c" },
+      // `ctrl+a` for all of it, as in every program with a
+      // selection. It is also screen's prefix and tmux's other
+      // one: a reader inside either of those has to rebind it,
+      // and the keys page is where.
+      // The four a reader arrives already knowing. `ctrl+v` was
+      // being kept for this one; `ctrl+y` is redo because
+      // `ctrl+shift+z` cannot be said here -- a control byte
+      // cannot carry the case of a letter, and the chord only
+      // reaches a terminal speaking the kitty protocol.
+      { "command": "cut-selection", "context": "normal", "key": "ctrl+x" },
+      { "command": "paste", "context": "normal", "key": "ctrl+v" },
+      // And again inside a dialog. These three are not about the
+      // file, they are about whatever has a caret in it -- and a
+      // list, the settings and a conversation all have a box a
+      // reader types into. Bound rather than left to fall
+      // through, because a dialog answers no global key at all.
+      { "command": "copy-selection", "context": "dialog", "key": "ctrl+c" },
+      { "command": "cut-selection", "context": "dialog", "key": "ctrl+x" },
+      { "command": "paste", "context": "dialog", "key": "ctrl+v" },
+      // And taking all of what is in the box, which is how a
+      // selection to copy or cut is made in one key.
+      { "command": "select-all", "context": "dialog", "key": "ctrl+a" },
+      // And the same two under the names a desktop uses for
+      // them. Argued in `why_not`, which has to let them
+      // through: they are the chords omarchy's `super+c` and
+      // `super+v` turn into where the thing they are sent to
+      // looks like a terminal.
+      { "command": "copy-selection", "context": "normal", "key": "ctrl+insert" },
+      { "command": "paste", "context": "normal", "key": "shift+insert" },
+      { "command": "copy-selection", "context": "dialog", "key": "ctrl+insert" },
+      { "command": "paste", "context": "dialog", "key": "shift+insert" },
+      { "command": "undo", "context": "normal", "key": "ctrl+z" },
+      { "command": "redo", "context": "normal", "key": "ctrl+y" },
+      { "command": "select-all", "context": "normal", "key": "ctrl+a" },
+      { "command": "quit", "context": "always", "key": "ctrl+q" },
+      // And in a dialog, where almost nothing is bound, because
+      // the reason almost nothing is -- a global key reaching a
+      // dialog would open a second thing over it -- is the one
+      // reason this key cannot have: leaving opens nothing. It
+      // was already written down as the behaviour (`handle_key`
+      // says a layer lets `ctrl+q` fall through it) and was not
+      // the behaviour: a dialog's context never reaches what is
+      // bound everywhere, so the chord was not a command there at
+      // all and the key did nothing. `Context::Documents` falls
+      // back to this one, and a conversation to the file's, so
+      // this is the whole of what was missing.
+      { "command": "quit", "context": "dialog", "key": "ctrl+q" },
+      // Alt: about the cursor. Enter on top of that is "open what
+      // I am on", so the menu of everything a server can say
+      // about the name under the caret is where the two meet.
+      //
+      // Not borrowed from an IDE, whatever the chord looks like:
+      // JetBrains' `alt+enter` is its intentions and quick fixes,
+      // which here is `alt+a` -- the server offering to *change*
+      // the file, not Obelus offering to go and look at it. A
+      // comment claiming the muscle memory would be claiming it
+      // for the wrong half.
+      //
+      // Alt is also the escape prefix, so it arrives from every
+      // terminal -- unlike `ctrl+enter`, which needs the keyboard
+      // protocol.
+      { "command": "ask-about-symbol", "context": "normal", "key": "alt+enter" },
+      // `alt+d` for the diff of this line: a question about the
+      // line under the cursor, asked with the first letter of the
+      // answer. Who wrote it is not here -- that is a setting,
+      // because it is on until the reader says otherwise.
+      { "command": "show-change", "context": "normal", "key": "alt+d" },
+      // `alt+f` for fold, on the letter of the word like the
+      // rest of this family. What it folds is whatever the
+      // cursor is inside, which is the question alt asks.
+      { "command": "fold", "context": "normal", "key": "alt+f" },
+      // `alt+m` for match, which is what this is called
+      // everywhere. Not `%`: Obelus binds no bare keys, because
+      // the day it takes typed text is the day every one of them
+      // becomes a character.
+      { "command": "go-to-bracket", "context": "normal", "key": "alt+m" },
+      // `alt+n` and `alt+p` for the next and previous change,
+      // joining `alt+d` for the diff of this one: three keys about
+      // the same thing, on the letters of what they do.
+      //
+      // The arrows would read better and are spent better below:
+      // `alt+arrow` moving a line is the chord every editor with a
+      // mouse has taught, and stepping between changes has letters
+      // to fall back on where moving a line has none -- the rules
+      // refuse two modifiers, and an arrow may only be bound under
+      // `alt`.
+      { "command": "go-to-previous-change", "context": "normal", "key": "alt+p" },
+      { "command": "go-to-next-change", "context": "normal", "key": "alt+n" },
+      // `alt+[` and `alt+]` for the previous and next problem.
+      //
+      // A second pair of previous-and-next keys, in a different
+      // idiom from the first, which is worth saying out loud. The
+      // letters are spoken for -- `alt+p` is the previous change
+      // and `alt+n` the next one -- and the bracket pair is what
+      // every editor with two of these reaches for second: Vim's
+      // unimpaired bindings, VS Code's `alt+[`/`alt+]` on the
+      // Mac. The alternative was giving the brackets to the
+      // changes and the letters to the problems, which moves a
+      // key readers already have for no gain.
+      //
+      // Not `f8` and `shift+f8`, which is where VS Code puts
+      // these: a function key here is bare or it is two keys on
+      // the next terminal, so only half of that pair can be had,
+      // and half a pair is worse than neither.
+      { "command": "go-to-previous-problem", "context": "normal", "key": "alt+[" },
+      { "command": "go-to-next-problem", "context": "normal", "key": "alt+]" },
+      // Not `ctrl+alt+arrow`, which GNOME and KDE take for
+      // switching workspaces: a key the desktop eats before the
+      // terminal sees it looks like a broken program.
+      { "command": "move-line-up", "context": "normal", "key": "alt+up" },
+      { "command": "move-line-down", "context": "normal", "key": "alt+down" },
+      // `alt+a` for the actions offered here, on the letter like
+      // the rest of this family.
+      //
+      // This is the one an IDE reader reaches for with a chord --
+      // JetBrains' `alt+enter`, VS Code's `ctrl+.` -- and it is on
+      // a letter anyway, because neither of those can be had here.
+      // `alt+enter` is spent above on a menu Obelus invented; and
+      // `ctrl+.` is not a key a terminal has a byte for, so it
+      // arrives only from the terminals speaking the keyboard
+      // protocol and is silence in the rest. The same reason
+      // `ctrl+shift+z` is not redo.
+      { "command": "do-something-here", "context": "normal", "key": "alt+a" },
+      // `alt+r` for rename, on the letter of the word like the
+      // rest of this family -- and the one key here that changes
+      // files the reader cannot see, which is why it asks first.
+      { "command": "rename-symbol", "context": "normal", "key": "alt+r" },
+      // `alt+h` for what this is -- hover, which is what every
+      // editor calls it and what the protocol calls it, on the
+      // letter of the word like the rest of this family.
+      { "command": "describe-symbol", "context": "normal", "key": "alt+h" },
+      // `alt+s` for signature: what the call the cursor is
+      // inside takes, on the letter of the word like the rest of
+      // this family. The way in for a reader who is *reading* a
+      // call rather than writing one -- every other way asks
+      // because a character was typed, and moving the caret into
+      // a call that is already written types nothing.
+      { "command": "show-signature", "context": "normal", "key": "alt+s" },
+      // `alt+e` for error: what the server says is wrong with
+      // this file, on the letter like the rest of this family.
+      { "command": "show-problems", "context": "normal", "key": "alt+e" },
+      // `alt+w` for widen, joining the family that asks about
+      // whatever the caret is in: the first step is the word it
+      // is in, and the rest are what the grammar says holds it.
+      { "command": "widen-selection", "context": "normal", "key": "alt+w" },
+      // `alt+c` for comment, on the letter like the rest of this
+      // family -- and `ctrl+/`, which is what everyone else uses,
+      // for the terminals that can say it. Most send `ctrl+_` or a
+      // bare control byte for that chord and Obelus never hears
+      // it; the letter is the one that works everywhere.
+      { "command": "toggle-comment", "context": "normal", "key": "alt+c" },
+      { "command": "toggle-comment", "context": "normal", "key": "ctrl+/" },
+      // The one key that names itself, and the one binding
+      // outside the three families. `Insert` is what this does on
+      // every keyboard that has the key, it is bare because it is
+      // not a letter and cannot be typing, and a chord for it
+      // would be a chord nobody would look for.
+      { "command": "toggle-replace", "context": "normal", "key": "insert" },
+      // The browser's keys, for the browser's idea: a history of
+      // places, walked in both directions. vim's `ctrl+o` and
+      // `ctrl+i` cannot both be used -- `ctrl+i` *is* tab.
+      { "command": "go-back", "context": "normal", "key": "alt+left" },
+      { "command": "go-forward", "context": "normal", "key": "alt+right" },
+      // Escape, which means "never mind" everywhere. It reaches
+      // the key table only when no picker and no prompt is open,
+      // because each of those takes it first -- so this is escape
+      // pressed at the file itself, and the only thing there to
+      // give up on is a selection.
+      { "command": "clear-selection", "context": "normal", "key": "esc" },
+  ],
+}

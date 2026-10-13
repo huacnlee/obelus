@@ -7,18 +7,22 @@
 //! A project may carry settings, and a project is not the reader.
 //! `.obelus/config.toml` in the working directory, laid *over* the reader's own
 //! file key by key: the project says what this project needs -- wrapped lines,
-//! a theme -- and says nothing about everything else, which stays theirs. Read
-//! into a fresh config instead of over theirs and a project with one line in it
-//! would turn off a reader's wrapping, which is what every "project settings"
-//! feature that replaces rather than layers actually does.
+//! a tab width -- and says nothing about everything else, which stays theirs.
+//! Read into a fresh config instead of over theirs and a project with one line
+//! in it would turn off a reader's wrapping, which is what every "project
+//! settings" feature that replaces rather than layers actually does.
 //!
-//! A directory rather than a dotfile, because settings are not the only thing a
-//! project will keep for Obelus -- a theme of its own, whatever comes after it
-//! -- and one directory is one thing to find, to copy between machines and to
-//! name in a `.gitignore`, where a dotfile per kind of thing is a row of them
-//! at the top of every listing. Only the working directory itself, never
-//! walking up: Obelus has one answer to which project it is on -- the file list
-//! walks it, the counts count it, git is read from it.
+//! Not a theme: the themes are the reader's, built in or in their own
+//! directory, and a project names none of them and keeps none of its own --
+//! see `obelus_config`, where `theme` is `ReaderOnly`.
+//!
+//! A directory rather than a dotfile, because settings may not stay the only
+//! thing a project keeps for Obelus, and one directory is one thing to find,
+//! to copy between machines and to name in a `.gitignore`, where a dotfile per
+//! kind of thing is a row of them at the top of every listing. Only the
+//! working directory itself, never walking up: Obelus has one answer to which
+//! project it is on -- the file list walks it, the counts count it, git is
+//! read from it.
 //!
 //! The project's settings have a page of their own, `open-project-settings`, a
 //! command rather than a fifth tab: the tabs there are *groups* of settings and
@@ -174,6 +178,26 @@ pub(in crate::app) struct Settled {
     /// The settings that file set, which are the ones the reader cannot
     /// change here.
     pub pinned: Vec<&'static str>,
+    /// Where omarchy writes the theme it renders for Obelus, on a machine
+    /// that could have one -- see `obelus_theme::builtin::OMARCHY`.
+    ///
+    /// Beside the path of the reader's settings and set where that is,
+    /// because it is the same kind of fact: where this machine keeps
+    /// something of the reader's. Nothing in a test that has not said, so
+    /// a test run on a machine with omarchy on it sees what it sees
+    /// everywhere else.
+    pub omarchy: Option<PathBuf>,
+    /// Where the themes taken from the registry are kept, a directory
+    /// each -- see `obelus_themes::root`. Set where the reader's settings
+    /// path is, for the reason `omarchy` is.
+    pub installed: Option<PathBuf>,
+    /// Whether the reader has no settings file at all, so nobody has said
+    /// which keys Obelus starts from.
+    ///
+    /// Written down where the file is read and asked once the loop has
+    /// started (`App::ask_for_a_keymap`): a list needs the loop's channel,
+    /// and what went wrong on the way up is told first.
+    pub unchosen: bool,
 }
 
 impl Default for Settled {
@@ -190,6 +214,9 @@ impl Default for Settled {
             no_theme: None,
             project: None,
             pinned: Vec::new(),
+            omarchy: None,
+            installed: None,
+            unchosen: false,
         }
     }
 }
@@ -212,12 +239,16 @@ impl App {
         self.make_room(Room::Region);
         // Asked for now rather than when the tab is reached: the fetch
         // takes a moment, and a reader who walks to the agents tab should
-        // find a list there rather than watch one arrive.
+        // find a list there rather than watch one arrive. And the themes'
+        // index, for the same reason.
         self.refresh_registry();
+        self.refresh_themes();
         // And what the active agent offers, asked of it now: the page draws
         // what was last heard until the answer arrives.
         self.ask_what_the_agent_offers();
-        self.settings = Some(Settings::new());
+        let mut settings = Settings::new();
+        settings.hear_keymap(&self.keymap, &self.laid_out_keys(), self.lined_keys());
+        self.settings = Some(settings);
     }
 
     /// Opens the project's own settings, which are a page of the same shape.
@@ -230,7 +261,9 @@ impl App {
         self.refresh_registry();
         // Nothing asked of the agent: what it starts on is the reader's
         // alone, and the project's page has no group for it.
-        self.settings = Some(Settings::for_project());
+        let mut settings = Settings::for_project();
+        settings.hear_keymap(&self.keymap, &self.laid_out_keys(), self.lined_keys());
+        self.settings = Some(settings);
     }
 
     /// Offers a key to the settings page, and says whether it took it.
@@ -270,12 +303,17 @@ impl App {
         // for them: the rows a notch counts are the rows the page shows now.
         self.settle_the_remote_page();
         let listed = self.listed_agents();
+        let themes = self.themes_on_the_page();
         let offering = self.agent_offering();
         let room = self.settings_room(self.editor_area, offering.as_ref());
         let Some(settings) = self.settings.as_mut() else {
             return false;
         };
-        settings.scroll(rows, &listed, offering.as_ref(), room);
+        let cards = Cards {
+            agents: &listed,
+            themes: &themes,
+        };
+        settings.scroll(rows, cards, offering.as_ref(), room);
         true
     }
 
@@ -292,9 +330,10 @@ impl App {
         // is borrowed: it needs them to know what enter means on a card,
         // and it is not the thing that knows them.
         let listed = self.listed_agents();
-        // Cloned for the same reason: the page needs the table to say which
-        // key each command is on, and it is the application that owns it.
-        let keymap = self.keymap.clone();
+        let themes = self.themes_on_the_page();
+        // A delete pressed once on a theme only counts towards the next
+        // press if nothing else was pressed between.
+        let taking = self.themes.taking.take();
         // And what the active agent offers, for the same reason again: the
         // page lists its settings and knows nothing about where they came
         // from.
@@ -306,8 +345,10 @@ impl App {
         match settings.handle_key(
             key,
             &self.settled.config,
-            &keymap,
-            &listed,
+            Cards {
+                agents: &listed,
+                themes: &themes,
+            },
             offering.as_ref(),
             room,
         ) {
@@ -324,8 +365,17 @@ impl App {
                 self.unset_setting(key);
                 true
             }
-            SettingsOutcome::Bind(command, chord) => {
-                self.rebind(command, chord);
+            SettingsOutcome::Bind(command, chords) => {
+                self.rebind(command, chords);
+                true
+            }
+            SettingsOutcome::ResetKeys(command) => {
+                self.settled.readers.keys.remove(command.name());
+                self.keep_the_keys();
+                true
+            }
+            SettingsOutcome::ResetAllKeys => {
+                self.ask_to_put_every_key_back();
                 true
             }
             SettingsOutcome::Choose(key, choices, word) => {
@@ -342,6 +392,15 @@ impl App {
             }
             SettingsOutcome::Install(id) => {
                 self.install_agent(&id);
+                true
+            }
+            SettingsOutcome::InstallTheme(name) => {
+                self.install_theme(&name);
+                true
+            }
+            SettingsOutcome::RemoveTheme(name) => {
+                self.themes.taking = taking;
+                self.take_theme_away(&name);
                 true
             }
             SettingsOutcome::Activate(id) => {
@@ -457,6 +516,22 @@ impl App {
         choices: &'static [&'static str],
         word: &str,
     ) {
+        let mut picker = self.choices(key, choices, word);
+        // What the theme was, for the same reason the theme list keeps it:
+        // walking this list wears each colour in turn, and the one that was
+        // on is only in the running program.
+        if key == "theme" {
+            self.theme_before = Some((self.theme_name().to_string(), self.worn()));
+            picker.otherwise(
+                crate::app::project::themes::NONE_HERE,
+                PickerValue::MoreThemes,
+            );
+        }
+        self.show_list(picker);
+    }
+
+    /// The list of a setting's choices, opened on the one in force.
+    fn choices(&self, key: &'static str, choices: &'static [&'static str], word: &str) -> Picker {
         // The themes are the one list here the table cannot hold: which of
         // them there are is a question about two directories, and the table
         // is static data about what a setting *is*. So it is asked of the
@@ -475,16 +550,7 @@ impl App {
             // is a word to remember it by and not a description of it.
             "keys_from" => choices
                 .iter()
-                .map(|choice| {
-                    let about = match *choice {
-                        "classic" => Some("The function keys, in banks of four"),
-                        "mnemonic" => Some(
-                            "Control and alt, on the letter of the word -- which a running terminal keeps for its program",
-                        ),
-                        _ => None,
-                    };
-                    ((*choice).to_string(), about.map(str::to_string))
-                })
+                .map(|choice| ((*choice).to_string(), self.about_a_layout(choice)))
                 .collect(),
             // The chats Obelus can be reached from, after none: which there
             // are is the remote crate's list, not a row of the table.
@@ -517,7 +583,11 @@ impl App {
                 label: label(&choice),
                 version: None,
                 detail: about,
-                trailing: None,
+                // Where a theme comes from, the way the theme list says it.
+                trailing: (key == "theme")
+                    .then(|| self.theme_whence(&choice))
+                    .flatten()
+                    .map(str::to_string),
                 changed: None,
                 value: PickerValue::Setting { key, word: choice },
                 enabled: true,
@@ -529,6 +599,9 @@ impl App {
                 tab: None,
                 section: None,
             })
+            // And for a theme, the row that goes for more of them -- the
+            // same list as the one opened by its own key, so the same foot.
+            .chain((key == "theme").then(Self::more_themes))
             .collect();
         // Taller for the workflows, whose choices are a few rows each: the
         // list only ever draws a choice whole, so at the ordinary height the
@@ -544,7 +617,8 @@ impl App {
         // Read whole, the way the list of conversations is, because what
         // is under each workflow is a few sentences rather than a word --
         // and all of them, because they are Obelus's own. A layout's is
-        // one, and its last words are the ones about a terminal.
+        // one, and its last words are the keys it puts the files and the
+        // palette on.
         if matches!(key, "workflow" | "keys_from") {
             picker.wraps(None);
             picker.details_whole();
@@ -552,13 +626,91 @@ impl App {
         // Opened on the one in force, so the list starts by saying which
         // that is.
         picker.prefer(preferred);
-        // What the theme was, for the same reason the theme list keeps it:
-        // walking this list wears each colour in turn, and the one that was
-        // on is only in the running program.
-        if key == "theme" {
-            self.theme_before = Some((self.theme_name().to_string(), *self.theme()));
+        picker
+    }
+
+    /// What a layout puts the keys on, and two of them as they would be.
+    ///
+    /// Because the name is a word to remember it by and not a description
+    /// of it. What it is comes from [`obelus_config::key_layout`], beside
+    /// the setting, so the list and the setting cannot describe one layout
+    /// two ways. The two keys are asked of the table that layout would build,
+    /// with the reader's own `[keys]` laid over it as they would be, so a
+    /// row cannot name a key the layout does not give -- and the two are
+    /// the ones a reader reaches for first: a file, and everything else.
+    fn about_a_layout(&self, word: &str) -> Option<String> {
+        let gloss = obelus_config::key_layout(word)?.about;
+        let layout = obelus_keymap::Layout::named(word)?;
+        let (keymap, _) = obelus_keymap::Keymap::with(layout, &self.settled.config.keys);
+        let key = |command| {
+            keymap
+                .chord_for(command)
+                .map(obelus_keymap::KeyChord::label)
+        };
+        let examples: Vec<String> = [
+            ("Open a file with", Command::FileOpen),
+            ("run a command with", Command::CommandPalette),
+        ]
+        .into_iter()
+        .filter_map(|(words, command)| Some(format!("{words} {}", key(command)?)))
+        .collect();
+        if examples.is_empty() {
+            return Some(gloss.to_string());
         }
+        // A sentence of its own, so it has to start with a capital however
+        // many of the two there are.
+        let mut said = examples.join(", ");
+        if let Some(first) = said.get(..1) {
+            said.replace_range(..1, &first.to_uppercase());
+        }
+        Some(format!("{gloss}. {said}"))
+    }
+
+    /// Offers the layouts the reader's keys start from, on a first start.
+    ///
+    /// The setting's own list -- the one the settings page opens, rows,
+    /// filtering and all -- with a question over it, because a first start
+    /// has no settings row above it to say what is being chosen. Choosing
+    /// one writes it at once, as a row of the settings page does.
+    ///
+    /// No command opens it. Which keys these are is a preference, chosen
+    /// once, and a preference is a setting: after the first start the
+    /// settings page is the way to it.
+    pub fn open_keymap_picker(&mut self) {
+        let mut picker = self.choices(
+            "keys_from",
+            obelus_config::KEY_LAYOUTS,
+            &self.settled.readers.keys_from.clone(),
+        );
+        picker.ask("Which keys Obelus starts from");
         self.show_list(picker);
+    }
+
+    /// Asks which keys to start from, on a first start.
+    ///
+    /// A first start is one with no settings file, and nothing else: a
+    /// reader with a file has been here before, whether or not it names a
+    /// layout, and one whose file will not read must not be asked a
+    /// question whose answer is written over it. Asked once per process --
+    /// escape leaves the defaults and writes nothing, so the next start
+    /// asks again, and any answer writes the file, `obelus` included, so
+    /// no start after it does.
+    ///
+    /// Not where nobody is at the screen, and not over the page asking
+    /// which project: that page is the whole screen and the more pressing
+    /// question, so this waits for the answer (`App::settle_on`).
+    pub(in crate::app) fn ask_for_a_keymap(&mut self) {
+        if !self.settled.unchosen || self.is_headless() || self.which_project.chooser.is_some() {
+            return;
+        }
+        self.settled.unchosen = false;
+        self.open_keymap_picker();
+    }
+
+    /// Lets a first start's question about the keys go unasked, for the
+    /// rest of this process: a start that had something else to say first.
+    pub(in crate::app) const fn let_the_keymap_question_go(&mut self) {
+        self.settled.unchosen = false;
     }
 
     /// Offers one of the agent's settings, as the same compact list.
@@ -756,26 +908,62 @@ impl App {
         ));
     }
 
-    /// Where a theme file may be, nearest first.
+    /// Where a theme file may be: beside the reader's settings, and nowhere
+    /// else.
     ///
-    /// The project's own `.obelus/themes` and then the reader's, which is the
-    /// order the settings themselves are laid: what a project says about
-    /// itself goes over what the reader says about everything. A theme is
-    /// only colours -- there is no code in one, and nothing in a file here
-    /// can be run -- so a project may hand one over on the same terms it hands
-    /// over a wrapped line.
+    /// Not a project's `.obelus/themes`, which there was: the themes are
+    /// the reader's, and a project's file may not name one (`theme` is
+    /// `ReaderOnly`), so a theme a project carried could only ever be one
+    /// the reader went looking for -- and the reader's own directory is
+    /// where they keep those.
+    ///
+    /// And where the themes taken from the registry are kept, after it: a
+    /// theme of the reader's by the same name is theirs, and comes first.
     fn theme_directories(&self) -> Vec<PathBuf> {
-        let project = self
-            .settled
-            .project
-            .as_deref()
-            .and_then(obelus_theme::written::beside);
-        let readers = self
-            .settled
+        self.readers_themes()
+            .into_iter()
+            .chain(self.settled.installed.clone())
+            .collect()
+    }
+
+    /// The reader's own themes, beside their settings.
+    fn readers_themes(&self) -> Option<PathBuf> {
+        self.settled
             .path
             .as_deref()
-            .and_then(obelus_theme::written::beside);
-        project.into_iter().chain(readers).collect()
+            .and_then(obelus_theme::written::beside)
+    }
+
+    /// Where a theme comes from, as a list says it beside the name: from
+    /// the registry, or the reader's own -- and nothing for one built in,
+    /// which every reader has.
+    ///
+    /// Said because a theme of the reader's can wear a built-in name, and
+    /// does go first: without it, the `nord` in the list is not the `nord`
+    /// in Obelus, and nothing on the screen says so.
+    #[must_use]
+    pub fn theme_whence(&self, name: &str) -> Option<&'static str> {
+        let holds = |directory: Option<PathBuf>| {
+            directory.is_some_and(|directory| {
+                obelus_theme::written::found_in(&directory)
+                    .iter()
+                    .any(|(called, _)| called == name)
+            })
+        };
+        if holds(self.readers_themes()) {
+            Some("Local")
+        } else if holds(self.settled.installed.clone()) {
+            Some("Downloaded")
+        } else {
+            None
+        }
+    }
+
+    /// Says where the themes taken from the registry are, for a test: the
+    /// real place is under the reader's data directory, which a test must
+    /// not read.
+    pub fn installed_themes_for_test(&mut self, root: PathBuf) {
+        self.settled.installed = Some(root);
     }
 
     /// What one of a setting's words is called on screen, where it is
@@ -800,11 +988,7 @@ impl App {
                 "" => Some("Off".into()),
                 key => obelus_remote::platform::named(key).map(|platform| platform.name.into()),
             },
-            "keys_from" => match word {
-                "classic" => Some("Classic".into()),
-                "mnemonic" => Some("Mnemonic".into()),
-                _ => None,
-            },
+            "keys_from" => obelus_config::key_layout(word).map(|layout| layout.name.into()),
             // A share of the machine, with what it comes to on this one:
             // the word is the same on every machine the file is read on,
             // and the number is what the reader is actually choosing.
@@ -848,27 +1032,49 @@ impl App {
             .flat_map(|directory| obelus_theme::written::found_in(directory))
             .map(|(name, _)| name)
             .collect();
-        names.extend(builtin::ALL.iter().map(|(name, _)| (*name).to_string()));
+        // Obelus's own two, then omarchy's where it has written one -- the
+        // theme of the desktop the reader is on, which is the next thing
+        // they would look for -- then the rest of the shelf.
+        let mut built_in: Vec<String> = builtin::ALL
+            .iter()
+            .map(|(name, _)| (*name).to_string())
+            .collect();
+        if self.omarchy().is_some() {
+            built_in.insert(2.min(built_in.len()), builtin::OMARCHY.to_string());
+        }
+        names.extend(built_in);
         let mut seen = std::collections::HashSet::new();
         names.retain(|name| seen.insert(name.clone()));
         names
     }
 
     /// The colours a name stands for, out of the files and then the
-    /// built-in ones.
+    /// built-in ones -- and the picture under them, where a file names one.
     ///
     /// `None` where nothing answers to it, which is a setting naming a theme
     /// that has been renamed or deleted: the colours on screen stay as they
     /// are, because a reader who cannot read the screen cannot fix the file.
     #[must_use]
-    pub fn theme_called(&mut self, name: &str) -> Option<Theme> {
+    pub fn theme_called(&mut self, name: &str) -> Option<Worn> {
         let Some(path) = self.theme_file(name) else {
-            return builtin::by_name(name).copied();
+            return builtin::by_name(name).copied().map(Worn::from);
         };
         match obelus_theme::written::read_where(&path) {
-            Ok(theme) => {
+            Ok(read) => {
                 self.nothing_wrong_with(&path);
-                Some(theme)
+                // A line the theme could do without, marked where it is:
+                // the theme is worn all the same, with that line left at
+                // what it would have been had it not been written.
+                for trouble in read.troubles {
+                    tracing::debug!(why = trouble.why, "a line of a theme that did nothing");
+                    self.obelus_says(
+                        &path,
+                        trouble.at,
+                        obelus_lsp::trouble::Severity::Warning,
+                        &trouble.why,
+                    );
+                }
+                Some(read.worn)
             }
             Err(wrong) => {
                 tracing::warn!(why = wrong.why, "a theme that would not read");
@@ -892,26 +1098,66 @@ impl App {
     /// The file a name is written in, where one is.
     #[must_use]
     fn theme_file(&self, name: &str) -> Option<PathBuf> {
-        self.theme_directories().into_iter().find_map(|directory| {
-            obelus_theme::written::found_in(&directory)
-                .into_iter()
-                .find(|(called, _)| called == name)
-                .map(|(_, path)| path)
-        })
+        self.theme_directories()
+            .into_iter()
+            .find_map(|directory| {
+                obelus_theme::written::found_in(&directory)
+                    .into_iter()
+                    .find(|(called, _)| called == name)
+                    .map(|(_, path)| path)
+            })
+            .or_else(|| (name == builtin::OMARCHY).then(|| self.omarchy()).flatten())
+    }
+
+    /// The theme omarchy has written for Obelus, where it has -- see
+    /// `obelus_theme::builtin::OMARCHY`.
+    fn omarchy(&self) -> Option<PathBuf> {
+        self.settled.omarchy.clone().filter(|file| file.is_file())
+    }
+
+    /// Says where omarchy's theme would be, for a test: the real one is
+    /// under the reader's home, which a test must not read.
+    pub fn omarchy_for_test(&mut self, file: PathBuf) {
+        self.settled.omarchy = Some(file);
     }
 
     /// The directories a change to the theme in force could arrive in.
     ///
-    /// The two themes are looked for in, and wherever the one in force
-    /// really lives. That last one is the whole reason this is not simply
-    /// the first two: a theme file is often a link into a directory
-    /// something else owns -- a dotfiles repository, or a desktop that
-    /// themes every program it has -- and what rewrites it rewrites that
-    /// directory, which a watch on the link's own would never hear about.
+    /// The one themes are looked for in, and wherever the one in force
+    /// really lives. That second one is the whole reason this is not simply
+    /// the first: a theme file is often a link into a directory something
+    /// else owns -- a dotfiles repository, or a desktop that themes every
+    /// program it has -- and what rewrites it rewrites that directory, which
+    /// a watch on the link's own would never hear about.
     pub(in crate::app) fn theme_watches(&self) -> Vec<PathBuf> {
         let mut directories = self.theme_directories();
         if let Some(path) = self.theme_file(&self.settled.config.theme)
             && let Some(parent) = obelus_config::resolved(&path).parent()
+        {
+            directories.push(parent.to_path_buf());
+        }
+        // And omarchy's `current`, while omarchy's theme is the one named:
+        // omarchy replaces the directory under it whole, so for a moment
+        // there is no file to find the directory by -- and before omarchy
+        // first renders one there never was. `current` stays, and the theme
+        // arriving in it is heard there; reading it takes up the watch on
+        // the new directory again.
+        if self.settled.config.theme == builtin::OMARCHY
+            && let Some(current) = self
+                .settled
+                .omarchy
+                .as_deref()
+                .and_then(Path::parent)
+                .and_then(Path::parent)
+            && !directories.iter().any(|directory| directory == current)
+        {
+            directories.push(current.to_path_buf());
+        }
+        // And wherever its picture is, which a theme may name from anywhere:
+        // a picture replaced under its own name is the theme changing as
+        // surely as a colour is.
+        if let Some(parent) = self.wallpaper().and_then(|hung| hung.file.parent())
+            && !directories.iter().any(|directory| directory == parent)
         {
             directories.push(parent.to_path_buf());
         }
@@ -1077,29 +1323,94 @@ impl App {
         self.open(&path);
     }
 
-    /// Moves a command onto a key, or takes its key away, and writes the
-    /// file.
+    /// Puts a command on these keys and no others, or on none, and writes
+    /// the file.
     ///
-    /// The same shape as changing a setting -- applied first, saved second
-    /// -- and through the same table: what is written down is the command's
-    /// name and the chord spelled out, because a table full of enum
-    /// spellings and keycodes would be Obelus's own business rather than
-    /// something a reader can edit.
+    /// The same shape as changing a setting, and through the same steps:
+    /// into the reader's own layer, the project's laid back over it, the
+    /// table built again from what the file says -- and not saved over a
+    /// file that will not read. What is written down is the command's name
+    /// and the chords spelled out, because a table full of enum spellings
+    /// and keycodes would be Obelus's own business rather than something a
+    /// reader can edit.
+    ///
+    /// Built again rather than patched, because a patched table and one
+    /// built from the file are two answers: patching wrote the project's
+    /// settings into the reader's file, lost the key at the next change of
+    /// any setting, and put a command's key back in only one of the
+    /// contexts the layout had it in.
     pub(in crate::app) fn rebind(
         &mut self,
         command: obelus_command::Command,
-        chord: Option<KeyChord>,
+        chords: Vec<KeyChord>,
     ) {
-        let written = chord.map(|chord| chord.label_in(false)).unwrap_or_default();
+        let written = chords.iter().map(|chord| chord.label_in(false)).collect();
         self.settled
-            .config
+            .readers
             .keys
             .insert(command.name().to_string(), written);
-        self.keymap.rebind(command, chord);
+        self.keep_the_keys();
+    }
+
+    /// Asks whether to put every command back on its layout's keys: a
+    /// list of two, because it takes every key the reader chose at once,
+    /// and the reader is in a list of keys already.
+    fn ask_to_put_every_key_back(&mut self) {
+        let layout = obelus_config::key_layout(&self.settled.config.keys_from)
+            .map_or("the layout", |layout| layout.name);
+        let row = |label: &str, value| PickerItem {
+            prose: false,
+            marker: None,
+            icon: None,
+            label: label.to_string(),
+            version: None,
+            detail: None,
+            trailing: None,
+            changed: None,
+            value,
+            enabled: true,
+            colours: None,
+            status: None,
+            depth: 0,
+            opens: None,
+            kind: None,
+            tab: None,
+            section: None,
+        };
+        let items = vec![
+            row("Put them back", PickerValue::KeysBack),
+            row("Keep them", PickerValue::Nothing),
+        ];
+        let mut picker = Picker::new(items, PickerLayout::Compact { rows: 2 });
+        picker.ask(&format!("Put every key back to {layout}'s?"));
+        // A question, which a key that names another view does not swap
+        // away: it is waiting on the reader.
+        picker.will_not_give_way();
+        self.show_list(picker);
+    }
+
+    /// Puts every command back on its layout's keys: the reader's key table
+    /// taken out of the file.
+    pub(in crate::app) fn put_every_key_back(&mut self) {
+        self.settled.readers.keys.clear();
+        self.keep_the_keys();
+    }
+
+    /// Makes the keys the reader's layer says the ones in force, and writes
+    /// the file -- the way a setting is: the project laid back over it, the
+    /// table built again, and nothing saved over a file that will not read.
+    fn keep_the_keys(&mut self) {
+        self.apply_project();
         let Some(path) = self.settled.path.clone() else {
             return;
         };
-        if let Err(error) = obelus_config::save_to(&path, &self.settled.config) {
+        if !self.settled.readable {
+            // Said here as a setting's change says it: this is the moment
+            // the reader finds out the key is not being kept.
+            self.wrong("Not saved: the settings will not read".to_string());
+            return;
+        }
+        if let Err(error) = obelus_config::save_to(&path, &self.settled.readers) {
             tracing::warn!(%error, "not saving the configuration");
             self.wrong(format!("Not saved: {error}"));
         }
@@ -1148,7 +1459,7 @@ impl App {
         let layout =
             obelus_keymap::Layout::named(&self.settled.config.keys_from).unwrap_or_default();
         let (keymap, unbound) = obelus_keymap::Keymap::with(layout, &self.settled.config.keys);
-        self.keymap = keymap;
+        self.set_keymap(keymap);
         self.settled.unbound = unbound;
         // What a server works out is drawn or it is not, and the switch has
         // to reach the screen either way: turned off it takes what is
@@ -1203,6 +1514,9 @@ impl App {
     /// than whatever the machine it runs on has in `~/.config`.
     pub fn load_config(&mut self) {
         self.settled.path = obelus_config::path();
+        self.settled.omarchy =
+            dirs::home_dir().map(|home| obelus_theme::builtin::omarchy_in(&home));
+        self.settled.installed = obelus_themes::root();
         if self.settled.path.is_none() {
             tracing::info!("nowhere to keep settings, so the defaults");
             return;
@@ -1224,7 +1538,12 @@ impl App {
         // Which file, and what was in it: "my setting did nothing" is
         // answered by the path Obelus actually read, and a reader with two
         // machines or an `XDG_CONFIG_HOME` has more than one candidate.
-        match obelus_config::read_from(&path) {
+        let reading = obelus_config::read_from(&path);
+        // Only a file that is not there: one that will not read is still
+        // the reader's, and a first start's question would be answered by
+        // writing over it.
+        self.settled.unchosen = !reading.keymap_is_chosen();
+        match reading {
             obelus_config::Reading::Settings {
                 config,
                 named,
@@ -1455,16 +1774,16 @@ impl App {
                 obelus_keymap::Unbindable::NoSuchCommand => {
                     format!("No command is called `{}`", one.name)
                 }
+                // About the key and not the line: a line may name several,
+                // and the ones that would do are bound -- which command it
+                // is goes without saying, because the mark is on its line.
                 obelus_keymap::Unbindable::Unreadable => {
-                    format!(
-                        "Nothing is bound to `{}`: `{}` is not a key",
-                        one.name, one.text
-                    )
+                    format!("No key is called `{}`", one.text)
                 }
                 // The reason the page that binds keys gives, in its own
                 // words, because it is the same judgement.
                 obelus_keymap::Unbindable::NotAllowed(why) => {
-                    format!("Nothing is bound to `{}`: {why}", one.name)
+                    format!("No command can be on `{}`: {why}", one.text)
                 }
             };
             let at = spans.get(&format!("keys.{}", one.name)).copied();

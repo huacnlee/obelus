@@ -69,7 +69,8 @@ fn the_row_under_a_list_is_not_marked() {
     let scratch = temporary("under-a-list");
     let mut app = open(&settings_file(&scratch));
     let dump = support::render(&mut app, 66, 12);
-    let lit = support::drawn_in(&dump, "Theme");
+    // With the space, which the tab of themes has not got after its word.
+    let lit = support::drawn_in(&dump, "Theme ");
     // And the tab, which is the same mark across a row: the page's own name
     // is the first word on the screen.
     let tab = support::drawn_in(&dump, "Settings");
@@ -82,7 +83,7 @@ fn the_row_under_a_list_is_not_marked() {
     let dump = support::render(&mut app, 66, 12);
     assert!(app.picker().is_some(), "the choices did not open:\n{dump}");
     assert_ne!(
-        support::drawn_in(&dump, "Theme"),
+        support::drawn_in(&dump, "Theme "),
         lit,
         "the page's row is lit under the list:\n{dump}"
     );
@@ -95,7 +96,7 @@ fn the_row_under_a_list_is_not_marked() {
     support::press(&mut app, KeyCode::Esc);
     let dump = support::render(&mut app, 66, 12);
     assert_eq!(
-        support::drawn_in(&dump, "Theme"),
+        support::drawn_in(&dump, "Theme "),
         lit,
         "the row did not take the mark back:\n{dump}"
     );
@@ -214,6 +215,8 @@ fn a_choice_opens_the_list_every_other_choice_uses() {
         obelus_theme::builtin::ALL
             .iter()
             .map(|(name, _)| (*name).to_string())
+            // And the row that goes for more of them, at the foot.
+            .chain(std::iter::once("More themes".to_string()))
             .collect::<Vec<_>>(),
         "not the theme's choices"
     );
@@ -441,22 +444,31 @@ fn every_setting_is_on_one_page_under_a_heading() {
     );
 
     // And the tabs are the pages: the settings, the keys, the chat this
-    // machine can be reached from, the agents -- the agents last, so that
-    // shift and tab from the settings is still the way to them.
+    // machine can be reached from, the themes, the agents -- the agents
+    // last, so that shift and tab from the settings is still the way to
+    // them.
     assert_eq!(
         app.settings().expect("the settings").tabs(),
-        ["Settings", "Keys", "Remote", "Agents"]
+        ["Settings", "Keys", "Remote", "Themes", "Agents"]
     );
     support::press(&mut app, KeyCode::Tab);
     assert!(app.settings().expect("the settings").on_keys());
     support::press(&mut app, KeyCode::Tab);
     assert!(app.settings().expect("the settings").on_remote());
     support::press(&mut app, KeyCode::Tab);
+    assert!(app.settings().expect("the settings").on_themes());
+    assert!(
+        rows(&app).is_empty(),
+        "the themes page has settings rows on it"
+    );
+    support::press(&mut app, KeyCode::Tab);
     assert!(app.settings().expect("the settings").on_agents());
     assert!(
         rows(&app).is_empty(),
         "the agents page has settings rows on it"
     );
+    support::press(&mut app, KeyCode::BackTab);
+    assert!(app.settings().expect("the settings").on_themes());
     support::press(&mut app, KeyCode::BackTab);
     assert!(app.settings().expect("the settings").on_remote());
     support::press(&mut app, KeyCode::BackTab);
@@ -513,6 +525,53 @@ fn a_setting_with_no_gloss_keeps_the_blank_under_it() {
     );
 }
 
+/// A setting's choices open as a compact list over the settings, and the
+/// file behind the settings stays where it is: the list is over the page,
+/// not over the file, so there is no caret to keep clear of it. The page
+/// itself still has only the rows above the list, which is how a setting
+/// low on it keeps its row in sight while its choices are open.
+///
+/// Deliberate breaks: the file scrolled into view whatever covers it (its
+/// top line moves while a theme is chosen), and `editor_room` handing the
+/// whole region over whenever a page is open, which was the first fix for
+/// that (the page then has no room kept above the list).
+#[test]
+fn a_list_over_the_settings_leaves_the_file_where_it_is() {
+    let _turn = SETTINGS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner);
+    let scratch = temporary("room-behind");
+    let mut app = App::new(vec![support::open_fixture("many_lines.rs")]);
+    app.config_file_for_test(settings_file(&scratch));
+    let screen = ratatui::layout::Rect::new(0, 0, 66, 12);
+    support::lay_out(&mut app, screen.width, screen.height);
+    // Low on the screen, where a list's room would have to scroll it.
+    for _ in 0..8 {
+        support::press(&mut app, KeyCode::Down);
+    }
+    let _ = support::render(&mut app, screen.width, screen.height);
+    let top = app.current_buffer().expect("the file").viewport().top;
+
+    dispatch::dispatch(&mut app, Command::ConfigOpen);
+    // The theme is the first row, and enter opens its choices.
+    support::press(&mut app, KeyCode::Enter);
+    let _ = support::render(&mut app, screen.width, screen.height);
+    assert!(
+        app.picker()
+            .is_some_and(|list| list.layout() != obelus_component::picker::PickerLayout::FullArea),
+        "the theme's choices are not a compact list"
+    );
+    assert_eq!(
+        app.current_buffer().expect("the file").viewport().top,
+        top,
+        "the file behind the settings scrolled for a list over the settings"
+    );
+    assert!(
+        obelus_ui::editor_room(screen, &app).height < obelus_ui::regions(screen).editor.height,
+        "the settings page lost the room above its own list"
+    );
+}
+
 /// Typing narrows the rows, and the count on the status bar says how many
 /// are left. Plainly by substring, because a reader typing "the" means the
 /// word.
@@ -554,7 +613,8 @@ fn typing_narrows_the_settings() {
     let row = support::text_block(&dump)
         .lines()
         .filter(|row| !row.is_empty())
-        .position(|row| row.contains("Theme"))
+        // With the space, which the tab of themes has not got.
+        .position(|row| row.contains("Theme "))
         .expect("the row that matched");
     // The "T" of "Theme" is the first cell of the name: past the
     // `NN|` the dump writes down its side, past the row's own left-hand
@@ -2049,10 +2109,11 @@ fn a_command_can_be_put_on_another_key() {
         support::text_block(&dump).contains("choose-theme"),
         "the keys page does not list the commands:\n{dump}"
     );
-    // It has no key at all, which is what makes it worth binding.
+    // It has no key at all, which is what makes it worth binding -- and
+    // adding one is `ctrl+enter`, there being nothing for enter to change.
     assert_eq!(app.keymap().chord_for(Command::ThemeSelect), None);
 
-    support::press(&mut app, KeyCode::Enter);
+    support::press_control_key(&mut app, KeyCode::Enter);
     let asking = support::render(&mut app, 66, 12);
     assert!(
         support::text_block(&asking).contains("Press a key"),
@@ -2103,7 +2164,8 @@ fn a_key_that_is_taken_says_so_on_the_row() {
     let mut app = open(&settings_file(&scratch));
     support::press(&mut app, KeyCode::Tab);
     support::type_text(&mut app, "choose-theme");
-    support::press(&mut app, KeyCode::Enter);
+    // It has no key, so one is added: `ctrl+enter`.
+    support::press_control_key(&mut app, KeyCode::Enter);
 
     // `ctrl+p` is the palette's, and it stays the palette's.
     support::press_control(&mut app, 'p');
@@ -2143,9 +2205,10 @@ fn a_key_that_is_taken_says_so_on_the_row() {
 /// waiting.
 ///
 /// Every one of these would leave the reader with a binding that does
-/// nothing: the arrows never reach the key table at all -- the editor takes
-/// them -- the terminal sends tab for `ctrl+i` whatever was pressed, and a
-/// bare letter is what typing will mean.
+/// nothing anywhere: the arrows never reach the key table at all -- the
+/// editor takes them -- tab is every list's own, and a bare letter is what
+/// typing will mean. What only some terminal cannot send, `ctrl+i` among
+/// them, is the reader's to know, and binds.
 #[test]
 fn a_key_that_could_never_fire_is_refused() {
     use crossterm::event::{KeyEvent, KeyModifiers};
@@ -2157,12 +2220,12 @@ fn a_key_that_could_never_fire_is_refused() {
     let mut app = open(&settings_file(&scratch));
     support::press(&mut app, KeyCode::Tab);
     support::type_text(&mut app, "choose-theme");
-    support::press(&mut app, KeyCode::Enter);
+    // It has no key, so one is added: `ctrl+enter`.
+    support::press_control_key(&mut app, KeyCode::Enter);
 
     for (code, modifiers, why) in [
         (KeyCode::Up, KeyModifiers::NONE, "editor"),
         (KeyCode::PageDown, KeyModifiers::NONE, "editor"),
-        (KeyCode::Char('i'), KeyModifiers::CONTROL, "terminal"),
         (KeyCode::Char('z'), KeyModifiers::NONE, "Typing"),
         // The front of the reason, which is what a row this narrow has
         // room for once the key is spelled out rather than drawn.
@@ -2199,9 +2262,10 @@ fn a_key_that_could_never_fire_is_refused() {
     );
 }
 
-/// Delete takes a command's key away, which is a decision like any other.
+/// `alt+backspace` takes a command's key away, which is a decision like
+/// any other.
 #[test]
-fn delete_takes_a_key_away() {
+fn alt_backspace_takes_a_key_away() {
     use obelus_command::Command;
 
     let _taken = SETTINGS.lock().expect("the lock");
@@ -2211,7 +2275,7 @@ fn delete_takes_a_key_away() {
     support::press(&mut app, KeyCode::Tab);
     support::type_text(&mut app, "close-document");
     support::press(&mut app, KeyCode::Enter);
-    support::press(&mut app, KeyCode::Delete);
+    support::press_alt_key(&mut app, KeyCode::Backspace);
 
     assert_eq!(app.keymap().chord_for(Command::DocumentClose), None);
     // Both of its bindings: the same command in the list of open files
@@ -2229,6 +2293,759 @@ fn delete_takes_a_key_away() {
         written.contains("close-document"),
         "the key taken away is not in the file:\n{written}"
     );
+}
+
+/// Every key a command is on is a row of its own, ending against the
+/// column's right edge, and only the first carries the command's name --
+/// and the command after it starts on the row after that.
+///
+/// Among other commands, because a row with no name was once counted as no
+/// row at all, and the next command was drawn over the second key: with
+/// the one command on the page there was nothing to draw over it.
+///
+/// Broken deliberately three ways: by listing one row a command, as the
+/// page did (`Alt+Shift+p` was nowhere on it); by writing the key from the
+/// column's left edge again (the two keys did not end in a line); and by
+/// counting a nameless row as no rows (the next command covered it).
+#[test]
+fn every_key_of_a_command_is_a_row_of_its_own() {
+    use obelus_component::settings::KeyRow;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("several-rows");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "keys_from = \"vscode\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    // Every command has a hyphen, so the page is all of them.
+    support::type_text(&mut app, "-");
+    // Onto the command after `run-command`'s last row, so the window
+    // has both of its rows and the one that follows them.
+    let rows = app.settings().expect("the settings").key_rows();
+    let after = rows
+        .iter()
+        .rposition(|row| {
+            matches!(
+                row,
+                KeyRow::Key {
+                    command: Command::CommandPalette,
+                    ..
+                }
+            )
+        })
+        .expect("the command's rows")
+        + 1;
+    while app.settings().expect("the settings").focus() < after {
+        support::press(&mut app, KeyCode::Down);
+    }
+    let dump = support::render(&mut app, 80, 16);
+    let rows: Vec<&str> = support::text_block(&dump)
+        .lines()
+        .map(|row| row.split_once('|').map_or(row, |(_, cells)| cells))
+        .collect();
+    let first = rows
+        .iter()
+        .position(|row| row.contains("run-command"))
+        .unwrap_or_else(|| panic!("no row for the command:\n{dump}"));
+    let second = rows[first + 1];
+    assert!(rows[first].contains("Ctrl+Shift+p"), "{dump}");
+    assert!(second.contains("Alt+Shift+p"), "{dump}");
+    assert!(
+        !second.contains("run-command"),
+        "the name is said twice:\n{dump}"
+    );
+    let end = |row: &str, key: &str| row.find(key).map(|at| at + key.len());
+    assert_eq!(
+        end(rows[first], "Ctrl+Shift+p"),
+        end(second, "Alt+Shift+p"),
+        "the keys do not end in a line:\n{dump}"
+    );
+    // And the next command on the row after, its name in the first column.
+    assert!(
+        rows.get(first + 2)
+            .and_then(|row| row.chars().nth(1))
+            .is_some_and(|character| character.is_ascii_lowercase()),
+        "the next command is not on the row after:\n{dump}"
+    );
+}
+
+/// Enter on a key changes that key: the one pressed takes its place, and
+/// the command's other keys stay.
+///
+/// And while it waits the foot says the one key that does something
+/// else there, taking the key away, and not escape, which backs out here
+/// as everywhere.
+///
+/// Broken deliberately by adding the key pressed rather than putting it in
+/// the row's place, as the page did: `ctrl+y` stayed. And apart, by naming
+/// escape at the foot again: `Back` was there.
+#[test]
+fn enter_on_a_key_changes_it() {
+    use obelus_command::Command;
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("change-a-key");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "[keys]\nredo = [\"ctrl+y\", \"alt+y\"]\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    support::press(&mut app, KeyCode::Enter);
+    let dump = support::render(&mut app, 66, 12);
+    let foot = support::text_block(&dump);
+    assert!(foot.contains("Remove"), "{foot}");
+    assert!(!foot.contains("Esc"), "{foot}");
+    support::press_alt(&mut app, 'z');
+
+    let chord = |key: &str| KeyChord::parse(key).expect("a key");
+    assert_eq!(
+        app.keymap().chords_for(Command::Redo),
+        [chord("alt+z"), chord("alt+y")]
+    );
+    let written = std::fs::read_to_string(&file).expect("the file");
+    assert!(
+        written.contains("redo = [\"Alt+z\", \"Alt+y\"]"),
+        "the file does not say the keys:\n{written}"
+    );
+}
+
+/// `ctrl+enter` on a command's row puts it on one more key, after the ones
+/// it has, and the foot says so; enter changes a key and control adds one,
+/// so `alt+enter` is not a second way to add.
+///
+/// Broken deliberately three ways: by taking `alt+enter` as adding too (the
+/// row waited after it), by leaving `Ctrl+Enter` off a command with no key
+/// (the foot did not offer it there), and by offering enter there anyway
+/// (the foot said `Change` over nothing to change).
+#[test]
+fn control_and_enter_adds_a_key() {
+    use crossterm::event::{KeyEvent, KeyModifiers};
+    use obelus_app::event::Event;
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("add-a-key");
+    let file = settings_file(&scratch);
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    let enter_with = |app: &mut App, modifiers| {
+        app.handle(Event::Key(KeyEvent::new(KeyCode::Enter, modifiers)));
+    };
+    enter_with(&mut app, KeyModifiers::CONTROL);
+    support::press_alt(&mut app, 'z');
+    let chord = |key: &str| KeyChord::parse(key).expect("a key");
+    assert_eq!(
+        app.keymap().chords_for(Command::Redo),
+        [chord("ctrl+y"), chord("alt+z")]
+    );
+    let written = std::fs::read_to_string(&file).expect("the file");
+    assert!(
+        written.contains("redo = [\"Ctrl+y\", \"Alt+z\"]"),
+        "the file does not say both keys:\n{written}"
+    );
+
+    enter_with(&mut app, KeyModifiers::ALT);
+    assert!(
+        app.settings()
+            .is_some_and(|settings| settings.binding().is_none()),
+        "alt+enter added a key as well"
+    );
+
+    // And on a command with no key, where enter would put one too.
+    support::press(&mut app, KeyCode::Esc);
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "new-file");
+    let dump = support::render(&mut app, 80, 16);
+    let foot = support::text_block(&dump);
+    assert!(foot.contains("Ctrl+Enter"), "{foot}");
+    // And not enter, which has nothing to change there.
+    assert!(!foot.contains("Change"), "{foot}");
+}
+
+/// `alt+backspace` takes away the key on the row the reader is on, and only
+/// that one; on a command with no key, enter does nothing -- there is
+/// nothing to change -- and a row waiting to add a key has nothing to take
+/// away, and goes on waiting.
+///
+/// Broken deliberately three ways: by taking every key away, as the page
+/// did (`Ctrl+Shift+p` went too); by letting enter wait on a row with no
+/// key (the row was waiting); and by giving up on a row adding a key at
+/// an `alt+backspace` (the row stopped waiting).
+#[test]
+fn alt_backspace_takes_away_the_key_on_its_row() {
+    use obelus_command::Command;
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("remove-a-key");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "keys_from = \"vscode\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "run-command");
+    // The layout's row first, then the command's two.
+    let rows = app.settings().expect("the settings").key_rows();
+    let second = rows
+        .iter()
+        .position(|row| {
+            matches!(
+                row,
+                obelus_component::settings::KeyRow::Key {
+                    command: Command::CommandPalette,
+                    slot: 1
+                }
+            )
+        })
+        .expect("the second key's row");
+    while app.settings().expect("the settings").focus() < second {
+        support::press(&mut app, KeyCode::Down);
+    }
+    support::press(&mut app, KeyCode::Enter);
+    support::press_alt_key(&mut app, KeyCode::Backspace);
+    assert_eq!(
+        app.keymap().chords_for(Command::CommandPalette),
+        [KeyChord::parse("ctrl+shift+p").expect("a key")]
+    );
+
+    // A command on no key: delete has nothing to take.
+    support::press(&mut app, KeyCode::Esc);
+    let _ = std::fs::write(&file, "keys_from = \"vscode\"\n");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "new-file");
+    support::press(&mut app, KeyCode::Enter);
+    assert!(
+        app.settings()
+            .is_some_and(|settings| settings.binding().is_none()),
+        "enter waited on a command with no key to change"
+    );
+    app.handle(obelus_app::event::Event::Key(
+        crossterm::event::KeyEvent::new(KeyCode::Enter, crossterm::event::KeyModifiers::CONTROL),
+    ));
+    support::press_alt_key(&mut app, KeyCode::Backspace);
+    assert!(
+        app.settings()
+            .is_some_and(|settings| settings.binding() == Some(Command::FileNew)),
+        "the row gave up waiting"
+    );
+}
+
+/// A key bound on the page goes into the reader's own file, and nothing of
+/// the project's goes with it.
+///
+/// Broken deliberately by saving the layered settings rather than the
+/// reader's, as the page did: the project's `wrap = true` was written into
+/// the reader's file.
+#[test]
+fn a_key_bound_writes_the_readers_file_and_nothing_of_the_projects() {
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = project("keys-layers", "wrap = true\n");
+    let mine = temporary("keys-layers-mine");
+    let file = settings_file(&mine);
+    let mut app = App::new(vec![support::open_fixture("sample.rs")]);
+    app.working_directory_for_test(scratch.path().to_path_buf());
+    app.config_file_for_test(file.clone());
+    support::lay_out(&mut app, 66, 12);
+    dispatch::dispatch(&mut app, Command::ConfigOpen);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    support::press(&mut app, KeyCode::Enter);
+    support::press_alt(&mut app, 'z');
+    let written = std::fs::read_to_string(&file).expect("the file");
+    assert!(
+        !written.contains("wrap = true"),
+        "the project's setting was written: {written}"
+    );
+    assert!(written.contains("redo = \"Alt+z\""), "{written}");
+}
+
+/// A key bound on the page is still bound after another setting changes,
+/// because the table is built again from the reader's layer.
+///
+/// Broken deliberately by putting the key into the layered settings rather
+/// than the reader's own: flipping the blame margin built the table again
+/// from the reader's, and redo went back to `ctrl+y`.
+#[test]
+fn a_key_bound_outlives_the_next_setting() {
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("keys-outlive");
+    let file = settings_file(&scratch);
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    support::press(&mut app, KeyCode::Enter);
+    support::press_alt(&mut app, 'z');
+    dispatch::dispatch(&mut app, Command::ConfigOpen);
+    support::type_text(&mut app, "blame");
+    let before = app.config().blame_margin;
+    support::press(&mut app, KeyCode::Enter);
+    assert_ne!(app.config().blame_margin, before, "no setting was changed");
+    assert_eq!(
+        app.keymap().chords_for(Command::Redo),
+        [KeyChord::parse("alt+z").expect("a key")]
+    );
+}
+
+/// A file that will not read is not written over by a key bound on the
+/// page, and the page says the key was not kept.
+///
+/// Broken deliberately by taking the `readable` guard out of `rebind`: the
+/// file became nothing but the new key.
+#[test]
+fn a_key_bound_does_not_write_over_a_file_that_will_not_read() {
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("keys-unreadable");
+    let file = settings_file(&scratch);
+    let before = "theme = \"light\"\nwrap = [\n";
+    std::fs::write(&file, before).expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    support::press(&mut app, KeyCode::Enter);
+    support::press_alt(&mut app, 'z');
+    assert_eq!(std::fs::read_to_string(&file).expect("the file"), before);
+    assert!(
+        app.note().is_some_and(|note| note.starts_with("Not saved")),
+        "nothing said the key was not kept: {:?}",
+        app.note()
+    );
+}
+
+/// A command whose keys were all taken away, then given one, has it in
+/// every context the layout had the command in -- a terminal's palette
+/// included.
+///
+/// Broken deliberately by patching the table as the page did: the key the
+/// palette got back was the file's alone, and in a terminal it did nothing.
+#[test]
+fn a_key_given_back_is_in_every_context_the_command_was() {
+    use crossterm::event::{KeyEvent, KeyModifiers};
+    use obelus_keymap::Context;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("given-back");
+    let file = settings_file(&scratch);
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "run-command");
+    support::press(&mut app, KeyCode::Enter);
+    support::press_alt_key(&mut app, KeyCode::Backspace);
+    assert!(app.keymap().chords_for(Command::CommandPalette).is_empty());
+    support::press_control_key(&mut app, KeyCode::Enter);
+    support::press_alt(&mut app, 'z');
+    let alt_z = KeyEvent::new(KeyCode::Char('z'), KeyModifiers::ALT);
+    for context in [Context::Normal, Context::Terminal] {
+        assert_eq!(
+            app.keymap().lookup(&alt_z, context),
+            Some(Command::CommandPalette),
+            "{context:?}"
+        );
+    }
+}
+
+/// A key of a line that will not do is said about that key, and the line's
+/// other keys bind: the mark does not say nothing was bound when something
+/// was.
+///
+/// Broken deliberately by saying it of the line, as the marks did --
+/// "Nothing is bound to `redo`" over a line that had put redo on `alt+y`.
+#[test]
+fn a_bad_key_on_a_line_is_said_of_the_key() {
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("bad-key-of-several");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "[keys]\nredo = [\"nope\", \"alt+y\"]\n").expect("the file");
+    let mut app = App::new(vec![
+        obelus_buffer::Buffer::open(&file).expect("opening the settings file"),
+    ]);
+    app.config_file_for_test(file.clone());
+    support::lay_out(&mut app, 72, 24);
+    let said: Vec<String> = app
+        .problems()
+        .map(|problem| problem.message.clone())
+        .collect();
+    assert_eq!(said, ["No key is called `nope`"]);
+    assert_eq!(
+        app.keymap().chords_for(Command::Redo),
+        [KeyChord::parse("alt+y").expect("a key")]
+    );
+}
+
+/// Taking a command's last key away leaves the focus on that command, on
+/// the row that is left, rather than on the next command.
+///
+/// Broken deliberately by keeping the focus's index as it was when the rows
+/// change, as the page did: it landed on the command after.
+#[test]
+fn taking_a_key_away_leaves_the_focus_on_its_command() {
+    use obelus_component::settings::KeyRow;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("focus-stays");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "keys_from = \"vscode\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "-");
+    let rows = app.settings().expect("the settings").key_rows();
+    let second = rows
+        .iter()
+        .position(|row| {
+            matches!(
+                row,
+                KeyRow::Key {
+                    command: Command::CommandPalette,
+                    slot: 1
+                }
+            )
+        })
+        .expect("the second key's row");
+    while app.settings().expect("the settings").focus() < second {
+        support::press(&mut app, KeyCode::Down);
+    }
+    support::press(&mut app, KeyCode::Enter);
+    support::press_alt_key(&mut app, KeyCode::Backspace);
+    let settings = app.settings().expect("the settings");
+    assert!(
+        matches!(
+            settings.key_rows().get(settings.focus()),
+            Some(KeyRow::Key {
+                command: Command::CommandPalette,
+                slot: 0
+            })
+        ),
+        "the focus left the command: {:?}",
+        settings.key_rows().get(settings.focus())
+    );
+}
+
+/// A press on a tab while a row waits for its key does nothing: it is not
+/// the tab key taken for the row, and the page stays on the keys.
+///
+/// Broken deliberately by letting presses through while a row waits: the
+/// press was refused on the row as `Tab`.
+#[test]
+fn a_press_on_a_tab_while_a_row_waits_does_nothing() {
+    use obelus_app::event::{Event, Pointer};
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("press-tab-waits");
+    let mut app = open(&settings_file(&scratch));
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "redo");
+    support::press(&mut app, KeyCode::Enter);
+    let area = app.editor_area_for_test();
+    // The first tab, on the page's first row.
+    app.handle(Event::Pointer {
+        kind: Pointer::Pressed,
+        x: area.x + 3,
+        y: area.y,
+    });
+    let settings = app.settings().expect("the settings");
+    assert!(settings.on_keys(), "a press moved the page off the keys");
+    assert_eq!(
+        settings.binding(),
+        Some(Command::Redo),
+        "the row stopped waiting"
+    );
+    assert!(settings.refused().is_none(), "a press was taken as a key");
+}
+
+/// A command whose keys are not its layout's says so beside its name,
+/// and one whose line says what the layout says anyway does not.
+///
+/// Broken deliberately twice: by marking nothing (redo was not marked), and
+/// by marking every command that has a key rather than asking the layout
+/// (run-command, whose line is VS Code's own keys, was marked).
+#[test]
+fn a_command_off_its_layout_is_marked_changed() {
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("marked-changed");
+    let file = settings_file(&scratch);
+    std::fs::write(
+        &file,
+        "keys_from = \"vscode\"\n\n[keys]\nredo = \"alt+z\"\n\
+         run-command = [\"ctrl+shift+p\", \"alt+shift+p\"]\n",
+    )
+    .expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    let row_of = |app: &mut App, name: &str| {
+        let dump = support::render(app, 80, 16);
+        support::text_block(&dump)
+            .lines()
+            .find(|row| row.contains(name))
+            .unwrap_or_default()
+            .to_string()
+    };
+    support::type_text(&mut app, "redo");
+    assert!(
+        row_of(&mut app, "redo").contains("Changed"),
+        "{}",
+        row_of(&mut app, "redo")
+    );
+    for _ in 0.."redo".len() {
+        support::press(&mut app, KeyCode::Backspace);
+    }
+    support::type_text(&mut app, "run-command");
+    let row = row_of(&mut app, "run-command");
+    assert!(!row.contains("Changed"), "{row}");
+}
+
+/// `alt+backspace` takes away the key on the row the reader is on at once,
+/// with no enter first.
+///
+/// Broken deliberately by taking it only while a row waits, as the page
+/// did: the key stayed.
+#[test]
+fn alt_backspace_takes_a_key_away_at_once() {
+    use obelus_component::settings::KeyRow;
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("delete-at-once");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "keys_from = \"vscode\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "run-command");
+    let rows = app.settings().expect("the settings").key_rows();
+    let second = rows
+        .iter()
+        .position(|row| {
+            matches!(
+                row,
+                KeyRow::Key {
+                    command: Command::CommandPalette,
+                    slot: 1
+                }
+            )
+        })
+        .expect("the second key's row");
+    while app.settings().expect("the settings").focus() < second {
+        support::press(&mut app, KeyCode::Down);
+    }
+    support::press_alt_key(&mut app, KeyCode::Backspace);
+    assert_eq!(
+        app.keymap().chords_for(Command::CommandPalette),
+        [KeyChord::parse("ctrl+shift+p").expect("a key")]
+    );
+}
+
+/// `alt+r` puts the command the reader is on back on its layout's keys,
+/// taking its line out of the file; and the foot offers it only on a
+/// command that is off them.
+///
+/// Broken deliberately twice: by doing nothing with it (redo stayed on
+/// `alt+z`), and by offering it on every command (the foot said `Reset`
+/// over undo, which is its layout's).
+#[test]
+fn alt_r_puts_a_command_back() {
+    use obelus_keymap::{Keymap, Layout};
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("reset-one");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "[keys]\nredo = \"alt+z\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "undo");
+    let foot = |app: &mut App| {
+        let dump = support::render(app, 100, 16);
+        support::text_block(&dump).to_string()
+    };
+    // Undo is its layout's; redo, under it in this filter, is not -- so
+    // the foot offers every key back but not this one.
+    let said = foot(&mut app);
+    assert!(!said.contains("Alt+r  Reset"), "{said}");
+    assert!(said.contains("Reset all"), "{said}");
+    for _ in 0.."undo".len() {
+        support::press(&mut app, KeyCode::Backspace);
+    }
+    support::type_text(&mut app, "redo");
+    let said = foot(&mut app);
+    assert!(said.contains("Alt+r  Reset"), "{said}");
+    support::press_alt(&mut app, 'r');
+    assert_eq!(
+        app.keymap().chords_for(Command::Redo),
+        Keymap::laid_out(Layout::Obelus).chords_for(Command::Redo)
+    );
+    let written = std::fs::read_to_string(&file).expect("the file");
+    assert!(!written.contains("redo"), "the line stayed: {written}");
+}
+
+/// `alt+backspace` on a key the wheel took off the screen brings it back
+/// and takes nothing, as enter does: the next press takes it.
+///
+/// Broken deliberately by acting on the focus wherever it is, as the alt
+/// keys did: the first press took a key nobody could see.
+#[test]
+fn alt_backspace_on_a_row_scrolled_away_shows_it_first() {
+    use obelus_component::settings::KeyRow;
+    use obelus_keymap::KeyChord;
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("alt-off-screen");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "keys_from = \"vscode\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "-");
+    let rows = app.settings().expect("the settings").key_rows();
+    let second = rows
+        .iter()
+        .position(|row| {
+            matches!(
+                row,
+                KeyRow::Key {
+                    command: Command::CommandPalette,
+                    slot: 1
+                }
+            )
+        })
+        .expect("the second key's row");
+    while app.settings().expect("the settings").focus() < second {
+        support::press(&mut app, KeyCode::Down);
+    }
+    support::render(&mut app, 66, 12);
+    for _ in 0..6 {
+        app.handle(Event::Scroll(3));
+    }
+    support::render(&mut app, 66, 12);
+    let both = [
+        KeyChord::parse("ctrl+shift+p").expect("a key"),
+        KeyChord::parse("alt+shift+p").expect("a key"),
+    ];
+
+    support::press_alt_key(&mut app, KeyCode::Backspace);
+    assert_eq!(
+        app.keymap().chords_for(Command::CommandPalette),
+        both,
+        "a key went from a row off the screen"
+    );
+    support::render(&mut app, 66, 12);
+    support::press_alt_key(&mut app, KeyCode::Backspace);
+    assert_eq!(app.keymap().chords_for(Command::CommandPalette), both[..1]);
+}
+
+/// The question about putting every key back waits for its answer: a key
+/// that names another view does not swap it away.
+///
+/// Broken deliberately by letting it give way: `f1` put the files up in
+/// its place.
+#[test]
+fn the_question_about_every_key_does_not_give_way() {
+    use crossterm::event::{KeyEvent, KeyModifiers};
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("reset-all-stays");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "[keys]\nredo = \"alt+z\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    app.handle(Event::Key(KeyEvent::new(
+        KeyCode::Char('R'),
+        KeyModifiers::ALT | KeyModifiers::SHIFT,
+    )));
+    support::press_function(&mut app, 1);
+    assert!(
+        app.picker()
+            .and_then(|picker| picker.question())
+            .is_some_and(|question| question.starts_with("Put every key back")),
+        "the question gave way"
+    );
+}
+
+/// A command another's line took a key from is changed, but has no line
+/// of its own to take out: `alt+r` is not offered there, and does nothing.
+///
+/// Broken deliberately by offering it wherever a command is changed: the
+/// foot said `Alt+r  Reset` over `open-file`, and pressing it changed
+/// nothing.
+#[test]
+fn alt_r_is_offered_only_where_a_line_can_be_taken_out() {
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("reset-no-line");
+    let file = settings_file(&scratch);
+    let before = "keys_from = \"mnemonic\"\n\n[keys]\nchoose-theme = \"ctrl+o\"\n";
+    std::fs::write(&file, before).expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    support::type_text(&mut app, "open-file");
+    let dump = support::render(&mut app, 100, 16);
+    let said = support::text_block(&dump);
+    assert!(
+        said.contains("Changed"),
+        "open-file lost its key and is not marked:\n{said}"
+    );
+    assert!(!said.contains("Alt+r  Reset"), "{said}");
+}
+
+/// `alt+shift+r` asks before it puts every command back: escape
+/// keeps the keys, and the first row puts them all back and empties the
+/// file of them.
+///
+/// Broken deliberately twice: by putting them back without asking (the
+/// keys had gone before the question was answered), and by doing nothing
+/// with the answer (redo stayed on `alt+z`).
+#[test]
+fn alt_shift_r_asks_and_puts_every_key_back() {
+    use crossterm::event::{KeyEvent, KeyModifiers};
+    use obelus_app::event::Event;
+    use obelus_keymap::{KeyChord, Keymap, Layout};
+
+    let _taken = SETTINGS.lock().expect("the lock");
+    let scratch = temporary("reset-all");
+    let file = settings_file(&scratch);
+    std::fs::write(&file, "[keys]\nredo = \"alt+z\"\nundo = \"alt+u\"\n").expect("the file");
+    let mut app = open(&file);
+    support::press(&mut app, KeyCode::Tab);
+    let all = |app: &mut App| {
+        app.handle(Event::Key(KeyEvent::new(
+            KeyCode::Char('R'),
+            KeyModifiers::ALT | KeyModifiers::SHIFT,
+        )));
+    };
+    let alt_z = KeyChord::parse("alt+z").expect("a key");
+
+    all(&mut app);
+    assert!(
+        app.picker()
+            .and_then(|picker| picker.question())
+            .is_some_and(|question| question.starts_with("Put every key back")),
+        "it did not ask"
+    );
+    assert_eq!(
+        app.keymap().chords_for(Command::Redo),
+        [alt_z],
+        "it did not wait for the answer"
+    );
+    support::press(&mut app, KeyCode::Esc);
+    assert_eq!(
+        app.keymap().chords_for(Command::Redo),
+        [alt_z],
+        "escape put them back"
+    );
+
+    all(&mut app);
+    support::press(&mut app, KeyCode::Enter);
+    let laid_out = Keymap::laid_out(Layout::Obelus);
+    for command in [Command::Redo, Command::Undo] {
+        assert_eq!(
+            app.keymap().chords_for(command),
+            laid_out.chords_for(command)
+        );
+    }
+    let written = std::fs::read_to_string(&file).expect("the file");
+    assert!(!written.contains("[keys]"), "the keys stayed: {written}");
+    assert!(app.settings().is_some(), "the page went with the question");
 }
 
 /// The settings file opens as a file, and is written first if it is not
@@ -2400,9 +3217,12 @@ fn writing_the_settings_keeps_what_obelus_does_not_recognise() {
 /// to draw -- and the row it goes into already says what it narrows,
 /// before anything has been typed there.
 ///
+/// Nor is escape, which means the same thing in every view Obelus has.
+///
 /// Deliberate breaks: put a "To filter" hint back on the foot, and it
 /// carries a cap nobody presses; let `what_is_filtered` say nothing, and
-/// the page no longer says anywhere that it can be typed at.
+/// the page no longer says anywhere that it can be typed at; put a
+/// `Leave` on escape back at the end of the foot, and it is said here.
 #[test]
 fn the_settings_say_what_their_keys_do() {
     let _turn = SETTINGS
@@ -2415,11 +3235,13 @@ fn the_settings_say_what_their_keys_do() {
     dispatch::dispatch(&mut app, Command::ConfigProject);
 
     let text = support::text_block(&support::render(&mut app, 76, 16)).to_string();
-    // Escape is not here at all: it is on the card, because it means the
-    // same thing in every view Obelus has.
-    for word in ["Change", "Unset", "Keys"] {
+    for word in ["Change", "Unset"] {
         assert!(word_on(&text, word), "{word:?} is not at the foot:\n{text}");
     }
+    assert!(
+        !word_on(&text, "Leave"),
+        "the foot is spending itself on escape:\n{text}"
+    );
     assert!(
         !word_on(&text, "To filter"),
         "typing is a cap at the foot:\n{text}"
@@ -2428,20 +3250,6 @@ fn the_settings_say_what_their_keys_do() {
         word_on(&text, "Filter settings"),
         "the row typing goes into does not say what it narrows:\n{text}"
     );
-
-    // `ctrl+k` says all of them, at length.
-    support::press_control(&mut app, 'k');
-    let dump = support::render(&mut app, 76, 16);
-    let text = support::text_block(&dump);
-    assert!(text.contains("The keys here"), "no card:\n{dump}");
-    assert!(
-        text.contains("Take this setting out of the project's file"),
-        "the card only has the foot's word for it:\n{dump}"
-    );
-
-    // And escape closes the card before it leaves the page.
-    support::press(&mut app, KeyCode::Esc);
-    assert!(app.settings().is_some(), "escape left the settings");
 }
 
 /// `unset` is on the project's page and nowhere else, because the reader's own
@@ -2618,9 +3426,9 @@ fn a_press_on_a_tab_goes_to_it() {
     let dump = support::render(&mut app, 66, 12);
 
     // The tabs are the page's first row, and the third of them is two away
-    // -- which the shorter way round makes one step, because they wrap.
+    // -- and three the other way, because they wrap.
     let names = app.settings().expect("the page").tabs();
-    assert_eq!(names.len(), 4, "the page does not have the four tabs");
+    assert_eq!(names.len(), 5, "the page does not have the five tabs");
     assert_eq!(app.settings().expect("the page").tab(), 0);
     let row = support::text_block(&dump)
         .lines()
@@ -3260,10 +4068,10 @@ fn the_projects_page_has_one_tab() {
         failure: None,
     }));
 
-    // The reader's own page has four.
+    // The reader's own page has five.
     assert_eq!(
         app.settings().expect("the settings").tabs(),
-        ["Settings", "Keys", "Remote", "Agents"]
+        ["Settings", "Keys", "Remote", "Themes", "Agents"]
     );
 
     dispatch::dispatch(&mut app, Command::ConfigProject);
@@ -3761,6 +4569,9 @@ impl obelus_app::app::Drawing for Told {
     /// Nor this: which faces a window draws with is its own business, and
     /// what is under test here is the size.
     fn use_fonts(&self, _: &[String]) {}
+
+    /// Nor this, which has a test of its own in `themes`.
+    fn hang(&self, _: Option<&obelus_theme::Wallpaper>) {}
 }
 
 impl Told {
@@ -4099,7 +4910,7 @@ fn a_line_that_did_nothing_is_a_warning_on_that_line() {
 #[test]
 fn what_a_project_may_not_set_is_marked_on_the_projects_file() {
     let _taken = SETTINGS.lock().expect("the lock");
-    let scratch = project("not-allowed", "theme = \"dark\"\nagent = \"copilot\"\n");
+    let scratch = project("not-allowed", "wrap = true\nagent = \"copilot\"\n");
     let theirs = scratch.path().join(".obelus").join("config.toml");
 
     let mut app = App::new(vec![
@@ -4424,10 +5235,15 @@ fn a_workflow_nothing_answers_to_is_said_on_the_welcome_screen() {
 /// fires is the thing the whole `why_not` judgement exists to prevent, and
 /// until now the file was the one place it could still happen.
 ///
+/// And `ctrl+shift` on a letter is not one of them: it binds, as the
+/// editors' layouts do, and a terminal that cannot send it sends `ctrl` and
+/// the letter -- which is said nowhere, by the reader's choice.
+///
 /// Deliberate break: `Keymap::with` skipping quietly, which is what it did
 /// -- the count drops to zero. And `keys_that_bound_nothing` looking the
 /// span up under the bare name rather than under `keys.`, which leaves
-/// three problems with nowhere to be.
+/// three problems with nowhere to be. And refusing control with a capital
+/// in `why_not` again: `ctrl+shift+u` was a fourth.
 #[test]
 fn a_key_that_bound_nothing_is_a_warning_on_that_line() {
     let _taken = SETTINGS.lock().expect("the lock");
@@ -4436,7 +5252,8 @@ fn a_key_that_bound_nothing_is_a_warning_on_that_line() {
     std::fs::write(
         &file,
         "theme = \"dark\"\n\n[keys]\nopen-file = \"f1\"\nopen-fiel = \"f2\"\n\
-         save-file = \"ctrl+shiftier+s\"\nclose-document = \"ctrl+shift+e\"\n",
+         save-file = \"ctrl+shiftier+s\"\nclose-document = \"ctrl+enter\"\n\
+         redo = \"ctrl+shift+u\"\n",
     )
     .expect("writing a settings file");
 
@@ -4451,22 +5268,20 @@ fn a_key_that_bound_nothing_is_a_warning_on_that_line() {
         .map(|problem| (problem.span.line.get(), problem.message.clone()))
         .collect();
     assert_eq!(said.len(), 3, "{said:?}");
-    // The line that binds is not one of them.
-    assert!(!said.iter().any(|(line, _)| *line == 3), "{said:?}");
+    // The lines that bind are not among them.
+    assert!(
+        !said.iter().any(|(line, _)| *line == 3 || *line == 7),
+        "{said:?}"
+    );
     assert_eq!(said[0], (4, "No command is called `open-fiel`".to_string()));
     assert_eq!(
         said[1],
-        (
-            5,
-            "Nothing is bound to `save-file`: `ctrl+shiftier+s` is not a key".to_string()
-        )
+        (5, "No key is called `ctrl+shiftier+s`".to_string())
     );
     // The reason the page that binds keys gives, in its own words, because
     // it is the same judgement.
     assert!(
-        said[2]
-            .1
-            .starts_with("Nothing is bound to `close-document`: "),
+        said[2].1.starts_with("No command can be on `ctrl+enter`: "),
         "{said:?}"
     );
     assert_eq!(said[2].0, 6);
@@ -4814,7 +5629,7 @@ fn the_agents_go_where_their_bar_is_dragged() {
 /// leaves `Layout` off the top of the page; its row drawn with `entry`
 /// false, which puts `open-file` straight under the gloss; the list of
 /// layouts without `details_whole`, which loses what a terminal does;
-/// `apply_config` building the classic table whatever the setting says,
+/// `apply_config` building the obelus table whatever the setting says,
 /// which leaves `ctrl+o` on nothing; and `lay` not writing `keys_from`,
 /// which leaves the file without it.
 #[test]
@@ -4842,7 +5657,7 @@ fn the_keys_page_chooses_where_the_keys_start() {
         .iter()
         .position(|row| row.contains("Layout"))
         .unwrap_or_else(|| panic!("the layout is not on the page:\n{dump}"));
-    assert!(rows[at].contains("Classic"), "{dump}");
+    assert!(rows[at].contains("Obelus"), "{dump}");
     // What it does under it, then the blank, then the table.
     assert!(
         rows[at + 1].contains("What your own keys start from"),
@@ -4903,9 +5718,9 @@ fn the_keys_page_chooses_where_the_keys_start() {
 
 /// Every layout the settings offer is one the key table can lay out, and
 /// each a different one: a word with no table behind it would be a choice
-/// that silently starts from the classic keys.
+/// that silently starts from the default keys.
 ///
-/// Broken deliberately by adding a third word to `KEY_LAYOUTS`.
+/// Broken deliberately by adding a fifth word to `KEY_LAYOUTS`.
 #[test]
 fn every_layout_offered_is_a_table() {
     let named: Vec<_> = obelus_config::KEY_LAYOUTS
@@ -4962,9 +5777,9 @@ fn a_layout_nothing_answers_to_stays_in_the_file() {
 /// Every layout is offered under a name of its own and with what it is:
 /// a name the reader can say, and a line that says which keys it means.
 ///
-/// Broken deliberately by giving a third word to `KEY_LAYOUTS`, which has
-/// neither, by taking `mnemonic` out of `called`, and by giving `classic`
-/// nothing to say in the list.
+/// Broken deliberately by giving a fifth word to `KEY_LAYOUTS`, which has
+/// neither, and by taking `mnemonic` out of `KEY_LAYOUT_CHOICES`, which
+/// both `called` and the list read.
 #[test]
 fn every_layout_is_offered_with_a_name_and_what_it_is() {
     let _turn = SETTINGS

@@ -47,7 +47,10 @@
 //! somebody else's server. `remote` and `remotes` are the
 //! reader's for a reason of their own: they say who may talk to this machine
 //! from a chat, and a project that could name a person there could hand a
-//! stranger the agent.
+//! stranger the agent. And `theme` is the reader's because what it names is
+//! the reader's: the themes are the ones built in and the ones in the
+//! reader's own directory, a project has nowhere to keep one, and a name a
+//! project wrote would be a name it chose among somebody else's.
 //!
 //! The configuration file holds preferences, not state. This file is the
 //! whole of it — one table, `dirs` for where it lives, written the moment
@@ -198,8 +201,9 @@ pub struct Config {
     /// Zero forgets none. Only those, because one about a note already goes
     /// when the note does, and a note still there is work not yet done --
     /// coming back to it a season later is coming back to that
-    /// conversation. What is forgotten is Obelus's own line about it: the
-    /// agent keeps every word, and nothing is asked of it.
+    /// conversation. What is forgotten is Obelus's own line about it and the
+    /// page it kept: the agent keeps its own account, and nothing is asked
+    /// of it.
     pub conversation_days: usize,
     /// Whether Obelus asks, once a day, whether a newer version is out.
     ///
@@ -244,12 +248,16 @@ pub struct Config {
     /// Beside `keys` rather than in it, because every line of that table
     /// is a command's name and this is not one.
     pub keys_from: String,
-    /// The keys the reader has moved, by the command's own name.
+    /// The keys the reader has moved, by the command's own name: every key
+    /// the command is on, the first being the one shown.
     ///
     /// Changes rather than the whole table: a reader who rebinds one key
     /// should be given the new default for everything they said nothing
-    /// about. An empty chord is a key taken away, which is also a decision.
-    pub keys: std::collections::BTreeMap<String, String>,
+    /// about. No keys is every key taken away, which is also a decision.
+    ///
+    /// The file says one key as a string and several as an array, and none
+    /// as either `""` or `[]` -- the shapes a reader writes by hand.
+    pub keys: std::collections::BTreeMap<String, Vec<String>>,
     /// What each agent is to start a conversation on, in its own words.
     ///
     /// The agent's id, then the agent's id for one of the settings it
@@ -682,7 +690,55 @@ const WORKFLOWS: &[&str] = &["none", "in-place", "feature-branch"];
 ///
 /// `obelus_keymap::Layout` is what each one binds, and a test in
 /// `obelus-app` holds the two lists to each other.
-pub const KEY_LAYOUTS: &[&str] = &["classic", "mnemonic"];
+pub const KEY_LAYOUTS: &[&str] = &["obelus", "mnemonic", "vscode", "textmate"];
+
+/// A table of keys as a reader chooses it: the word the file holds, the
+/// name it is offered under, and what it is.
+///
+/// What it is says no key. Which key a layout puts a command on is the key
+/// table's to answer, with the reader's own `[keys]` laid over it, and a
+/// line here naming one would be a second answer to that question.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct KeyLayout {
+    /// The word `keys_from` holds, one of [`KEY_LAYOUTS`].
+    pub word: &'static str,
+    /// What it is called where a reader chooses it. A name, kept in its
+    /// own spelling: `VS Code`, `TextMate`.
+    pub name: &'static str,
+    /// What it puts the keys on, in a line.
+    pub about: &'static str,
+}
+
+/// Every layout, in the order of [`KEY_LAYOUTS`], with its name and what it
+/// is.
+pub const KEY_LAYOUT_CHOICES: &[KeyLayout] = &[
+    KeyLayout {
+        word: "obelus",
+        name: "Obelus",
+        about: "The function keys, in banks of four",
+    },
+    KeyLayout {
+        word: "mnemonic",
+        name: "Mnemonic",
+        about: "Control and alt, on the letter of the word -- which a running terminal keeps for its program",
+    },
+    KeyLayout {
+        word: "vscode",
+        name: "VS Code",
+        about: "VS Code's keys where Obelus does the same thing, and no function keys",
+    },
+    KeyLayout {
+        word: "textmate",
+        name: "TextMate",
+        about: "TextMate's keys where Obelus does the same thing, and no function keys",
+    },
+];
+
+/// The layout a word names, with its name and what it is.
+#[must_use]
+pub fn key_layout(word: &str) -> Option<&'static KeyLayout> {
+    KEY_LAYOUT_CHOICES.iter().find(|layout| layout.word == word)
+}
 /// How many build jobs at once, as a share of the machine.
 ///
 /// Logical CPUs, which is what a build counts when it sizes itself.
@@ -698,7 +754,7 @@ pub const ALL: &[Setting] = &[
         // is about not having.
         about: "",
         group: Group::Appearance,
-        reach: Reach::Anywhere,
+        reach: Reach::ReaderOnly,
         kind: Kind::Choice(THEMES),
         drawn: Drawn::Anywhere,
     },
@@ -904,7 +960,7 @@ pub const ALL: &[Setting] = &[
     Setting {
         key: "conversation_days",
         name: "Forget conversations",
-        about: "How long after anything was last said in it a conversation about no note is forgotten. The agent still has it, but Obelus forgets the way back, and making this longer does not bring it back. One about a note goes when the note does",
+        about: "How long after anything was last said in it a conversation about no note is forgotten. The agent still has it, but Obelus forgets the way back and the page it kept, and making this longer does not bring either back. One about a note goes when the note does",
         group: Group::Agent,
         // The reader's alone: it decides what Obelus forgets of theirs, and
         // a project that could shorten it would be a downloaded file
@@ -916,7 +972,7 @@ pub const ALL: &[Setting] = &[
     Setting {
         key: "keys_from",
         name: "Layout",
-        about: "What your own keys start from: the function keys, or control and alt on the letter of the word",
+        about: "What your own keys start from: the function keys, letters, or another editor's",
         group: Group::Keys,
         // The reader's, for the reason the keys are: a project that could
         // choose it would be moving every key that opens anything.
@@ -1145,11 +1201,11 @@ pub fn path() -> Option<PathBuf> {
 
 /// Where a project keeps settings of its own, if it keeps any.
 ///
-/// `.obelus/config.toml`, and only that. A project keeps more than settings for
-/// Obelus -- a theme of its own, whatever comes after it -- and one
-/// directory holding all of it is one thing to find, to copy between
-/// machines and to name in a `.gitignore`, where a dotfile per kind of thing
-/// is a row of them at the top of every listing of the project.
+/// `.obelus/config.toml`, and only that. A project may come to keep more
+/// than settings for Obelus, and one directory holding all of it is one
+/// thing to find, to copy between machines and to name in a `.gitignore`,
+/// where a dotfile per kind of thing is a row of them at the top of every
+/// listing of the project.
 ///
 /// The working directory itself, without walking up: Obelus has one answer
 /// to which project it is on -- the file list walks it, the counts count it,
@@ -1385,6 +1441,22 @@ pub enum Reading {
     /// Nowhere for the failures that are not about the text -- a file
     /// whose permissions forbid it has no line that is wrong with it.
     Unreadable(String, Option<Span>),
+}
+
+impl Reading {
+    /// Whether the reader has been here before, so a first start's question
+    /// about which keys to start from is not to be asked.
+    ///
+    /// Only no file at all is a first start. A file that names no layout is
+    /// a reader who has the default keys and has been using them -- every
+    /// file written before there was a choice is one -- and a file that
+    /// will not read is still theirs: asking would mean writing the answer
+    /// over it. And with nowhere to keep one, an answer could not be kept,
+    /// so it would be asked at every start.
+    #[must_use]
+    pub fn keymap_is_chosen(&self) -> bool {
+        !matches!(self, Self::Nothing)
+    }
 }
 
 /// The config a file's contents describe, taking the default for anything
@@ -1631,13 +1703,24 @@ pub fn apply(config: &mut Config, table: &toml::Table, whose: Whose) -> Applied 
     if let Some(keys) = table.get("keys").and_then(toml::Value::as_table)
         && allowed("keys")
     {
-        // Whatever is a string. A command Obelus has never heard of and a
-        // chord it cannot read are dealt with where the table is built,
-        // which is the one place that knows what either of those is.
-        for (name, chord) in keys {
-            if let Some(chord) = chord.as_str() {
-                config.keys.insert(name.clone(), chord.to_string());
-            }
+        // Whatever is a string, or an array of them. A command Obelus has
+        // never heard of and a chord it cannot read are dealt with where the
+        // table is built, which is the one place that knows what either of
+        // those is.
+        for (name, written) in keys {
+            // What is not a string goes through as the text it is written
+            // in, to be said where the table is built: dropped, `[1]` would
+            // read as no keys, and take the command's away without a word.
+            let text = |value: &toml::Value| match value {
+                toml::Value::String(chord) => chord.clone(),
+                other => other.to_string(),
+            };
+            let chords = match written {
+                toml::Value::String(chord) if chord.is_empty() => Vec::new(),
+                toml::Value::Array(chords) => chords.iter().map(text).collect(),
+                other => vec![text(other)],
+            };
+            config.keys.insert(name.clone(), chords);
         }
     }
     if let Some(agents) = table.get("agents").and_then(toml::Value::as_table)
@@ -1817,6 +1900,10 @@ pub fn to_toml(config: &Config) -> String {
 /// because Obelus had written `icons = true` down for them the first time
 /// it saved. The same rule the keys and the agents already kept -- a line
 /// is something the reader said, not something Obelus was thinking about.
+///
+/// Which holds for the layout too, `obelus` included: that a reader has
+/// chosen one is said by there being a file at all
+/// ([`Reading::keymap_is_chosen`]), not by a line naming the default.
 #[must_use]
 pub fn over(existing: &str, config: &Config) -> String {
     lay(existing, config, false)
@@ -1990,8 +2077,13 @@ fn lay(existing: &str, config: &Config, every: bool) -> String {
         document.remove("keys");
     } else {
         let mut keys = toml_edit::Table::new();
-        for (name, chord) in &config.keys {
-            keys[name] = toml_edit::value(chord.clone());
+        // One key as a string, which is what a reader writes for one;
+        // several, or none, as an array.
+        for (name, chords) in &config.keys {
+            keys[name] = match chords.as_slice() {
+                [chord] => toml_edit::value(chord.clone()),
+                chords => toml_edit::value(chords.iter().collect::<toml_edit::Array>()),
+            };
         }
         document["keys"] = toml_edit::Item::Table(keys);
     }
@@ -2265,11 +2357,10 @@ pub fn write_project(path: &Path, key: &str, value: Option<&Value>) -> std::io::
 
 /// Where a project's settings *would* go, for a project that has none yet.
 ///
-/// The directory, always. A project keeps more than settings for Obelus -- a
-/// theme of its own, whatever comes after it -- and one directory holding
-/// all of it is one thing to find, to copy between machines and to put in a
-/// `.gitignore`, where a dotfile per kind of thing is a row of them at the
-/// top of every listing of the project.
+/// The directory, always. A project may come to keep more than settings for
+/// Obelus, and one directory holding all of it is one thing to find, to copy
+/// between machines and to put in a `.gitignore`, where a dotfile per kind
+/// of thing is a row of them at the top of every listing of the project.
 #[must_use]
 pub fn project_path_for(root: &Path) -> PathBuf {
     root.join(".obelus").join("config.toml")
@@ -2360,13 +2451,13 @@ mod tests {
         let _ = std::fs::remove_dir_all(&root);
         std::fs::create_dir_all(&root).expect("the project");
         let path = project_path_for(&root);
-        let theme = Value::Choice("light".to_string());
-        write_project(&path, "theme", Some(&theme)).expect("a project's first setting");
+        let wrapped = Value::Switch(true);
+        write_project(&path, "wrap", Some(&wrapped)).expect("a project's first setting");
         assert!(path.is_file(), "a project's first setting made no file");
 
         std::fs::remove_dir_all(&root).expect("the project going");
         assert!(
-            write_project(&path, "theme", Some(&theme)).is_err(),
+            write_project(&path, "wrap", Some(&wrapped)).is_err(),
             "a setting was written into a project that has gone"
         );
         assert!(!root.exists(), "the project was made again");
@@ -2600,6 +2691,134 @@ mod tests {
         assert_eq!(config.keys_from, "mnemonic");
     }
 
+    /// The two editors' layouts are words the file can hold, and are
+    /// written back as they were read -- the default is not written at all.
+    ///
+    /// Broken deliberately by taking `textmate` out of `KEY_LAYOUTS`: it
+    /// read as a choice nothing answers to, and the keys started from the
+    /// obelus table. And by writing `keys_from` whether or not it differs
+    /// from the default (`true` for `config.keys_from != default.keys_from`
+    /// in `to_toml`): the words still round-tripped, and only the default
+    /// below caught it -- `obelus` was written into a file that never
+    /// named it.
+    #[test]
+    fn the_editors_layouts_are_words_the_file_can_hold() {
+        let default = super::Config::default();
+        assert_eq!(default.keys_from, "obelus");
+        assert!(
+            !to_toml(&default).contains("keys_from"),
+            "{}",
+            to_toml(&default)
+        );
+        for word in ["vscode", "textmate"] {
+            let text = format!("keys_from = \"{word}\"\n");
+            let super::Reading::Settings {
+                config, ignored, ..
+            } = super::reading_of(&text)
+            else {
+                panic!("{word} did not read");
+            };
+            assert!(ignored.is_empty(), "{word}: {ignored:?}");
+            assert_eq!(config.keys_from, word);
+            assert_eq!(to_toml(&config), text);
+        }
+    }
+
+    /// Each layout has a name to be offered under and a line saying what
+    /// it is, in the order the file's words are in.
+    ///
+    /// The names are written out here rather than read off the table, so
+    /// the test says what a reader is shown. Broken deliberately by
+    /// spelling VS Code `Vscode`, and by giving `textmate` no entry.
+    #[test]
+    fn every_layout_has_a_name_and_what_it_is() {
+        let words: Vec<_> = super::KEY_LAYOUT_CHOICES
+            .iter()
+            .map(|layout| layout.word)
+            .collect();
+        assert_eq!(words, super::KEY_LAYOUTS);
+        let names: Vec<_> = super::KEY_LAYOUTS
+            .iter()
+            .map(|word| super::key_layout(word).map(|layout| layout.name))
+            .collect();
+        assert_eq!(
+            names,
+            [
+                Some("Obelus"),
+                Some("Mnemonic"),
+                Some("VS Code"),
+                Some("TextMate")
+            ]
+        );
+        for layout in super::KEY_LAYOUT_CHOICES {
+            assert!(!layout.about.is_empty(), "{} says nothing", layout.word);
+        }
+        assert_eq!(super::key_layout("lazyvim"), None);
+    }
+
+    /// Only a file that is not there is a reader who has not chosen.
+    ///
+    /// Broken deliberately twice: by answering `matches!(self,
+    /// Self::Settings { .. })`, which asked a reader whose file will not
+    /// read and wrote the answer over it; and by answering `true` for
+    /// everything, which never asked anybody.
+    #[test]
+    fn only_a_missing_settings_file_needs_a_keymap_choice() {
+        assert!(!super::Reading::Nothing.keymap_is_chosen());
+        assert!(super::reading_of("wrap = false").keymap_is_chosen());
+        assert!(super::reading_of("").keymap_is_chosen());
+        assert!(super::reading_of("not toml = [").keymap_is_chosen());
+        assert!(super::Reading::Nowhere.keymap_is_chosen());
+    }
+
+    /// A command's keys are read in every shape a reader writes them, and
+    /// written in the one they would: a string for one, an array for
+    /// several, and an empty array for none -- and what is written reads
+    /// back as itself.
+    ///
+    /// Broken deliberately twice: writing one key as an array (the file said
+    /// `["alt+o"]`), and reading `""` as a key called nothing (the command
+    /// had one key, and it was empty).
+    #[test]
+    fn a_command_is_on_one_key_several_or_none() {
+        let config = from_toml(
+            "[keys]\nopen-file = \"alt+o\"\nclose-file = \"\"\nsave-file = []\n\
+             run-command = [\"ctrl+shift+p\", \"alt+shift+p\"]\n",
+        );
+        let keys = |name: &str| config.keys.get(name).cloned();
+        assert_eq!(keys("open-file"), Some(vec!["alt+o".to_string()]));
+        assert_eq!(keys("close-file"), Some(Vec::new()));
+        assert_eq!(keys("save-file"), Some(Vec::new()));
+        assert_eq!(
+            keys("run-command"),
+            Some(vec!["ctrl+shift+p".to_string(), "alt+shift+p".to_string()])
+        );
+
+        let written = to_toml(&config);
+        assert!(written.contains("open-file = \"alt+o\"\n"), "{written}");
+        assert!(written.contains("close-file = []\n"), "{written}");
+        assert!(
+            written.contains("run-command = [\"ctrl+shift+p\", \"alt+shift+p\"]\n"),
+            "{written}"
+        );
+        assert_eq!(from_toml(&written).keys, config.keys, "{written}");
+    }
+
+    /// What in a key's line is not a string is kept as the text it is, so
+    /// that it is said where the table is built rather than read as no keys.
+    ///
+    /// Broken deliberately by dropping what is not a string, as the reading
+    /// did: `open-file = [1]` came back as no keys at all.
+    #[test]
+    fn what_is_not_a_key_in_a_line_is_kept_to_be_said() {
+        let config = from_toml("[keys]\nopen-file = [1, \"alt+o\"]\nsave-file = 3\n");
+        assert_eq!(
+            config.keys.get("open-file"),
+            Some(&vec!["1".to_string(), "alt+o".to_string()])
+        );
+        assert_eq!(config.keys.get("save-file"), Some(&vec!["3".to_string()]));
+    }
+
     /// A project cannot choose which keys a reader starts from: it would be
     /// moving every key that opens anything.
     ///
@@ -2609,7 +2828,7 @@ mod tests {
         let mut config = Config::default();
         let table: toml::Table = "keys_from = \"mnemonic\"".parse().expect("toml");
         let applied = apply(&mut config, &table, Whose::Project);
-        assert_eq!(config.keys_from, "classic");
+        assert_eq!(config.keys_from, "obelus");
         assert!(
             applied
                 .ignored
@@ -2701,9 +2920,14 @@ mod tests {
             // A key moved and a key taken away: both are decisions, and
             // both have to survive the file or the reader makes them again
             // every time Obelus starts.
+            // And a command on two keys, which the file says as an array.
             keys: [
-                ("open-file".to_string(), "alt+o".to_string()),
-                ("close-file".to_string(), String::new()),
+                ("open-file".to_string(), vec!["alt+o".to_string()]),
+                ("close-file".to_string(), Vec::new()),
+                (
+                    "run-command".to_string(),
+                    vec!["ctrl+shift+p".to_string(), "alt+shift+p".to_string()],
+                ),
             ]
             .into_iter()
             .collect(),
@@ -3287,8 +3511,8 @@ mod tests {
         let theirs = project.with_extension("toml.writing");
         std::fs::create_dir_all(theirs.parent().expect("a directory")).expect("the directory");
         std::fs::write(&theirs, "another Obelus is halfway through this").expect("theirs");
-        let theme = super::Value::Choice("light".to_string());
-        super::write_project(&project, "theme", Some(&theme)).expect("a project's setting");
+        let wrapped = super::Value::Switch(true);
+        super::write_project(&project, "wrap", Some(&wrapped)).expect("a project's setting");
         assert_eq!(
             std::fs::read_to_string(&theirs).ok().as_deref(),
             Some("another Obelus is halfway through this"),

@@ -22,7 +22,7 @@ impl App {
 
     /// Offers the built-in themes.
     pub fn open_theme_picker(&mut self) {
-        self.theme_before = Some((self.theme_name().to_string(), *self.theme()));
+        self.theme_before = Some((self.theme_name().to_string(), self.worn()));
         let items = self
             .themes()
             .into_iter()
@@ -36,7 +36,7 @@ impl App {
                 label: name.clone(),
                 version: None,
                 detail: None,
-                trailing: None,
+                trailing: self.theme_whence(&name).map(str::to_string),
                 changed: None,
                 value: PickerValue::Theme(name),
                 enabled: true,
@@ -48,9 +48,14 @@ impl App {
                 tab: None,
                 section: None,
             })
+            .chain(std::iter::once(Self::more_themes()))
             .collect();
         let mut picker = Picker::new(items, PickerLayout::Compact { rows: COMPACT_ROWS });
         picker.when_empty("No theme is built in");
+        picker.otherwise(
+            crate::app::project::themes::NONE_HERE,
+            PickerValue::MoreThemes,
+        );
         picker.before_typing("Filter themes");
         // Open on the one that is on, so the list starts by saying which
         // theme this is rather than making the reader work it out.
@@ -572,6 +577,21 @@ impl App {
             }
             return;
         }
+        // Not a theme to wear, so the one the list was opened over goes
+        // back -- which leaving the list does -- and what was typed goes
+        // with the reader where it found nothing here, and is left behind
+        // where it found this row.
+        if let PickerValue::MoreThemes = value {
+            let looking_for = self
+                .picker
+                .as_ref()
+                .filter(|picker| picker.match_count() == 0)
+                .map(Picker::query)
+                .unwrap_or_default();
+            self.leave(Layer::Picker);
+            self.show_more_themes(&looking_for);
+            return;
+        }
         if let PickerValue::Commit(id) = value {
             if self.expand_commit(id) {
                 return;
@@ -642,15 +662,7 @@ impl App {
                     self.go_to_document(id);
                 }
             }
-            PickerValue::Theme(name) => {
-                // Kept, now that there is somewhere to keep it: a reader who
-                // picks a theme and finds the old one back tomorrow has been
-                // given a preview rather than a choice.
-                self.change_setting("theme", &obelus_config::Value::Choice(name.clone()));
-                if let Some(theme) = self.theme_called(&name) {
-                    self.set_theme(&name, theme);
-                }
-            }
+            PickerValue::Theme(name) => self.choose_theme(&name),
             PickerValue::Place {
                 path,
                 line,
@@ -695,13 +707,17 @@ impl App {
             PickerValue::CommitFile { id, path } => self.open_at_commit(id, &path, None),
             // Dealt with before the list is closed, for the reason a
             // directory is: choosing one may leave the list where it was.
-            PickerValue::Conversation(_) | PickerValue::PullRequest(_) | PickerValue::Issue(_) => {}
+            PickerValue::Conversation(_)
+            | PickerValue::PullRequest(_)
+            | PickerValue::Issue(_)
+            | PickerValue::MoreThemes => {}
             PickerValue::Worktree { at, enter, .. } => match enter {
                 WorktreeEnter::Switch => self.go_to_worktree(at),
                 WorktreeEnter::Open | WorktreeEnter::Bring => self.go_elsewhere(at),
                 WorktreeEnter::Stay => {}
             },
             PickerValue::Task { id, .. } => self.open_background_output(&id),
+            PickerValue::KeysBack => self.put_every_key_back(),
             PickerValue::Nothing => {}
         }
     }

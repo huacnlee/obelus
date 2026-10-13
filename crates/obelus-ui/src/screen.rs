@@ -47,6 +47,12 @@ pub struct Choosing {
     /// what a path on the command line means -- would put Obelus on
     /// wherever the process began.
     pub there: bool,
+    /// Whether what is in that box is the top of a checkout.
+    ///
+    /// The ink that says enter opens a project, which is what a reader
+    /// walking down the tree is looking for: the box stops there rather
+    /// than going on into it.
+    pub project: bool,
     /// Whether anything is being offered to finish it with.
     ///
     /// What keeps the row quiet while a path is half typed: `/tmp/o` is
@@ -56,7 +62,7 @@ pub struct Choosing {
     pub offering: bool,
 }
 
-/// One project the reader has had open, as a row.
+/// One project the reader has chosen on the page that asks which, as a row.
 #[derive(Clone, Debug)]
 pub struct Opened {
     /// Where it is, with `~` for the reader's own directory.
@@ -359,6 +365,8 @@ pub trait Screen {
     fn layers(&self) -> layers::Layers;
     /// The agents page's rows.
     fn listed_agents(&self) -> Vec<Listed>;
+    /// The themes page's cards, and none while another page is showing.
+    fn listed_themes(&self) -> Vec<obelus_themes::Card>;
     /// The runs the editor marks: the uses of the name the pointer is
     /// resting on.
     fn marked_runs(&self) -> &[obelus_text::coordinates::Span];
@@ -439,6 +447,9 @@ pub trait Screen {
     fn text_area(&self) -> TextArea;
     /// The colours currently in force.
     fn theme(&self) -> &Theme;
+    /// Why the registry's list of themes could not be fetched, if it could
+    /// not.
+    fn themes_failure(&self) -> Option<&str>;
     /// The project's own settings file, while the project has one.
     fn project_config(&self) -> Option<&Path>;
     /// What the server says is wrong with the file being read.

@@ -10,23 +10,24 @@
 //! conversations were filed under a directory nobody works in.
 //!
 //! So Obelus asks, on a page of its own before the welcome screen, and
-//! this is what it offers: the projects this reader has had open, newest
-//! first. The same shape the conversations have and for the same reason
+//! this is what it offers: the projects this reader has chosen here,
+//! newest first. The same shape the conversations have and for the same reason
 //! -- what a reader did outlives the window.
 //!
-//! **A project is remembered however it was named.** By an argument, by
-//! the directory Obelus was started in, or by being chosen on that
-//! screen: all three are a reader saying where they work, and a list that
-//! held only the third would be empty for exactly the reader who works
-//! from a terminal and then reaches for the menu once. [`App::work_in`] is
-//! the one door all three go through, which is why the remembering is
-//! there and not at any of them.
+//! **A project is remembered when it is chosen on that screen, and only
+//! then.** Not when an argument names it, not when Obelus is started
+//! standing in it, and not when a window goes to another worktree: the
+//! list is of the answers this page was given. It once held every project
+//! Obelus was put on, through [`App::work_in`], and what leaving the rest
+//! out costs is said out loud -- a reader who works from a terminal and
+//! reaches for the menu once finds the list empty and types the path, and
+//! choosing it then is what puts it on.
 //!
-//! **Only a worktree is remembered.** Not every directory Obelus is
-//! pointed at is somewhere a reader would come back to: a process started
-//! in `$HOME`, in `/`, or in a directory of downloads is the normal case
-//! for a launcher, and writing those down would fill the list with the
-//! places Obelus happened to begin rather than the places it was used.
+//! **Only a worktree is remembered.** Not every directory a reader
+//! chooses is somewhere they would come back to: a path typed into the
+//! box can be `$HOME`, `/`, or a directory of downloads, and writing
+//! those down would fill the list with places glanced at rather than
+//! places worked in.
 //! Asked of git, which is the same question [`crate::app::opening`] asks
 //! of a path on the command line.
 //!
@@ -44,8 +45,8 @@
 //! as well as off the screen, which is a choice with a cost said out loud
 //! -- a disk that is not plugged in, or a share not mounted yet at the
 //! moment a launcher starts Obelus, looks exactly like a project that was
-//! deleted, and its row goes with it. A reader who opens it again has it
-//! back, because opening it is how anything gets onto the list.
+//! deleted, and its row goes with it. A reader who chooses it here again
+//! has it back, because choosing it is how anything gets onto the list.
 
 use std::path::{Path, PathBuf};
 
@@ -210,7 +211,7 @@ fn spelled(path: &Path) -> PathBuf {
 /// an oversight: two of these within the same fraction of a millisecond
 /// both read the list before either writes it, and what the second writes
 /// has no row for what the first remembered. That costs one project
-/// missing until it is next opened, which opening puts right -- and a lock
+/// missing until it is next chosen, which choosing puts right -- and a lock
 /// is whole-file on Windows, which is what a claim's cost last time.
 ///
 /// Answers whether anything was written, which is `false` for a directory
@@ -219,8 +220,8 @@ fn spelled(path: &Path) -> PathBuf {
 /// to know whether to look again.
 pub(in crate::app) fn remember(root: &Path, now: i64) -> bool {
     // Not a worktree is not a project, and this is the one place that
-    // judgement is made: `work_in` is told about directories that are
-    // somewhere Obelus was started as well as ones a reader chose.
+    // judgement is made: the page puts Obelus on whatever directory was
+    // typed, worktree or not.
     if obelus_git::worktree(root).is_none() {
         return false;
     }
@@ -295,6 +296,18 @@ pub(in crate::app) fn forget(these: &[PathBuf]) -> bool {
         return false;
     }
     write(&path, &projects)
+}
+
+/// Whether a directory is the top of a checkout, where a walk down the
+/// tree towards a project ends.
+///
+/// The top and not anywhere inside one, which is the question meant:
+/// `crates` in a repository is a level on the way, and a reader going
+/// into one crate of many goes on with a separator. `.git` as anything at
+/// all, because in a linked worktree it is a file. One `stat`, on the key
+/// that moved the box.
+fn a_project(directory: &Path) -> bool {
+    directory.join(".git").exists()
 }
 
 /// Writes the list, whole.
@@ -558,12 +571,13 @@ impl crate::app::App {
     /// keys -- what the reader types, and what the list puts in -- and
     /// the second one forgot.
     fn note_what_the_box_names(&mut self) {
-        self.which_project.named_is_there = self
-            .which_project
-            .chooser
-            .as_ref()
-            .and_then(Chooser::named)
-            .is_some_and(|path| path.exists());
+        let named = self.which_project.chooser.as_ref().and_then(Chooser::named);
+        self.which_project.named_is_there = named.as_ref().is_some_and(|path| path.exists());
+        // Only of a path that is there, which is the path enter would open:
+        // an empty box names no directory, and `.git` against nothing is
+        // `.git` wherever the process happens to be.
+        self.which_project.named_is_a_project =
+            self.which_project.named_is_there && named.as_deref().is_some_and(a_project);
     }
 
     /// Reads what a directory holds and makes a list of it.
@@ -646,6 +660,12 @@ impl crate::app::App {
         // different place -- which is what it did: typing the separator
         // that walks into a directory left the one above it on screen.
         self.which_project.naming_list = None;
+        // And a list shut over the box is a list of somewhere else now.
+        // Said here and not left to the box having moved: `alpha` and
+        // `alpha/` are one path to a comparison, so the separator that
+        // walks on from a project the walk stopped at -- or from a box
+        // whose list was escaped -- would find the list still shut.
+        self.which_project.naming_shut = false;
         self.settle_the_naming_list();
     }
 
@@ -770,17 +790,26 @@ impl crate::app::App {
                     .and_then(Picker::selected_item)
                     .map(|item| item.value.clone());
                 let put = match chosen {
-                    Some(PickerValue::Directory(path)) => Some((path, true)),
+                    Some(PickerValue::Directory(path)) => {
+                        let into = !a_project(&path);
+                        Some((path, into))
+                    }
                     Some(PickerValue::File(path)) => Some((path, false)),
                     _ => None,
                 };
-                if let Some((path, directory)) = put {
+                if let Some((path, into)) = put {
                     self.which_project.naming_list = None;
+                    // And kept shut where the box stopped: it names
+                    // something in the directory already read, and the
+                    // next frame would build that list again, offering
+                    // the row just taken in front of the enter that opens
+                    // it.
+                    self.which_project.naming_shut = !into;
                     let outcome = self
                         .which_project
                         .chooser
                         .as_mut()
-                        .map(|chooser| chooser.put(&path, directory));
+                        .map(|chooser| chooser.put(&path, into));
                     // A directory asks for what is inside it at once, so
                     // walking down a tree is one key a level.
                     if let Some(obelus_component::chooser::Outcome::Wants(next)) = outcome {
@@ -792,15 +821,11 @@ impl crate::app::App {
             // The list, not the box: escape gives up on the nearest
             // thing first, and what the reader typed stays.
             //
-            // Nothing is written down about having shut it, which is
-            // where this differs from the agent's commands: that list is
-            // rebuilt from the box on every frame, so closing it needs a
-            // flag or the next frame puts it back. This one is built
-            // only when the *directory* moves -- `settle_the_naming_list`
-            // narrows what a read already found and never conjures a
-            // list -- so shutting it is enough, and it comes back when
-            // the reader types their way into somewhere else, which is
-            // a new question.
+            // Written down, because the frame builds the list again from
+            // what the last read found: shut only on screen, it would be
+            // back before the reader saw it go. It comes back when the
+            // box moves or a separator walks into somewhere else, which
+            // is a new question.
             KeyCode::Esc => {
                 self.which_project.naming_shut = true;
                 self.which_project.naming_list = None;
@@ -815,10 +840,10 @@ impl crate::app::App {
     /// A file and a directory are the two answers, and which is which is
     /// not this function's to decide: [`crate::app::opening`] already says
     /// what a path on the command line means -- a directory is the project
-    /// and the question it leaves is which file, a file names the tree it
-    /// is in and is opened. A reader typing a path here means exactly what
-    /// a reader typing one after `ob` means, and two answers to that would
-    /// be two ways to open the same thing.
+    /// and opens nothing, a file names the tree it is in and is opened. A
+    /// reader typing a path here means exactly what a reader typing one
+    /// after `ob` means, and two answers to that would be two ways to open
+    /// the same thing.
     fn settle_on(&mut self, path: &Path) {
         // A path that is not there is not a project, and this is the one
         // place that has to say so. `opening` answers what a path on the
@@ -859,13 +884,13 @@ impl crate::app::App {
         self.which_project.naming_list = None;
         self.which_project.naming_read = None;
         self.which_project.naming_shut = false;
+        // Here and not in `settle`, which going to another worktree
+        // shares: only an answer to this page goes on its list.
+        remember(&root, jiff::Timestamp::now().as_second());
         self.settle(root, &opening.files);
-        // A directory is a reader saying which project and asking which
-        // file, which is the list -- the same thing `ob some-directory`
-        // does, said in the same place.
-        if opening.list {
-            self.open_file_picker();
-        }
+        // A first start's question about the keys, held back while this
+        // page was the screen (`App::ask_for_a_keymap`).
+        self.ask_for_a_keymap();
     }
 
     /// Puts a window with no project on `root`, opening `files` in it.
@@ -944,6 +969,7 @@ impl crate::app::App {
             held: chooser.typing().held(),
             naming: chooser.is_naming(),
             there: self.which_project.named_is_there,
+            project: self.which_project.named_is_a_project,
             offering: self.which_project.naming_list.is_some(),
         })
     }
